@@ -17,8 +17,10 @@ export const optionMarkStyles = css`
     background: #222;
     color: #fff;
     pointer-events: none;
-    --_sv-icon-size: calc(var(--_sv-spacing) * 2.5);
     --_sv-icon-stroke: 2.5;
+  }
+  .option-mark > sv-icon {
+    --_sv-icon-size: calc(var(--_sv-spacing) * 2.5);
   }
   .option-mark[data-mark="current"] {
     background: #fff;

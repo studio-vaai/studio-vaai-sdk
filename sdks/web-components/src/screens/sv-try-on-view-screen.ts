@@ -586,9 +586,12 @@ export class SvTryOnViewScreen extends SvElement implements SvTryOnViewScreenPro
       )}
       <div class="panel">
         ${
-          view.selecting
+          view.shown === undefined && shown === undefined
             ? nothing
-            : html`<div class="result-fold" ?inert=${!this.#layout.wide && pickerOpen}>
+            : html`<div
+                class="result-fold"
+                ?inert=${view.selecting || (!this.#layout.wide && pickerOpen)}
+              >
                 <div class="result-clip">
                   <div class="result-summary">
                     ${this.#history(copy, displayed)}${this.#fit(copy, displayed)}

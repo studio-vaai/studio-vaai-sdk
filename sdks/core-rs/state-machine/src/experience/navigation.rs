@@ -185,9 +185,12 @@ impl DefaultController {
             return self.cancel_change(snapshot, plan);
         }
         match &self.navigation.screen {
+            Screen::TryOn if self.presentation.mode == super::PresentationMode::Result => {
+                self.presentation.open_variant_picker();
+            }
             Screen::TryOn
-                if self.presentation.mode != super::PresentationMode::Selection
-                    || self.foreground_pending(snapshot) =>
+                if self.presentation.mode == super::PresentationMode::Selection
+                    && self.foreground_pending(snapshot) =>
             {
                 self.back_to_selection(snapshot, plan);
             }

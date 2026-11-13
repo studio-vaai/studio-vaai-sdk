@@ -470,12 +470,15 @@ fn library_picker_releases_the_camera_and_reacquires_after_cancellation() {
 }
 
 #[test]
-fn back_moves_from_result_to_selection_then_height_and_the_photo_guide() {
+fn back_opens_the_variant_picker_then_returns_to_height_and_the_photo_guide() {
     let f = Fixture::ready();
     try_on_m(&f);
     let back = || f.flow.dispatch(NavigationAction::Back.into()).unwrap().view;
     let selection = back();
-    assert_eq!(selection.presentation().mode, PresentationMode::Selection);
+    assert_eq!(
+        selection.presentation().mode,
+        PresentationMode::EditingVariant
+    );
     assert_eq!(displayed_try_on(selection).unwrap().id, id("M"));
     assert!(matches!(back().screen, ScreenView::Height { .. }));
     let intro = back();

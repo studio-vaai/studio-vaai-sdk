@@ -13,7 +13,6 @@ import {
   DisplayedImage,
   BodyProgress,
   JourneyStep,
-  TryOnProgress,
   TryOnFailureKind,
   TryOnWarning,
   variantLabelValue,
@@ -117,16 +116,10 @@ export function tryOnScreenState(view: FlowView, screen: InstanceType<typeof Scr
           selection.labelFormats,
         );
   const savingHeight = heightPending(view);
-  let progressMessage: MessageId | undefined;
-  if (savingHeight) {
-    progressMessage = "experience.savingHeight";
-  } else if (progress === TryOnProgress.Queued) {
-    progressMessage = "experience.renderQueued";
-  }
   return {
     displayed: displayedTryOnId(presentation),
     progress,
-    progressMessage,
+    progressMessage: savingHeight ? ("experience.savingHeight" as const) : undefined,
     savingHeight,
     failure,
     requested,

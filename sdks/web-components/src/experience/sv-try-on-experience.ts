@@ -151,6 +151,9 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     .confirmation p {
       margin: 0;
     }
+    [data-photo-source] .confirmation {
+      align-content: start;
+    }
   `;
   static override properties = {
     experience: { attribute: false, noAccessor: true },
@@ -426,6 +429,14 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     }
   };
 
+  #replacePhoto(): void {
+    if (this.#experience?.view.domain.photo?.source === PhotoSource.Library) {
+      this.#beginPhoto(PhotoSource.Library);
+    } else {
+      this.#dispatch(new FlowAction.Photo({ action: new PhotoAction.Replace() }));
+    }
+  }
+
   readonly #heightChange = ({ detail }: HTMLElementEventMap["sv-height-setting-change"]): void => {
     this.#dispatch(
       new FlowAction.Height({ action: new HeightAction.Edit({ height: detail.value }) }),
@@ -436,18 +447,21 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     if (detail.action === "confirm") {
       this.#dispatch(new FlowAction.Height({ action: new HeightAction.Confirm() }));
     } else {
-      this.#dispatch(new FlowAction.Photo({ action: new PhotoAction.Replace() }));
+      this.#replacePhoto();
     }
   };
 
   readonly #rejectedAction = ({
     detail,
   }: HTMLElementEventMap["sv-photo-upload-rejected-action"]): void => {
-    this.#dispatch(
-      new FlowAction.Photo({
-        action: detail.action === "guide" ? new PhotoAction.ShowGuide() : new PhotoAction.Replace(),
-      }),
-    );
+    if (detail.action === "guide") {
+      this.#dispatch(new FlowAction.Photo({ action: new PhotoAction.ShowGuide() }));
+      return;
+    }
+    const screen = this.#experience?.view.screen;
+    if (screen !== undefined && ScreenView.PhotoRejected.instanceOf(screen)) {
+      this.#beginPhoto(screen.inner.photo.source);
+    }
   };
 
   readonly #tryOnChange = ({ detail }: HTMLElementEventMap["sv-try-on-view-change"]): void => {
@@ -520,7 +534,7 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
         break;
       }
       case "upload": {
-        this.#dispatch(new FlowAction.Photo({ action: new PhotoAction.Replace() }));
+        this.#replacePhoto();
         break;
       }
       case "add-to-cart": {
@@ -1288,6 +1302,44 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     const cancelModal = () => {
       this.#dispatch(new FlowAction.Navigation({ action: NavigationAction.CancelModal }));
     };
+    let photoModal: TemplateResult | typeof nothing = nothing;
+    if (view.modal !== undefined && Modal.ChoosePhotoSource.instanceOf(view.modal)) {
+      const confirmingRetake =
+        view.domain.photo?.source === PhotoSource.Camera &&
+        (ScreenView.Height.instanceOf(view.screen) || ScreenView.TryOn.instanceOf(view.screen));
+      photoModal = confirmingRetake
+        ? html`<sv-photo-retake-dialog
+            .open=${visible}
+            @sv-photo-retake-action=${(event: HTMLElementEventMap["sv-photo-retake-action"]) => {
+              if (event.detail.action === "retake") {
+                this.#beginPhoto(PhotoSource.Camera);
+              } else {
+                cancelModal();
+              }
+            }}
+          ></sv-photo-retake-dialog>`
+        : html`<sv-dialog
+            data-photo-source
+            .open=${visible}
+            .label=${this.ui.text("experience.choosePhoto")}
+            @sv-dismiss=${cancelModal}
+          >
+            <div class="confirmation">
+              <p>${this.ui.text("experience.choosePhoto")}</p>
+              ${this.#button(
+                "experience.takePhoto",
+                () => {
+                  this.#beginPhoto(PhotoSource.Camera);
+                },
+                "primary",
+              )}
+              ${this.#button("experience.chooseFromLibrary", () => {
+                this.#beginPhoto(PhotoSource.Library);
+              })}
+              ${this.#button("experience.cancel", cancelModal)}
+            </div>
+          </sv-dialog>`;
+    }
     return html`
       <sv-dialog
         .open=${visible}
@@ -1300,31 +1352,7 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
       >
         ${this.#dialogContent}
       </sv-dialog>
-      ${
-        view.modal !== undefined && Modal.ChoosePhotoSource.instanceOf(view.modal)
-          ? html`<sv-dialog
-              data-photo-source
-              .open=${visible}
-              .label=${this.ui.text("experience.choosePhoto")}
-              @sv-dismiss=${cancelModal}
-            >
-              <div class="confirmation">
-                <p>${this.ui.text("experience.choosePhoto")}</p>
-                ${this.#button(
-                  "experience.takePhoto",
-                  () => {
-                    this.#beginPhoto(PhotoSource.Camera);
-                  },
-                  "primary",
-                )}
-                ${this.#button("experience.chooseFromLibrary", () => {
-                  this.#beginPhoto(PhotoSource.Library);
-                })}
-                ${this.#button("experience.cancel", cancelModal)}
-              </div>
-            </sv-dialog>`
-          : nothing
-      }
+      ${photoModal}
     `;
   }
 }

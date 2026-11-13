@@ -158,6 +158,7 @@ function deferred<T>() {
 
 async function mountWithAdapters({
   height = 170,
+  photoSource = PhotoSource.Library,
   run,
   startDeviceEffect,
   restore = true,
@@ -168,6 +169,7 @@ async function mountWithAdapters({
   open = true,
 }: {
   height?: number | null;
+  photoSource?: PhotoSource;
   run?: TryOnExperienceAdapters["runJob"];
   startDeviceEffect?: TryOnExperienceAdapters["startDeviceEffect"];
   restore?: boolean;
@@ -223,7 +225,7 @@ async function mountWithAdapters({
                 body: {
                   bodyId: crypto.randomUUID(),
                   media: originalMedia,
-                  source: PhotoSource.Library,
+                  source: photoSource,
                   estimatedHeight: 172,
                   ...(height !== null && { height }),
                 },
@@ -309,7 +311,6 @@ describe("web try-on experience", () => {
             ? await rendered(element, "sv-height-setting-screen")
             : await rendered(element, "sv-try-on-view-screen");
         await press(screen, 'sv-button[slot="secondary"]');
-        await chooseLibrary(element);
         await vi.waitFor(() => {
           expect(experience.view.photoChange?.newPhoto?.photo.media).toBe(fixture.replacementMedia);
         });
@@ -358,7 +359,6 @@ describe("web try-on experience", () => {
       );
       await pressBack(shell);
       await press(screen, 'sv-button[slot="secondary"]');
-      await chooseLibrary(element);
       await vi.waitFor(() => {
         expect(ScreenView.Height.instanceOf(experience.view.screen)).toBe(true);
       });
@@ -419,7 +419,6 @@ describe("web try-on experience", () => {
       const screen = await rendered(element, "sv-try-on-view-screen");
       await press(screen, 'sv-button[slot="primary"]');
       await press(screen, 'sv-button[slot="secondary"]');
-      await chooseLibrary(element);
       upload.resolve(new Outcome.Failed({ error: BackendError.Unavailable }));
       await vi.waitFor(() => {
         expect(
@@ -492,7 +491,6 @@ describe("web try-on experience", () => {
     const visibility = vi.spyOn(document, "visibilityState", "get");
     try {
       await press(await rendered(element, "sv-try-on-view-screen"), 'sv-button[slot="secondary"]');
-      await chooseLibrary(element);
       expect(Modal.Picker.instanceOf(experience.view.modal)).toBe(true);
       visibility.mockReturnValue("hidden");
       document.dispatchEvent(new Event("visibilitychange"));
@@ -540,7 +538,6 @@ describe("web try-on experience", () => {
           await rendered(element, "sv-try-on-view-screen"),
           'sv-button[slot="secondary"]',
         );
-        await chooseLibrary(element);
         expect(Modal.Picker.instanceOf(experience.view.modal)).toBe(true);
         height.resolve(new Outcome.Failed({ error: BackendError.Internal }));
         await vi.waitFor(() => {
@@ -1459,11 +1456,11 @@ describe("web try-on experience", () => {
             }),
           }),
         );
-        const shell = await rendered(tryOn, "sv-screen");
-        await pressBack(shell);
+        await tryOn.updateComplete;
+        tryOn.shadowRoot?.querySelector<HTMLButtonElement>(".picker-toggle")?.click();
         expect(experience.view.presence.open).toBe(true);
         await tryOn.updateComplete;
-        expect(tryOn.presentation?.mode).toBe(PresentationMode.Selection);
+        expect(tryOn.presentation?.mode).toBe(PresentationMode.Result);
 
         experience.dispatch(
           new FlowAction.Presentation({ action: new PresentationAction.RequestTryOn() }),
@@ -1955,7 +1952,7 @@ describe("result selection and recovery", () => {
 
       const screen = await rendered(element, "sv-try-on-view-screen");
       expect(HeightStatus.Pending.instanceOf(bodyHeight(experience.view.domain.body))).toBe(true);
-      expect(screen.presentation?.mode).toBe(PresentationMode.Selection);
+      expect(screen.presentation?.mode).toBe(PresentationMode.EditingVariant);
       expect(Capability.Available.instanceOf(screen.presentation?.canRequestTryOn)).toBe(true);
       expect(heightWork.mock.calls).toEqual([["SetHeight"]]);
 
@@ -2980,10 +2977,10 @@ async function firstResult(fixture: Awaited<ReturnType<typeof mountWithAdapters>
   return screen;
 }
 function editHeight(experience: TryOnExperience) {
-  if (experience.screen.step === "try-on") {
+  back(experience);
+  if (ScreenView.TryOn.instanceOf(experience.view.screen)) {
     back(experience);
   }
-  back(experience);
 }
 
 async function pressBack(screen: HTMLElementTagNameMap["sv-screen"]) {
@@ -3001,16 +2998,19 @@ function back(experience: TryOnExperience) {
   experience.dispatch(new FlowAction.Navigation({ action: NavigationAction.Back }));
 }
 describe("result recovery and height navigation", () => {
-  it("goes back from result to variant selection, height and the photo guide", async () => {
+  it("opens the variant picker in place before going back to height and the photo guide", async () => {
     const fixture = await mountWithAdapters({ run: () => result() });
     const { element, experience, dispose } = fixture;
     try {
       const screen = await firstResult(fixture);
       const displayed = screen.presentation?.displayed;
+      const image = await rendered(screen, "sv-image", "sv-image[data-result]");
       await pressBack(await rendered(screen, "sv-screen"));
       expect(experience.screen.step).toBe("variant-selection");
       await screen.updateComplete;
+      expect(screen.presentation?.mode).toBe(PresentationMode.EditingVariant);
       expect(screen.presentation?.displayed).toEqual(displayed);
+      await expect(rendered(screen, "sv-image", "sv-image[data-result]")).resolves.toBe(image);
       await pressBack(await rendered(screen, "sv-screen"));
       const height = await rendered(element, "sv-height-setting-screen");
       await pressBack(await rendered(height, "sv-screen"));
@@ -3597,13 +3597,11 @@ describe("camera, photo, and fit gates", () => {
         await rendered(element, "sv-height-setting-screen"),
         'sv-button[slot="secondary"]',
       );
-      await chooseLibrary(element);
       await vi.waitFor(() => {
         expect(ScreenView.PhotoRejected.instanceOf(experience.view.screen)).toBe(true);
       });
       const rejected = await rendered(element, "sv-photo-upload-rejected-screen");
       await press(rejected, 'sv-button[slot="primary"]');
-      await chooseLibrary(element);
       await vi.waitFor(() => {
         expect(Modal.Picker.instanceOf(experience.view.modal)).toBe(true);
       });
@@ -3721,19 +3719,38 @@ describe("camera, photo, and fit gates", () => {
 });
 
 describe("return navigation and storefront", () => {
-  it("offers both replacement sources from selection and keeps the image after cancelling", async () => {
-    const fixture = await mountWithAdapters({ run: () => result() });
+  it("confirms camera replacement and keeps the image after backing out", async () => {
+    const fixture = await mountWithAdapters({
+      photoSource: PhotoSource.Camera,
+      run: () => result(),
+    });
     const { experience, element, dispose } = fixture;
     try {
       const screen = await firstResult(fixture);
       const displayed = screen.presentation?.displayed;
-      await pressBack(await rendered(screen, "sv-screen"));
-      await press(screen, 'sv-button[slot="secondary"]');
+      const replace = () => {
+        experience.dispatch(new FlowAction.Photo({ action: new PhotoAction.Replace() }));
+      };
+      replace();
 
-      const chooser = await rendered(element, "sv-dialog", "[data-photo-source]");
-      expect(chooser.textContent).toContain("Take a photo");
-      expect(chooser.textContent).toContain("Choose from library");
-      await press(element, "[data-photo-source] sv-button:first-of-type");
+      const confirmation = await rendered(element, "sv-photo-retake-dialog");
+      const dialog = await rendered(confirmation, "sv-alert-dialog");
+      expect(dialog.heading).toBe("Record another photo?");
+      confirmation.dispatchEvent(
+        new CustomEvent("sv-photo-retake-action", {
+          detail: { action: "cancel", reason: "button" },
+        }),
+      );
+      expect(experience.view.modal).toBeUndefined();
+      expect(screen.photoSrc).toBe("/original.jpg");
+
+      replace();
+      const reopened = await rendered(element, "sv-photo-retake-dialog");
+      reopened.dispatchEvent(
+        new CustomEvent("sv-photo-retake-action", {
+          detail: { action: "retake" },
+        }),
+      );
       await rendered(element, "sv-photo-capture-screen");
       back(experience);
       const returned = await rendered(element, "sv-try-on-view-screen");
@@ -3758,7 +3775,6 @@ describe("return navigation and storefront", () => {
       await height.updateComplete;
       expect(height.heightCm).toBe(181);
       await press(height, 'sv-button[slot="secondary"]');
-      await chooseLibrary(element);
       await vi.waitFor(() => {
         expect(
           NewPhotoStatus.Failed.instanceOf(experience.view.photoChange?.newPhoto?.status),
@@ -3937,7 +3953,6 @@ describe("permanent failures and recovery", () => {
         expect(failed.error).toMatch(/photo is no longer available/iu);
       });
       await press(failed, 'sv-button[slot="secondary"]');
-      await chooseLibrary(element);
       await vi.waitFor(() => {
         expect(
           NewPhotoStatus.Failed.instanceOf(experience.view.photoChange?.newPhoto?.status),
@@ -4074,6 +4089,7 @@ describe("device recovery across transitions", () => {
   it("blocks height writes after a try-on establishes that the body is gone", async () => {
     const heightWrites = vi.fn<(height: number) => void>();
     const { experience, element, dispose } = await mountWithAdapters({
+      choosePhoto: () => globalThis.undefined,
       run(job) {
         if (Job.Body.instanceOf(job)) {
           heightWrites(job.inner.job.inner.height);
@@ -4091,7 +4107,7 @@ describe("device recovery across transitions", () => {
       const height = await rendered(element, "sv-height-setting-screen");
       expect(height.confirmDisabled).toBe(true);
       await press(height, 'sv-button[slot="secondary"]');
-      expect(Modal.ChoosePhotoSource.instanceOf(experience.view.modal)).toBe(true);
+      expect(experience.view.modal).toBeInstanceOf(Modal.Picker);
       expect(heightWrites).not.toHaveBeenCalled();
     } finally {
       dispose();
