@@ -1,6 +1,7 @@
 {
   "name": "@studio-vaai/react-components",
   "version": "0.3.1",
+  "private": true,
   "description": "Prebuilt studio vaai virtual try-on UI (layer 3)",
   "license": "MIT",
   "files": [
@@ -28,9 +29,6 @@
       "import": "./dist/debug.js"
     },
     "./studio-vaai-components.css": "./dist/studio-vaai-components.css"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "scripts": {
     "build": "vite build --config vite.lib.config.ts && node scripts/check-css-isolation.mjs && rm -f tsconfig.tsbuildinfo && tsgo --emitDeclarationOnly && node scripts/strip-css-from-dts.mjs",

@@ -1,6 +1,7 @@
 {
   "name": "@studio-vaai/js-client",
   "version": "0.3.1",
+  "private": true,
   "description": "TypeScript contract types for the studio vaai public HTTP API, plus an optional fetch-based transport (Hey API codegen under src/impl/generated).",
   "license": "MIT",
   "files": [
@@ -16,9 +17,6 @@
       "types": "./dist/generated/openapi.d.ts",
       "import": "./dist/generated/openapi.js"
     }
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "scripts": {
     "generate": "openapi-typescript ../api/generated/openapi.yaml -o src/generated/openapi.ts && openapi-ts",

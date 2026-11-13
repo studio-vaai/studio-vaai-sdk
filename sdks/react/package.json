@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "React integration for the studio vaai try-on experience",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/studio-vaai/studio-vaai-sdk.git",
+    "directory": "sdks/react"
+  },
   "files": [
     "dist"
   ],

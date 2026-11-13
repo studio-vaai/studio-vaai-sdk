@@ -1,8 +1,9 @@
 name: Publish
 
-# Publishes the `@studio-vaai/*` packages to npm through trusted publishing
-# (OIDC), so there is no npm token. Each package needs this repository and this
-# workflow file (`publish.yml`) as its trusted publisher on npmjs.com.
+# Publishes Core, Web Components, React and Vue to npm. Configure this repository
+# and `publish.yml` as each package's trusted publisher. The optional
+# npm-publish environment secret NPM_BOOTSTRAP_TOKEN is for the initial release
+# of packages that do not yet exist on npm.
 #
 # Versions come from each `sdks/*/package.json`: bump and merge them before
 # running this. Existing registry versions are skipped; publication.json records
@@ -56,6 +57,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 26
+          registry-url: https://registry.npmjs.org
 
       - uses: actions/setup-python@v6
         with:
@@ -95,6 +97,9 @@ jobs:
 
       - name: Publish prepared archives
         id: publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
         run: |
           python sdks/build-tools/sbom/sbom.py release publish --output "$RUNNER_TEMP/sdk-release" \
             ${{ inputs.dry-run && '--dry-run' || '' }}

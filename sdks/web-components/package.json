@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "studio vaai virtual try-on UI as framework-free web components (Lit)",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/studio-vaai/studio-vaai-sdk.git",
+    "directory": "sdks/web-components"
+  },
   "files": [
     "dist"
   ],

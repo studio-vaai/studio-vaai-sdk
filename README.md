@@ -32,8 +32,8 @@ Rust toolchain and `just`; see [`sdks/core-rs/README.md`](sdks/core-rs/README.md
 
 ## Releases
 
-The `Publish` workflow publishes the `@studio-vaai/*` packages to npm, with provenance. Each
-package's version comes from its `package.json`.
+The `Publish` workflow publishes Core, Web Components, React, and Vue to npm with provenance.
+Each package's version comes from its `package.json`.
 
 ## License
 
