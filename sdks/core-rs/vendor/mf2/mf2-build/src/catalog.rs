@@ -1,0 +1,844 @@
+//! One catalog per locale: fallbacks flattened, locale data sliced, the
+//! bytes written, compressed and content-hashed.
+
+use std::borrow::Cow;
+use std::io::Write as _;
+use std::path::{Path, PathBuf};
+
+use mf2_catalog::format::locale_key;
+use mf2_catalog::writer::{self, Options};
+use mf2_catalog::{Dir, Manifest};
+use mf2_locale_data::{CLDR_VERSION, direction, locale_entries};
+use mf2_model::{Message, Pattern, PatternMessage};
+
+use crate::config::{Config, Missing, Strip};
+use crate::error::{Error, Result};
+use crate::features::{DateBackend, Features, NumberBackend, Place, Placement, Side};
+use crate::slice::Slice;
+
+/// Brotli as budget B7 is measured: quality 11, window
+/// 22 — what a server has on disk and hands to a client that says
+/// `Accept-Encoding: br`.
+const BROTLI_QUALITY: u32 = 11;
+const BROTLI_WINDOW: u32 = 22;
+/// A debug build's brotli: on a 197 KB catalog, the brotli
+/// CLI took 3 % of quality 11's time at quality 5, for 12 % more bytes;
+/// quality 9 took 2.4 times quality 5's, for 3 % fewer.
+const BROTLI_FAST_QUALITY: u32 = 5;
+
+/// How [`write`] compresses a catalog.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Compress {
+    /// Not at all: nothing serves it (a module-only or native build).
+    No,
+    /// At a fast level: a debug build, served by a development server.
+    Fast,
+    /// As B7 is measured: what a release serves.
+    Best,
+}
+
+/// One locale's catalog and what it cost.
+#[derive(Clone)]
+pub struct Catalog {
+    /// The BCP 47 tag.
+    pub tag: String,
+    /// The `.mf2b` bytes.
+    pub bytes: Vec<u8>,
+    /// Brotli 11.
+    pub br: Vec<u8>,
+    /// gzip, best.
+    pub gz: Vec<u8>,
+    /// The content hash that names the file.
+    pub hash: String,
+    /// Messages this locale does not have of its own.
+    pub missing: usize,
+    /// Of those, how many took another locale's text (D5).
+    pub fallbacks: usize,
+    /// The LOCALE entries it carries: `(key, bytes)`, ascending by key —
+    /// what `mf2 stats` breaks down.
+    pub locale_entries: Vec<(u32, usize)>,
+    /// The server-only table (`plan/08` §4.2): the LOCALE entries only
+    /// native code reads, in the LOCALE section's encoding, written beside
+    /// the catalog and embedded in the server. Empty when there is none.
+    /// Neither the catalog's bytes nor its hash cover it.
+    pub server: Vec<u8>,
+    /// The table's entries, as [`Catalog::locale_entries`].
+    pub server_entries: Vec<(u32, usize)>,
+    /// What its locale data covers.
+    pub slice: Slice,
+}
+
+impl Catalog {
+    /// `<locale>.<content-hash>.mf2b`, the name the server publishes.
+    pub fn file_name(&self) -> String {
+        format!("{}.{}.mf2b", self.tag, self.hash)
+    }
+
+    /// `<locale>.<content-hash>.mf2b.server`, where the build writes the
+    /// server-only table beside the catalog, when there is one. A site
+    /// (`Outcome::publish`) never holds it.
+    pub fn server_file_name(&self) -> Option<String> {
+        (!self.server.is_empty()).then(|| format!("{}.server", self.file_name()))
+    }
+}
+
+impl core::fmt::Debug for Catalog {
+    /// Sizes, not bytes: a catalog is tens of kilobytes, and a test that
+    /// fails should print something a person can read.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Catalog")
+            .field("tag", &self.tag)
+            .field("hash", &self.hash)
+            .field("raw", &self.bytes.len())
+            .field("br", &self.br.len())
+            .field("gz", &self.gz.len())
+            .field("missing", &self.missing)
+            .field("fallbacks", &self.fallbacks)
+            .field("locale_entries", &self.locale_entries)
+            .field("server", &self.server.len())
+            .field("server_entries", &self.server_entries)
+            .field("slice", &self.slice)
+            .finish()
+    }
+}
+
+/// Where a message's text came from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Origin {
+    /// The locale's own.
+    Own,
+    /// Another locale's, by the fallback chain.
+    Fallback(usize),
+    /// The id, because `missing = "id"`.
+    Id,
+    /// Nothing, because `missing = "empty"`.
+    Empty,
+}
+
+/// The messages a locale ships, one per `MsgId` index.
+///
+/// `own[i]` is the locale's own model, `chain` the locales to fall back to
+/// in order, each with its own models. The filler owns the messages the
+/// `missing` policy invents, so that they outlive the borrowed slice.
+pub struct Resolved<'a> {
+    /// One message per id, in `MsgId` order.
+    pub messages: Vec<Option<&'a Message<'a>>>,
+    /// Where each came from.
+    pub origins: Vec<Origin>,
+}
+
+/// The messages the `missing` policy invents: the id as text, or nothing.
+#[derive(Debug, Default)]
+pub struct Filler {
+    messages: Vec<Message<'static>>,
+}
+
+impl Filler {
+    /// A filler for `ids` under `missing`.
+    pub fn new(ids: &[String], missing: Missing) -> Filler {
+        let messages = match missing {
+            Missing::Id => ids
+                .iter()
+                .map(|id| {
+                    Message::Pattern(PatternMessage {
+                        declarations: Vec::new(),
+                        pattern: Pattern::from_text(Cow::Owned(id.clone())),
+                    })
+                })
+                .collect(),
+            Missing::Empty => ids
+                .iter()
+                .map(|_| {
+                    Message::Pattern(PatternMessage {
+                        declarations: Vec::new(),
+                        pattern: Pattern::from_text(Cow::Borrowed("")),
+                    })
+                })
+                .collect(),
+            Missing::Fallback => Vec::new(),
+        };
+        Filler { messages }
+    }
+
+    fn get(&self, index: usize) -> Option<&Message<'static>> {
+        self.messages.get(index)
+    }
+}
+
+/// Flattens the fallback chain for one locale (D5).
+pub fn resolve<'a>(
+    ids: &[String],
+    own: &[Option<&'a Message<'a>>],
+    chain: &[&[Option<&'a Message<'a>>]],
+    missing: Missing,
+    filler: &'a Filler,
+) -> Resolved<'a> {
+    let mut messages = Vec::with_capacity(ids.len());
+    let mut origins = Vec::with_capacity(ids.len());
+    for i in 0..ids.len() {
+        if let Some(message) = own.get(i).copied().flatten() {
+            messages.push(Some(message));
+            origins.push(Origin::Own);
+            continue;
+        }
+        match missing {
+            Missing::Fallback => {
+                let found = chain
+                    .iter()
+                    .enumerate()
+                    .find_map(|(step, models)| models.get(i).copied().flatten().map(|m| (step, m)));
+                if let Some((step, message)) = found {
+                    messages.push(Some(message));
+                    origins.push(Origin::Fallback(step));
+                } else {
+                    messages.push(None);
+                    origins.push(Origin::Empty);
+                }
+            }
+            Missing::Id => {
+                messages.push(filler.get(i));
+                origins.push(Origin::Id);
+            }
+            Missing::Empty => {
+                messages.push(filler.get(i));
+                origins.push(Origin::Empty);
+            }
+        }
+    }
+    Resolved { messages, origins }
+}
+
+/// Writes one locale's catalog: the bytes, `.br`, `.gz` and the hash, and
+/// the server-only table. `placement` is where the plural rules, the number
+/// data and ICU4X's date slice go, when the corpus needs them (`plan/08`
+/// §4.1).
+// Each argument is one independent input of the catalog.
+#[allow(clippy::too_many_arguments)]
+pub fn write(
+    tag: &str,
+    manifest: &Manifest,
+    resolved: &Resolved<'_>,
+    chain_tags: &[String],
+    slice: Slice,
+    config: &Config,
+    compress: Compress,
+    placement: Placement,
+) -> Result<Catalog> {
+    let dir = direction(tag).map_err(|source| Error::Locale {
+        locale: tag.to_owned(),
+        source,
+    })?;
+    let mut options = Options::new(tag, dir);
+    options.strip_cold = config.catalog.strip.contains(&Strip::Cold);
+    options.strip_ids = config.catalog.strip.contains(&Strip::Ids);
+    options.cldr_version = Some(CLDR_VERSION);
+    // `locale_entries` gives the plural rules and the number data alone,
+    // each of which goes where its own readers look.
+    let mut server_entries: Vec<(u32, Vec<u8>)> = Vec::new();
+    for entry in locale_entries(tag, &slice.needs)? {
+        let place = match entry.0 {
+            locale_key::PLURAL_CARDINAL | locale_key::PLURAL_ORDINAL => placement.plural,
+            _ => placement.numbers,
+        };
+        match place {
+            Place::Catalog => options.locale_entries.push(entry),
+            Place::Server => server_entries.push(entry),
+            // No side reads it, so the slice did not ask for it.
+            Place::Nowhere => {}
+        }
+    }
+    #[cfg(feature = "icu-blob")]
+    if let Some(entry) = crate::slice::icu_entry(tag, &slice)? {
+        match placement.dates {
+            Place::Catalog => options.locale_entries.push(entry),
+            Place::Server => server_entries.push(entry),
+            // No side formats with ICU4X, so the slice was not cut.
+            Place::Nowhere => {}
+        }
+    }
+    let mut missing = 0;
+    let mut fallbacks = 0;
+    for (i, origin) in resolved.origins.iter().enumerate() {
+        match origin {
+            Origin::Own => {}
+            Origin::Fallback(step) => {
+                missing += 1;
+                fallbacks += 1;
+                let from = chain_tags
+                    .get(*step)
+                    .cloned()
+                    .unwrap_or_else(|| tag.to_owned());
+                options.fallback.push((
+                    u32::try_from(i).map_err(|_| {
+                        Error::Layout("more messages than a catalog can hold".to_owned())
+                    })?,
+                    from,
+                ));
+            }
+            Origin::Id | Origin::Empty => missing += 1,
+        }
+    }
+    let bytes =
+        writer::catalog(manifest, &resolved.messages, &options).map_err(|source| Error::Write {
+            locale: tag.to_owned(),
+            source,
+        })?;
+    // Under `Emit::Module` nothing writes a catalog file, and brotli 11 at a
+    // 22-bit window is the most expensive thing in the pass — so the split
+    // that was meant to take work off the i18n crate does not pay for output
+    // it then discards (`Build::emit`).
+    let (br, gz) = match compress {
+        Compress::No => (Vec::new(), Vec::new()),
+        Compress::Fast => (
+            brotli_at(tag, &bytes, BROTLI_FAST_QUALITY)?,
+            gzip_at(tag, &bytes, flate2::Compression::fast())?,
+        ),
+        Compress::Best => (brotli(tag, &bytes)?, gzip(tag, &bytes)?),
+    };
+    let hash = content_hash(&bytes);
+    let server = writer::server_table(&server_entries).map_err(|source| Error::Write {
+        locale: tag.to_owned(),
+        source,
+    })?;
+    let sizes = |entries: &[(u32, Vec<u8>)]| {
+        let mut sizes: Vec<(u32, usize)> = entries
+            .iter()
+            .map(|(key, payload)| (*key, payload.len()))
+            .collect();
+        sizes.sort_unstable();
+        sizes
+    };
+    let locale_entries = sizes(&options.locale_entries);
+    let server_entries = sizes(&server_entries);
+    Ok(Catalog {
+        tag: tag.to_owned(),
+        bytes,
+        br,
+        gz,
+        hash,
+        missing,
+        fallbacks,
+        locale_entries,
+        server,
+        server_entries,
+        slice,
+    })
+}
+
+/// The first 16 hex digits of SHA-256 over the catalog's bytes: shared with
+/// `mf2::native`, which checks a catalog file against the name it was loaded
+/// under.
+pub use mf2_catalog::content_hash;
+
+/// Brotli at the quality and window B7 is measured with.
+pub fn brotli(locale: &str, bytes: &[u8]) -> Result<Vec<u8>> {
+    brotli_at(locale, bytes, BROTLI_QUALITY)
+}
+
+fn brotli_at(locale: &str, bytes: &[u8], quality: u32) -> Result<Vec<u8>> {
+    let fail = |source| Error::Compress {
+        locale: locale.to_owned(),
+        format: "brotli",
+        source,
+    };
+    let mut out = Vec::new();
+    {
+        let mut writer = brotli::CompressorWriter::new(&mut out, 4096, quality, BROTLI_WINDOW);
+        writer.write_all(bytes).map_err(fail)?;
+        // `CompressorWriter`'s `Drop` flushes too, but it cannot report; this
+        // is where a truncated stream would otherwise pass silently.
+        writer.flush().map_err(fail)?;
+    }
+    Ok(out)
+}
+
+/// gzip at its best setting, for clients without brotli.
+pub fn gzip(locale: &str, bytes: &[u8]) -> Result<Vec<u8>> {
+    gzip_at(locale, bytes, flate2::Compression::best())
+}
+
+fn gzip_at(locale: &str, bytes: &[u8], level: flate2::Compression) -> Result<Vec<u8>> {
+    let fail = |source| Error::Compress {
+        locale: locale.to_owned(),
+        format: "gzip",
+        source,
+    };
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), level);
+    encoder.write_all(bytes).map_err(fail)?;
+    encoder.finish().map_err(fail)
+}
+
+/// Writes `bytes` to `path`, but only if they differ from what is there.
+///
+/// `build.rs` runs on every compile of the i18n crate; rewriting a file whose
+/// bytes did not change would touch its mtime and make cargo rebuild
+/// everything downstream for nothing (P0.9).
+pub fn write_if_changed(path: &Path, bytes: &[u8]) -> Result<bool> {
+    if let Ok(existing) = std::fs::read(path)
+        && existing == bytes
+    {
+        return Ok(false);
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|source| Error::io(parent.to_path_buf(), source))?;
+    }
+    std::fs::write(path, bytes).map_err(|source| Error::io(path.to_path_buf(), source))?;
+    Ok(true)
+}
+
+/// Removes the files of `dir` that a build no longer writes, so that an old
+/// catalog never lingers under a name the server might still publish.
+pub fn remove_stale(dir: &Path, keep: &[PathBuf]) -> Result<Vec<PathBuf>> {
+    let mut removed = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Ok(removed);
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_catalog = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.contains(".mf2b"));
+        if is_catalog && !keep.contains(&path) {
+            std::fs::remove_file(&path).map_err(|source| Error::io(path.clone(), source))?;
+            removed.push(path);
+        }
+    }
+    removed.sort();
+    Ok(removed)
+}
+
+/// The direction the catalog header carries, for the generated locale table.
+pub fn dir_of(tag: &str) -> Result<Dir> {
+    direction(tag).map_err(|source| Error::Locale {
+        locale: tag.to_owned(),
+        source,
+    })
+}
+
+/// Who reads a LOCALE entry (`plan/08` §4.1). The browser looks only in the
+/// catalog it downloads; native code looks in the catalog and, beside a
+/// catalog a browser downloads, in the server-only table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Readers {
+    /// The browser's client reads it, when a browser downloads the catalog.
+    pub browser: bool,
+    /// Native code reads it: a server, or a native application.
+    pub native: bool,
+}
+
+impl Readers {
+    /// The readers of the entry `key` under `features`, from the table of
+    /// `plan/08` §4.1, entry by entry, and not from
+    /// [`Features::placement`], so that [`check_read`] holds the placement
+    /// to the readers rather than to itself. A key the table does not name
+    /// has no reader.
+    pub fn of(key: u32, features: &Features) -> Readers {
+        let numbers = |reads: fn(NumberBackend) -> bool| {
+            let side = |side| features.backend::<NumberBackend>(side).is_some_and(reads);
+            Readers {
+                browser: side(Side::Browser),
+                native: side(Side::Native),
+            }
+        };
+        match key {
+            locale_key::ICU_BLOB => {
+                let icu = |side| {
+                    features
+                        .backend::<DateBackend>(side)
+                        .is_some_and(DateBackend::reads_slice)
+                };
+                Readers {
+                    browser: icu(Side::Browser),
+                    native: icu(Side::Native),
+                }
+            }
+            // A side selects from the plural rules with `builtin` or
+            // `plain`; with `intl` it asks the browser.
+            locale_key::PLURAL_CARDINAL | locale_key::PLURAL_ORDINAL => {
+                numbers(NumberBackend::reads_plural_rules)
+            }
+            // Only `builtin` formats from the number data.
+            locale_key::NUMBER_SYMBOLS
+            | locale_key::NUMBER_PATTERNS
+            | locale_key::CURRENCY_DATA
+            | locale_key::UNIT_DATA => numbers(NumberBackend::reads_number_data),
+            _ => Readers {
+                browser: false,
+                native: false,
+            },
+        }
+    }
+
+    /// Whether one of them looks in `place`. `downloaded` is whether a
+    /// browser downloads the catalog: then an entry belongs in it only if
+    /// the browser reads it, and in the server-only table only if native
+    /// code does and the browser, which never sees the table, does not;
+    /// without one, native code is the catalog's one reader and there is no
+    /// table.
+    pub fn look_in(self, place: Place, downloaded: bool) -> bool {
+        match place {
+            Place::Catalog if downloaded => self.browser,
+            Place::Catalog => self.native,
+            Place::Server => downloaded && self.native && !self.browser,
+            // Nothing is written there.
+            Place::Nowhere => true,
+        }
+    }
+
+    /// Who they are, in words: what `unread-data` and `mf2 stats` say.
+    pub fn name(self) -> &'static str {
+        match (self.browser, self.native) {
+            (true, true) => "the browser and native code",
+            (true, false) => "the browser alone",
+            (false, true) => "native code alone",
+            (false, false) => "none at all",
+        }
+    }
+}
+
+/// `unread-data` (`plan/08` §7), checked after slicing: fails if one of
+/// the entries [`write`] put in the catalog (`catalog`, as
+/// [`Catalog::locale_entries`]) or in the server-only table (`table`, as
+/// [`Catalog::server_entries`]) went where none of its [`Readers`] looks.
+/// `downloaded` is whether a browser downloads the catalog: a browser side
+/// is on and the build is not a native application's.
+pub fn check_read(
+    tag: &str,
+    catalog: &[(u32, usize)],
+    table: &[(u32, usize)],
+    features: &Features,
+    downloaded: bool,
+) -> Result<()> {
+    let placed = catalog
+        .iter()
+        .map(|(key, _)| (*key, Place::Catalog))
+        .chain(table.iter().map(|(key, _)| (*key, Place::Server)));
+    for (key, place) in placed {
+        let readers = Readers::of(key, features);
+        if !readers.look_in(place, downloaded) {
+            return Err(Error::UnreadData {
+                locale: tag.to_owned(),
+                entry: entry_name(key),
+                place: match place {
+                    Place::Catalog if downloaded => "into the catalog a browser downloads",
+                    Place::Catalog => "into the catalog",
+                    Place::Server => "into the server-only table",
+                    Place::Nowhere => "nowhere",
+                },
+                readers: readers.name(),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// One bundle of a locale's data, as `mf2 stats` lists it (`plan/08` §7):
+/// its bytes, who reads it, and where it ships.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Bundle {
+    /// `messages`, a section's name (`cold`, `ids`, `fallback`, `nfc`) or
+    /// a LOCALE entry's (`plural.cardinal`, `icu.blob`, ...).
+    pub name: String,
+    /// Raw bytes.
+    pub bytes: usize,
+    /// Who reads it.
+    pub readers: Readers,
+    /// Where it ships: [`Place::Catalog`] or [`Place::Server`], the
+    /// server-only table.
+    pub place: Place,
+}
+
+impl Bundle {
+    /// Whether a browser downloads it and never reads it: in the catalog a
+    /// browser downloads, with no browser among its readers.
+    pub fn unread_by_browser(&self, downloaded: bool) -> bool {
+        downloaded && self.place == Place::Catalog && !self.readers.browser
+    }
+}
+
+/// The sections a catalog leaves out when nothing needs them: `cold` and
+/// `ids` under `[catalog] strip`, `fallback` when no message falls back,
+/// `nfc` when only an identical string matches a key.
+const OPTIONAL_SECTIONS: [u16; 4] = [
+    mf2_catalog::format::section::COLD,
+    mf2_catalog::format::section::IDS,
+    mf2_catalog::format::section::FALLBACK,
+    mf2_catalog::format::section::NFC,
+];
+
+impl Catalog {
+    /// What ships where for this locale (`plan/08` §7): the messages, each
+    /// section the catalog could leave out that it carries, each LOCALE
+    /// entry of the catalog, then each entry of the server-only table.
+    /// `downloaded` is whether a browser downloads the catalog, as for
+    /// [`check_read`].
+    ///
+    /// The catalog's bundles add up to its raw bytes: `messages` is what is
+    /// left after the optional sections and the LOCALE entries' payloads,
+    /// so it holds the header, the section table and the LOCALE section's
+    /// own framing. `fallback` and `nfc` are read on both sides, as the
+    /// messages are: the client asks which language lent a message its
+    /// text, and matches keys through the canonical-equivalence map. `cold`
+    /// (only `mf2 dump` decodes it) and `ids` (the client formats by
+    /// message number) are read by native code alone, so a browser catalog
+    /// built with `[catalog] strip` turned off counts them as unread.
+    pub fn bundles(&self, features: &Features, downloaded: bool) -> Vec<Bundle> {
+        let sections = sections(&self.bytes);
+        // The messages: a browser reads them when it downloads the catalog,
+        // native code always — as `Readers::of` counts native code.
+        let shared = Readers {
+            browser: downloaded,
+            native: true,
+        };
+        let mut optional = Vec::new();
+        for kind in OPTIONAL_SECTIONS {
+            let bytes: usize = sections
+                .iter()
+                .filter(|(k, _)| *k == kind)
+                .map(|(_, n)| *n)
+                .sum();
+            if bytes > 0 {
+                optional.push(Bundle {
+                    name: mf2_catalog::format::section::name(kind)
+                        .unwrap_or("section")
+                        .to_ascii_lowercase(),
+                    bytes,
+                    readers: if kind == mf2_catalog::format::section::COLD
+                        || kind == mf2_catalog::format::section::IDS
+                    {
+                        Readers {
+                            browser: false,
+                            native: true,
+                        }
+                    } else {
+                        shared
+                    },
+                    place: Place::Catalog,
+                });
+            }
+        }
+        // Without a browser side, no browser reads an entry, whatever the
+        // features would have it read.
+        let entry = |(key, bytes): &(u32, usize), place| {
+            let readers = Readers::of(*key, features);
+            Bundle {
+                name: entry_name(*key),
+                bytes: *bytes,
+                readers: Readers {
+                    browser: readers.browser && downloaded,
+                    native: readers.native,
+                },
+                place,
+            }
+        };
+        let entries: Vec<Bundle> = self
+            .locale_entries
+            .iter()
+            .map(|e| entry(e, Place::Catalog))
+            .collect();
+        let taken: usize = optional
+            .iter()
+            .chain(&entries)
+            .map(|bundle| bundle.bytes)
+            .sum();
+        let mut bundles = vec![Bundle {
+            name: "messages".to_owned(),
+            bytes: self.bytes.len().saturating_sub(taken),
+            readers: shared,
+            place: Place::Catalog,
+        }];
+        bundles.extend(optional);
+        bundles.extend(entries);
+        bundles.extend(self.server_entries.iter().map(|e| entry(e, Place::Server)));
+        bundles
+    }
+}
+
+/// A catalog's section table: `(kind, length)` for each section, read
+/// from the header without validating the rest.
+fn sections(bytes: &[u8]) -> Vec<(u16, usize)> {
+    use mf2_catalog::format::{HEADER_LEN, SECTION_ENTRY_LEN, header};
+    let count = bytes
+        .get(header::SECTION_COUNT..header::SECTION_COUNT + 2)
+        .and_then(|b| <[u8; 2]>::try_from(b).ok())
+        .map_or(0, |b| usize::from(u16::from_le_bytes(b)));
+    (0..count)
+        .map_while(|i| {
+            let at = HEADER_LEN + i * SECTION_ENTRY_LEN;
+            let entry = bytes.get(at..at + SECTION_ENTRY_LEN)?;
+            let kind = u16::from_le_bytes([*entry.first()?, *entry.get(1)?]);
+            let len = u32::from_le_bytes(<[u8; 4]>::try_from(entry.get(6..10)?).ok()?);
+            Some((kind, usize::try_from(len).ok()?))
+        })
+        .collect()
+}
+
+/// The name of the LOCALE entry `key`, or the key itself.
+fn entry_name(key: u32) -> String {
+    match key {
+        locale_key::PLURAL_CARDINAL => "plural.cardinal".to_owned(),
+        locale_key::PLURAL_ORDINAL => "plural.ordinal".to_owned(),
+        locale_key::NUMBER_SYMBOLS => "number.symbols".to_owned(),
+        locale_key::NUMBER_PATTERNS => "number.patterns".to_owned(),
+        locale_key::CURRENCY_DATA => "currency.data".to_owned(),
+        locale_key::UNIT_DATA => "unit.data".to_owned(),
+        locale_key::ICU_BLOB => "icu.blob".to_owned(),
+        other => format!("key {other}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use mf2_catalog::format::locale_key;
+
+    use super::check_read;
+    use crate::error::Error;
+    use crate::features::Features;
+
+    const PLURAL: [u32; 2] = [locale_key::PLURAL_CARDINAL, locale_key::PLURAL_ORDINAL];
+    const DATA: [u32; 4] = [
+        locale_key::NUMBER_SYMBOLS,
+        locale_key::NUMBER_PATTERNS,
+        locale_key::CURRENCY_DATA,
+        locale_key::UNIT_DATA,
+    ];
+    const NUMBERS: [u32; 6] = [
+        locale_key::PLURAL_CARDINAL,
+        locale_key::PLURAL_ORDINAL,
+        locale_key::NUMBER_SYMBOLS,
+        locale_key::NUMBER_PATTERNS,
+        locale_key::CURRENCY_DATA,
+        locale_key::UNIT_DATA,
+    ];
+    /// A browser on `intl` beside a server on `builtin`.
+    const INTL: &str = "hydrate,leptos-client-number-intl,leptos-server-number-builtin";
+    /// A browser on `plain` beside a server on `builtin`.
+    const PLAIN: &str = "hydrate,leptos-client-number-plain,leptos-server-number-builtin";
+
+    fn entries(keys: &[u32]) -> Vec<(u32, usize)> {
+        keys.iter().map(|key| (*key, 8)).collect()
+    }
+
+    /// The check on `features`, with the catalog downloaded when a browser
+    /// side is on, as `Build` calls it outside a native application.
+    fn check(features: &str, catalog: &[u32], table: &[u32]) -> crate::Result<()> {
+        let features = Features::parse(features);
+        let downloaded = features.has_browser_side();
+        check_read(
+            "en",
+            &entries(catalog),
+            &entries(table),
+            &features,
+            downloaded,
+        )
+    }
+
+    fn unread(result: crate::Result<()>, entry: &str) {
+        match result {
+            Err(Error::UnreadData { entry: found, .. }) => assert_eq!(found, entry),
+            other => panic!("expected unread-data for {entry}, got {other:?}"),
+        }
+    }
+
+    // The placements `catalog::write` makes pass.
+
+    #[test]
+    fn every_entry_where_its_readers_look_passes() {
+        check("hydrate,leptos-client-number-builtin", &NUMBERS, &[])
+            .expect("the browser reads them");
+        check(INTL, &[], &NUMBERS).expect("the server reads them");
+        check(PLAIN, &PLURAL, &DATA)
+            .expect("the browser reads the plural rules, the server alone the number data");
+        check("csr,leptos-client-number-plain", &PLURAL, &[])
+            .expect("the browser reads the plural rules");
+        check("native,native-number-builtin", &NUMBERS, &[]).expect("one reader, one file");
+        check(
+            "ssr,leptos-client-datetime-intl,leptos-server-datetime-icu",
+            &[],
+            &[locale_key::ICU_BLOB],
+        )
+        .expect("only the server formats with ICU4X");
+        check(
+            "ssr,leptos-client-datetime-icu,leptos-server-datetime-iso",
+            &[locale_key::ICU_BLOB],
+            &[],
+        )
+        .expect("the browser formats with ICU4X");
+        check("native,native-datetime-icu", &[locale_key::ICU_BLOB], &[])
+            .expect("one reader, one file");
+    }
+
+    // Deliberately wrong placements: each must fail.
+
+    #[test]
+    fn number_entries_in_a_catalog_the_browser_never_reads_fail() {
+        unread(check(INTL, &NUMBERS, &[]), "plural.cardinal");
+        // A browser on `plain` reads the plural rules, and none of the
+        // number data.
+        unread(check(PLAIN, &NUMBERS, &[]), "number.symbols");
+        // A browser on `intl` with no server: no one reads either.
+        unread(
+            check("csr,leptos-client-number-intl", &PLURAL, &[]),
+            "plural.cardinal",
+        );
+    }
+
+    #[test]
+    fn number_entries_in_the_table_while_the_browser_reads_them_fail() {
+        unread(
+            check(
+                "hydrate,leptos-client-number-builtin",
+                &[],
+                &[locale_key::NUMBER_SYMBOLS],
+            ),
+            "number.symbols",
+        );
+        unread(check(PLAIN, &[], &NUMBERS), "plural.cardinal");
+    }
+
+    #[test]
+    fn a_table_with_no_browser_side_fails() {
+        unread(
+            check(
+                "native,native-number-builtin",
+                &[],
+                &[locale_key::UNIT_DATA],
+            ),
+            "unit.data",
+        );
+    }
+
+    #[test]
+    fn the_date_slice_where_its_one_reader_does_not_look_fails() {
+        // Only the server formats with ICU4X: not in the browser's catalog.
+        unread(
+            check(
+                "ssr,leptos-client-datetime-intl,leptos-server-datetime-icu",
+                &[locale_key::ICU_BLOB],
+                &[],
+            ),
+            "icu.blob",
+        );
+        // Only the browser does: not in the server's table.
+        unread(
+            check(
+                "ssr,leptos-client-datetime-icu,leptos-server-datetime-iso",
+                &[],
+                &[locale_key::ICU_BLOB],
+            ),
+            "icu.blob",
+        );
+        // Neither does: nowhere at all.
+        unread(
+            check("native,native-datetime-iso", &[locale_key::ICU_BLOB], &[]),
+            "icu.blob",
+        );
+    }
+
+    #[test]
+    fn an_entry_no_one_knows_fails() {
+        unread(check("native,native-number-builtin", &[5], &[]), "key 5");
+    }
+}

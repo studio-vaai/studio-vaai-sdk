@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src/**/*", "build/wasm2/**/*.ts", "build/message-types.ts", "package.json"],
+  "compilerOptions": {
+    "rootDir": ".",
+    "paths": { "@ubjs/core": ["./dist/types/uniffi-runtime/index.d.ts"] },
+    "outDir": "dist/types",
+    "types": [],
+    "allowJs": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false
+  }
+}

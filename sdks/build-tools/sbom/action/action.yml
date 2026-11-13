@@ -1,0 +1,68 @@
+name: Check dependency vulnerabilities
+description: Report release vulnerabilities and enforce inventory coverage and scanner integrity
+inputs:
+  input:
+    description: Directory containing CycloneDX release inventories
+    required: true
+  shell:
+    description: Runner shell, including any required environment wrapper
+    default: bash
+  entrypoint:
+    description: SBOM CLI path relative to the workspace; defaults to SDK-local tools
+    default: sdks/build-tools/sbom/sbom.py
+  native:
+    description: Enforce native package coverage and NVIDIA applicability
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Configure scanner cache
+      id: cache-path
+      shell: bash
+      env:
+        SCAN_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        SCAN_RUNNER_NAME: ${{ runner.name }}
+        SCAN_REPOSITORY_ID: ${{ github.repository_id }}
+        SCAN_CACHE_MODE: ${{ inputs.native == 'true' && 'native' || 'ecosystem' }}
+      run: |
+        directory="$RUNNER_TEMP/sbom-scanner-cache"
+        persistent=false
+        if [[ "$SCAN_RUNNER_ENVIRONMENT" == self-hosted && -n "${RUNNER_TOOL_CACHE:-}" ]]; then
+          slot=${SCAN_RUNNER_NAME//[^a-zA-Z0-9_-]/_}_${RUNNER_TEMP//[^a-zA-Z0-9_-]/_}
+          directory="$RUNNER_TOOL_CACHE/sbom-scanners-v2/$SCAN_REPOSITORY_ID/$SCAN_CACHE_MODE/runner-$slot"
+          persistent=true
+        fi
+        mkdir -p "$directory"
+        printf 'directory=%s\npersistent=%s\n' "$directory" "$persistent" >> "$GITHUB_OUTPUT"
+    - name: Restore scanner cache
+      continue-on-error: true
+      if: ${{ steps.cache-path.outputs.persistent != 'true' }}
+      id: cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.cache-path.outputs.directory }}
+        key: sbom-scan-v2-${{ inputs.native == 'true' && 'native' || 'ecosystem' }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('sdks/build-tools/sbom/resources/scanners.json') }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+        restore-keys: |
+          sbom-scan-v2-${{ inputs.native == 'true' && 'native' || 'ecosystem' }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('sdks/build-tools/sbom/resources/scanners.json') }}-
+          sbom-scan-v1-${{ inputs.native == 'true' && 'native' || 'ecosystem' }}-${{ runner.os }}-${{ runner.arch }}-
+    - name: Check dependency vulnerabilities and coverage
+      id: scan
+      shell: ${{ inputs.shell }}
+      env:
+        SCAN_ENTRYPOINT: ${{ inputs.entrypoint }}
+        SCAN_INPUT: ${{ inputs.input }}
+        SCAN_NATIVE: ${{ inputs.native }}
+        SCAN_CACHE_DIRECTORY: ${{ steps.cache-path.outputs.directory }}
+      run: |
+        args=(--input "$SCAN_INPUT" --output "$RUNNER_TEMP/sbom-scans" --cache "$SCAN_CACHE_DIRECTORY")
+        if [[ "$SCAN_NATIVE" == true ]]; then
+          args+=(--native)
+        fi
+        python3 "$GITHUB_WORKSPACE/$SCAN_ENTRYPOINT" scan "${args[@]}"
+    - name: Save updated vulnerability databases
+      continue-on-error: true
+      if: ${{ always() && steps.cache-path.outputs.persistent != 'true' && steps.scan.outputs.cache-ready == 'true' && !endsWith(steps.cache.outputs.cache-matched-key, steps.scan.outputs.cache-key) }}
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.cache-path.outputs.directory }}
+        key: sbom-scan-v2-${{ inputs.native == 'true' && 'native' || 'ecosystem' }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('sdks/build-tools/sbom/resources/scanners.json') }}-${{ steps.scan.outputs.cache-key }}

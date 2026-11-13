@@ -1,0 +1,6 @@
+/target/
+# The Justfile's ubrn and wasm recipes write here.
+/build/
+# Vendored crates are kept whole, even where a broader rule ignores, say,
+# every data/ directory.
+!/vendor/**

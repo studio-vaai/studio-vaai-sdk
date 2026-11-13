@@ -1,0 +1,1115 @@
+openapi: 3.0.0
+info:
+  title: studio vaai Analytics API
+  version: '2026-11-04'
+  summary: Collect storefront and try-on events.
+tags:
+  - name: analytics
+paths:
+  /api/send:
+    post:
+      operationId: sendAnalyticsEvent
+      summary: Send an analytics event
+      description: |-
+        Send storefront and try-on events with the same X-Client-Api-Key used by the business API. The API key identifies the shop. Omit shopper credentials and cookies.
+
+        See [Analytics](/api/analytics) for integration guidance and the event catalogue.
+      parameters:
+        - name: X-Client-Api-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+        '401':
+          description: Access is unauthorized.
+        '403':
+          description: Access is forbidden.
+        '413':
+          description: Client error
+        '502':
+          description: Server error
+        '503':
+          description: Service unavailable.
+      tags:
+        - analytics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyticsEventRequest'
+security:
+  - {}
+components:
+  schemas:
+    AnalyticsContext:
+      type: object
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+    AnalyticsEvent:
+      anyOf:
+        - $ref: '#/components/schemas/EntrypointImpression'
+        - $ref: '#/components/schemas/EntrypointClicked'
+        - $ref: '#/components/schemas/IntroOpened'
+        - $ref: '#/components/schemas/ConsentGranted'
+        - $ref: '#/components/schemas/ImageRecordInitiated'
+        - $ref: '#/components/schemas/ImageRecordAborted'
+        - $ref: '#/components/schemas/ImageUploadInitiated'
+        - $ref: '#/components/schemas/ImageUploadAborted'
+        - $ref: '#/components/schemas/ImageUploaded'
+        - $ref: '#/components/schemas/HeightEntered'
+        - $ref: '#/components/schemas/VariantSelectionInitiated'
+        - $ref: '#/components/schemas/TryOnInitiated'
+        - $ref: '#/components/schemas/GatedSizeSelected'
+        - $ref: '#/components/schemas/CartItemAdded'
+        - $ref: '#/components/schemas/OrderPlaced'
+        - $ref: '#/components/schemas/ViewClosed'
+        - $ref: '#/components/schemas/ExperimentAssigned'
+        - $ref: '#/components/schemas/ExperienceOperationFailed'
+      description: Named events supported by studio vaai integrations. Data values are flat string, number, or boolean properties; the event definitions specify the supported properties.
+    AnalyticsEventRequest:
+      type: object
+      required:
+        - type
+        - payload
+      properties:
+        type:
+          type: string
+          enum:
+            - event
+        payload:
+          $ref: '#/components/schemas/AnalyticsEvent'
+      example:
+        type: event
+        payload:
+          hostname: shop.example.com
+          url: /products/longsleeve
+          name: try-on-initiated
+          data:
+            product-id: longsleeve
+            variant-size: M
+    AnalyticsImageSource:
+      type: string
+      enum:
+        - intro
+        - variant-selection
+        - image-rejection
+        - height
+      description: Where the user starts selecting or taking a photo.
+    AnalyticsProductData:
+      type: object
+      required:
+        - product-id
+      properties:
+        product-id:
+          type: string
+          description: Product associated with this event.
+          example: longsleeve
+        sdk-version:
+          type: string
+          description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+    AnalyticsStep:
+      type: string
+      enum:
+        - entry
+        - intro
+        - image-record
+        - image-upload
+        - image-rejection
+        - height
+        - variant-selection
+        - try-on
+      description: A step in the user flow.
+    AnalyticsVariantData:
+      type: object
+      required:
+        - product-id
+      properties:
+        product-id:
+          type: string
+          description: Product associated with this event.
+          example: longsleeve
+        sdk-version:
+          type: string
+          description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+        variant-size:
+          type: string
+          description: Selected size, if the product has a size axis.
+        variant-colorway:
+          type: string
+          description: Selected colorway, if the product has a colorway axis.
+      allOf:
+        - type: object
+          additionalProperties:
+            type: string
+      description: Additional variant-<axis> string properties describe the selected variant, for example variant-colorway or variant-length.
+    CartItemAdded:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - cart-item-added
+        data:
+          $ref: '#/components/schemas/AnalyticsVariantData'
+      description: A product variant is successfully added to the cart.
+      x-event-group: Cart & orders
+    ConsentGranted:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - consent-granted
+        data:
+          $ref: '#/components/schemas/AnalyticsProductData'
+      description: The shopper consents to processing their photo and body measurements. Create the session separately.
+      x-event-group: Entry & consent
+    EntrypointClicked:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - entrypoint-clicked
+        data:
+          type: object
+          properties:
+            product-id:
+              type: string
+              description: Product associated with this event.
+              example: longsleeve
+            sdk-version:
+              type: string
+              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+            entry:
+              type: string
+              description: Merchant-defined entrypoint placement.
+            subentry:
+              type: string
+              description: Optional finer-grained placement.
+            current-step:
+              $ref: '#/components/schemas/AnalyticsStep'
+          required:
+            - product-id
+            - entry
+            - current-step
+      description: The shopper clicks a try-on entrypoint to open or resume the flow.
+      x-event-group: Entry & consent
+    EntrypointImpression:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - entrypoint-impression
+        data:
+          type: object
+          properties:
+            product-id:
+              type: string
+              description: Product associated with this event.
+              example: longsleeve
+            sdk-version:
+              type: string
+              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+            entry:
+              type: string
+              description: Merchant-defined entrypoint placement, for example pdp-button.
+          required:
+            - product-id
+            - entry
+      description: A try-on button or link becomes visible.
+      x-event-group: Entry & consent
+    ExperienceOperationFailed:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - experience-operation-failed
+        data:
+          type: object
+          properties:
+            product-id:
+              type: string
+              description: Product associated with this event.
+              example: longsleeve
+            sdk-version:
+              type: string
+              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+            work:
+              type: string
+            outcome:
+              type: string
+            reason:
+              type: string
+            current-step:
+              $ref: '#/components/schemas/AnalyticsStep'
+          required:
+            - product-id
+            - work
+            - outcome
+            - current-step
+      description: A try-on operation failed or its outcome could not be confirmed.
+      x-event-group: Try-on
+    ExperimentAssigned:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - experiment-assigned
+        data:
+          type: object
+          properties:
+            experiment:
+              type: string
+              enum:
+                - try-on-enabled
+            variant:
+              type: string
+              enum:
+                - enabled
+                - disabled
+            sdk-version:
+              type: string
+              description: SDK package and version, when applicable.
+          required:
+            - experiment
+            - variant
+      description: A visitor receives a rollout assignment. Send once per assignment using the same anonymous visitor ID.
+      x-event-group: Rollout
+    GatedSizeSelected:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - gated-size-selected
+        data:
+          type: object
+          properties:
+            product-id:
+              type: string
+              description: Product associated with this event.
+              example: longsleeve
+            sdk-version:
+              type: string
+              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+            variant-size:
+              type: string
+            gate:
+              type: string
+              enum:
+                - too_small
+                - too_large
+          required:
+            - product-id
+            - variant-size
+            - gate
+      description: The shopper selects a size marked too small or too large.
+      x-event-group: Selection & try-on
+    HeightEntered:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - height-entered
+        data:
+          type: object
+          properties:
+            product-id:
+              type: string
+              description: Product associated with this event.
+              example: longsleeve
+            sdk-version:
+              type: string
+              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+            source:
+              $ref: '#/components/schemas/AnalyticsStep'
+          required:
+            - product-id
+            - source
+      description: The shopper confirms or updates their height.
+      x-event-group: Photo & height
+    ImageRecordAborted:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - image-record-aborted
+        data:
+          type: object
+          properties:
+            product-id:
+              type: string
+              description: Product associated with this event.
+              example: longsleeve
+            sdk-version:
+              type: string
+              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+            source:
+              $ref: '#/components/schemas/AnalyticsImageSource'
+          required:
+            - product-id
+            - source
+      description: The shopper leaves the camera without submitting a photo.
+      x-event-group: Photo & height
+    ImageRecordInitiated:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - image-record-initiated
+        data:
+          type: object
+          properties:
+            product-id:
+              type: string
+              description: Product associated with this event.
+              example: longsleeve
+            sdk-version:
+              type: string
+              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+            source:
+              $ref: '#/components/schemas/AnalyticsImageSource'
+          required:
+            - product-id
+            - source
+      description: The shopper enters the camera flow.
+      x-event-group: Photo & height
+    ImageUploadAborted:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - image-upload-aborted
+        data:
+          type: object
+          properties:
+            product-id:
+              type: string
+              description: Product associated with this event.
+              example: longsleeve
+            sdk-version:
+              type: string
+              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+            source:
+              $ref: '#/components/schemas/AnalyticsImageSource'
+          required:
+            - product-id
+            - source
+      description: The photo picker closes without a selection.
+      x-event-group: Photo & height
+    ImageUploadInitiated:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - image-upload-initiated
+        data:
+          type: object
+          properties:
+            product-id:
+              type: string
+              description: Product associated with this event.
+              example: longsleeve
+            sdk-version:
+              type: string
+              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+            source:
+              $ref: '#/components/schemas/AnalyticsImageSource'
+          required:
+            - product-id
+            - source
+      description: The photo picker opens.
+      x-event-group: Photo & height
+    ImageUploaded:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - image-uploaded
+        data:
+          type: object
+          properties:
+            product-id:
+              type: string
+              description: Product associated with this event.
+              example: longsleeve
+            sdk-version:
+              type: string
+              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+            image-source:
+              type: string
+              enum:
+                - record-self-timer
+                - record-system-dialog
+                - select
+          required:
+            - product-id
+            - image-source
+      description: Photo processing completes; the photo is ready for height confirmation.
+      x-event-group: Photo & height
+    IntroOpened:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - intro-opened
+        data:
+          type: object
+          properties:
+            product-id:
+              type: string
+              description: Product associated with this event.
+              example: longsleeve
+            sdk-version:
+              type: string
+              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+            source:
+              $ref: '#/components/schemas/AnalyticsStep'
+          required:
+            - product-id
+            - source
+      description: The introduction opens. Use entry as the source on first open.
+      x-event-group: Entry & consent
+    OrderPlaced:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - order-placed
+        data:
+          $ref: '#/components/schemas/AnalyticsVariantData'
+      description: A purchase completes. Send once per product variant.
+      x-event-group: Cart & orders
+    TryOnInitiated:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - try-on-initiated
+        data:
+          $ref: '#/components/schemas/AnalyticsVariantData'
+      description: A try-on starts for the selected variant.
+      x-event-group: Selection & try-on
+    VariantSelectionInitiated:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - variant-selection-initiated
+        data:
+          type: object
+          properties:
+            product-id:
+              type: string
+              description: Product associated with this event.
+              example: longsleeve
+            sdk-version:
+              type: string
+              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+            source:
+              $ref: '#/components/schemas/AnalyticsStep'
+            via:
+              type: string
+              enum:
+                - back
+                - go-to-product-overview
+          required:
+            - product-id
+            - source
+      description: Size and colour selection opens.
+      x-event-group: Selection & try-on
+    ViewClosed:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        hostname:
+          type: string
+          maxLength: 100
+          description: Storefront hostname, without a scheme or path.
+          example: shop.example.com
+        url:
+          type: string
+          description: Page path or URL. Prefer a path without sensitive query parameters.
+          example: /products/longsleeve
+        id:
+          type: string
+          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
+        language:
+          type: string
+          maxLength: 35
+          description: Browser language, for example en-GB.
+        screen:
+          type: string
+          maxLength: 11
+          description: Screen dimensions, for example 390x844.
+        title:
+          type: string
+          description: Page title.
+        referrer:
+          type: string
+          description: Referring page path or URL.
+        name:
+          type: string
+          enum:
+            - view-closed
+        data:
+          type: object
+          properties:
+            product-id:
+              type: string
+              description: Product associated with this event.
+              example: longsleeve
+            sdk-version:
+              type: string
+              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+            current-step:
+              $ref: '#/components/schemas/AnalyticsStep'
+          required:
+            - product-id
+            - current-step
+      description: The try-on view closes; include the current step.
+      x-event-group: Selection & try-on
+servers:
+  - url: https://a.studio-vaai.com
+    description: Analytics
+    variables: {}

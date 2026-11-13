@@ -1,0 +1,14 @@
+[workspace]
+resolver = "3"
+# vendor/mf2 is rust-mf2's crates, rebuilt by patches/vendor.sh: members, so
+# their own tests run with ours.
+members = ["api", "formatting", "image-metadata", "sdk-core", "state-machine", "vendor/mf2/*"]
+
+# Tuned for the size of the shipped binaries.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+# panic stays "unwind": UniFFI turns a Rust panic into a Swift or Kotlin error
+# instead of aborting the merchant's app.

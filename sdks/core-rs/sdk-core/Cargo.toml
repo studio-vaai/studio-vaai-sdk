@@ -1,0 +1,39 @@
+[package]
+name = "studio-vaai-core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "Platform bindings of the studio vaai SDK core: UniFFI for Swift, Kotlin, the web (WebAssembly) and React Native"
+
+[lib]
+name = "studio_vaai_core"
+# staticlib: what the iOS xcframework links. cdylib: Android's .so, the
+# WebAssembly module, and the library the bindgens read the interface from.
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+required-features = ["cli"]
+
+[features]
+cli = ["uniffi/cli"]
+
+[dependencies]
+# The public API client, generated from the TypeSpec contract; exports its own namespace.
+api = { path = "../api", features = ["uniffi"] }
+formatting = { path = "../formatting" }
+image-metadata = { path = "../image-metadata" }
+# Derives its own UniFFI exports, behind its `uniffi` feature.
+state-machine = { path = "../state-machine", features = ["uniffi"] }
+
+uniffi = "0.32.2"
+async-trait = "0.1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+
+# What uniffi-bindgen-react-native's wasm2 player needs from the module.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uniffi-runtime-wasm = "0.31.0-6"
+# Wasm is single-threaded: without this UniFFI demands Send + Sync on every
+# exported object.
+uniffi_core = { version = "0.32", features = ["wasm-unstable-single-threaded"] }

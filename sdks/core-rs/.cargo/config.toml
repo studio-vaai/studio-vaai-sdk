@@ -1,0 +1,5 @@
+# The @ubjs/wasm player calls back into the module through its function table,
+# so the table must be exported and growable. `ubrn build wasm2` would add this
+# while staging; the Justfile runs ubrn's generate step directly instead.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "link-arg=--export-table", "-C", "link-arg=--growable-table"]

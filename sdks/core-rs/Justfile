@@ -1,0 +1,76 @@
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+# The vendored crates, rustfmt, clippy and tests (the vendored crates' own
+# among them).
+ci: mf2-check
+    cargo fmt --check
+    cargo clippy --locked --workspace --all-targets --features studio-vaai-core/cli -- -D warnings
+    cargo nextest run -P default --workspace --locked
+
+# rust-mf2, vendored in vendor/mf2: its crates.io packages, as pinned by
+# patches/mf2/upstream.toml, changed only by the patches beside it. See
+# patches/mf2/README.md.
+
+# Rebuild vendor/mf2 from the pin and the patches.
+mf2-vendor:
+    patches/vendor.sh sync mf2
+
+# Fail unless vendor/mf2 is exactly that rebuild.
+mf2-check:
+    patches/vendor.sh check mf2
+
+# Record vendor/mf2's edits as the next patch, named in kebab-case.
+mf2-patch name:
+    patches/vendor.sh patch mf2 {{ name }}
+
+# Fold vendor/mf2's edits into an existing patch, by number.
+mf2-refresh number:
+    patches/vendor.sh refresh mf2 {{ number }}
+
+# uniffi-bindgen-react-native (ubrn) generates the web's TypeScript. Pinned to
+# the head of jhugman/uniffi-bindgen-react-native#468, the unmerged UniFFI 0.32
+# bump: released ubrn pins UniFFI 0.31, which lacks the zero-copy `&[u8]`
+# argument. Move to a release once one supports 0.32.
+ubrn_repo := "https://github.com/Dzejkop/uniffi-bindgen-react-native"
+ubrn_rev := "06f0a30d257573ffcc852e84e814670d53085979"
+ubrn := "build/ubrn/bin/uniffi-bindgen-react-native"
+
+# The pinned ubrn: its CLI and its two TypeScript runtimes (@ubjs/core, the FFI
+# converters; @ubjs/wasm, the player), built from source because the published
+# packages predate UniFFI 0.32. Into build/ubrn and build/node_modules, once
+# per pin.
+ubrn:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    stamp=build/ubrn/rev
+    [[ -x {{ ubrn }} && "$(cat $stamp 2>/dev/null)" == {{ ubrn_rev }} ]] && exit 0
+    rm -rf build/ubrn build/node_modules/@ubjs
+    git clone -q --filter=blob:none {{ ubrn_repo }} build/ubrn/src
+    git -C build/ubrn/src checkout -q {{ ubrn_rev }}
+    cargo install -q --locked --path build/ubrn/src/crates/ubrn_cli --root build/ubrn
+    (cd build/ubrn/src/runtimes/wasm && npm ci -s --ignore-scripts --no-audit --no-fund)
+    tsc=build/ubrn/src/runtimes/wasm/node_modules/.bin/tsc
+    $tsc -p build/ubrn/src/typescript/tsconfig.esm.json
+    $tsc -b build/ubrn/src/runtimes/wasm
+    for package in core:typescript wasm:runtimes/wasm; do
+      name=${package%%:*} source=build/ubrn/src/${package#*:}
+      mkdir -p build/node_modules/@ubjs/$name
+      cp -R $source/package.json $source/dist build/node_modules/@ubjs/$name/
+    done
+    echo {{ ubrn_rev }} > $stamp
+
+# The web build, into build/wasm2: the crate as a WebAssembly module, beside the
+# ubrn-generated TypeScript that runs it through the @ubjs/wasm player.
+wasm: ubrn
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target_dir=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')
+    wasm="$target_dir/wasm32-unknown-unknown/release/studio_vaai_core.wasm"
+    cargo build -q --release --lib -p studio-vaai-core --target wasm32-unknown-unknown
+    rm -rf build/wasm2
+    {{ ubrn }} generate wasm2 bindings --library "$wasm" --ts-dir build/wasm2 --no-format
+    bash scripts/optimize-wasm.sh "$wasm" build/wasm2/studio_vaai_core.wasm
+
+# Inventory the exact WASM artifact produced above. Requires cargo-cyclonedx 0.5.9.
+wasm-sbom: wasm
+    python3 ../build-tools/sbom/sbom.py native --target wasm32-unknown-unknown --artifact wasm32-unknown-unknown=build/wasm2/studio_vaai_core.wasm --output build/sbom

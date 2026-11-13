@@ -1,0 +1,35 @@
+{
+  "name": "@studio-vaai/core",
+  "version": "0.1.0",
+  "description": "The shared Rust SDK's API client, experience model, MF2 formatter and shipped catalogs for the web",
+  "license": "MIT AND MPL-2.0 AND Unicode-3.0",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/types/src/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./api": {
+      "types": "./dist/types/src/api.d.ts",
+      "import": "./dist/api.js"
+    },
+    "./analytics": {
+      "types": "./dist/types/src/analytics/index.d.ts",
+      "import": "./dist/analytics.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "just wasm && pnpm build:web",
+    "build:web": "node scripts/message-types.mts && vite build --config vite.config.ts && tsgo -p build/ubrn/src/typescript/tsconfig.esm.json --emitDeclarationOnly --declarationMap false --outDir dist/types/uniffi-runtime && tsgo --emitDeclarationOnly && node scripts/package-runtime-types.mts",
+    "test": "vitest run --config ../../vitest.config.ts test/"
+  },
+  "devDependencies": {
+    "vite": "^8.3.6"
+  }
+}

@@ -1,0 +1,50 @@
+# rust-mf2, Evan Carroll's Unicode MessageFormat 2 implementation
+# (https://github.com/EvanCarroll/rust-mf2, MIT; mf2-locale-data's CLDR
+# tables are Unicode, Inc.'s, under the Unicode License v3).
+#
+# vendor/mf2/ holds the crates.io packages below at `version`, published from
+# `commit`, and the repository files below from that commit, with the drop
+# list removed and the patches beside this file applied in order.
+# `patches/vendor.sh` rebuilds, checks and extends it.
+
+repository = "https://github.com/EvanCarroll/rust-mf2"
+commit = "d598787b23e5c7841dd2a021ae2beffef32303c8"
+version = "3.0.0"
+
+# Each package's checksum: crates.io's SHA-256 of its .crate file.
+[crates]
+mf2-build = "5475b278b0f7ac8ca1228cbe5a819e9efe8b76b585468cfb55813e4d9694afe2"
+mf2-catalog = "1c5d4d0ef13495b632f6da6d36a81a03a762c01cef4dfef59882797431877450"
+mf2-fn-number = "e41b1dfd7012bbd858f048caf0c92a5bbf7b4cc030fbd89cffc707e5e395f3c0"
+mf2-locale-data = "8002a888fe308401128402d3de323394128adcdab8ea72395edf13078fb7775b"
+mf2-model = "cea1106b9fb39038df5c599f18fe9abec8eed06ee109be38a3e8c03c49ec85ec"
+mf2-resource = "c5c1c37d3e08b8ec87ce7acb686b6f35888efb4e955eb269de907699d9b12ba2"
+mf2-runtime = "f3af896a4a7170c2814d49a27db3b333de2ead70dcc032ecf38142e098593eb8"
+mf2-syntax = "cd450ea575a3653ac3db85f3b93d4fc4854fba8a1bf62fac48b2536a5ee8da2c"
+
+# Files of the repository itself at `commit`, which no package carries, placed
+# beside the crates, with their SHA-256.
+[files]
+# Upstream's clippy configuration (proper names for `doc_markdown`), so the
+# crates lint as they do upstream.
+"clippy.toml" = "936f6a43038c897b61ad8636fbf9aaad7ed6a61c4238bdbe81ebc9a8ec2d759c"
+
+# Files removed after unpacking (globs, relative to vendor/mf2/). Files leave
+# through this list, never through a patch.
+[drop]
+paths = [
+  # Packaging leftovers: cargo's lockfile and original manifest, the VCS
+  # stamp (its commit is `commit` above) and the API listings.
+  "*/Cargo.lock",
+  "*/Cargo.toml.orig",
+  "*/.cargo_vcs_info.json",
+  "*/api.txt",
+  # The ICU4X date backend's tests, whose target 0002 removes with the
+  # backend (its module stays, never compiled in: rustfmt still reads it).
+  "mf2-locale-data/tests/icu_blob.rs",
+  # CLDR's currency and unit tables, 7.2 of the data's 7.5 MB, for `:currency`
+  # and `:unit`, which the SDK does not offer (0003).
+  "mf2-locale-data/data/currencies.txt",
+  "mf2-locale-data/data/units.txt",
+  "mf2-locale-data/tests/measure.rs",
+]

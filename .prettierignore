@@ -1,0 +1,20 @@
+# Read by oxfmt.
+
+# Dependencies and build outputs
+node_modules
+dist
+build
+target
+coverage
+*.tsbuildinfo
+
+# Generated code, committed as its generator writes it
+**/generated/**/*
+
+# Vendored crates, kept as their upstream published them (see
+# sdks/core-rs/patches)
+sdks/core-rs/vendor
+
+# Lock files
+pnpm-lock.yaml
+Cargo.lock

@@ -1,0 +1,11 @@
+# The bindings of the state machine's own UniFFI namespace, which the
+# `uniffi` feature exports and `studio-vaai-core` links into its library.
+
+[bindings.swift]
+# Swift names each namespace's file after its module, so this one needs its
+# own; its C module defaults to `StudioVaaiStateMachineFFI`.
+module_name = "StudioVaaiStateMachine"
+
+[bindings.kotlin]
+package_name = "com.studiovaai.core.statemachine"
+cdylib_name = "studio_vaai_core"

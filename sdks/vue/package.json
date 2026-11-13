@@ -1,0 +1,33 @@
+{
+  "name": "@studio-vaai/vue",
+  "version": "0.1.0",
+  "description": "Vue integration for the studio vaai try-on experience",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vite build && rm -f tsconfig.tsbuildinfo && tsgo --emitDeclarationOnly"
+  },
+  "dependencies": {
+    "@studio-vaai/core": "workspace:*",
+    "@studio-vaai/web-components": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^8.3.6",
+    "vue": "3.0.0"
+  },
+  "peerDependencies": {
+    "vue": "^3.0.0"
+  }
+}

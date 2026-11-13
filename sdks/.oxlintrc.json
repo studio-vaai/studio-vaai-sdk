@@ -1,0 +1,361 @@
+{
+  "$schema": "../node_modules/oxlint/configuration_schema.json",
+  "plugins": ["unicorn", "typescript", "react", "react-perf", "oxc", "import", "promise"],
+  "categories": {
+    "correctness": "error",
+    "perf": "error",
+    "restriction": "error",
+    "suspicious": "error",
+    "pedantic": "error",
+    "style": "error"
+  },
+  "rules": {
+    // Preserve the existing lint policy when adopting oxlint 1.92. These newly
+    // enabled restrictions and React Compiler diagnostics need a separate rollout;
+    // this workspace does not run React Compiler. Existing Hooks checks stay on.
+    // TypeScript permits value/type pairs; tsc checks duplicate value declarations.
+    "no-redeclare": "off",
+    "one-var": "off",
+    "react/jsx-no-literals": "off",
+    "unicorn/max-nested-calls": "off",
+    "unicorn/prefer-number-coercion": "off",
+    "unicorn/prefer-single-call": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "unicorn/prefer-export-from": "off",
+    "unicorn/numeric-separators-style": "off",
+    "unicorn/prefer-string-replace-all": "off",
+    "unicorn/prefer-array-flat-map": "off",
+    "react/function-component-definition": "off",
+    "react/static-components": "off",
+    "react/set-state-in-effect": "off",
+    "react/todo": "off",
+    "react/exhaustive-effect-dependencies": "off",
+    "react/refs": "off",
+    "react/no-deriving-state-in-effects": "off",
+    "react/rule-suppression": "off",
+    "react/preserve-manual-memoization": "off",
+    "react/purity": "off",
+    "react/immutability": "off",
+    "react/incompatible-library": "off",
+    "id-length": 0,
+    "no-async-await": 0,
+    "no-continue": 0,
+    "no-ternary": 0,
+    "arrow-body-style": 0,
+    "sort-keys": 0,
+    "sort-imports": "off",
+    "no-magic-numbers": 0,
+    "max-params": 0,
+    "no-default-export": 0,
+    "no-param-reassign": 0,
+    "no-optional-chaining": 0,
+    "no-rest-spread-properties": 0,
+    "func-style": 0,
+    "init-declarations": 0,
+    "max-dependencies": 0,
+    "max-classes-per-file": 0,
+    "new-cap": 0,
+    "react/jsx-filename-extension": 0,
+    "react/react-in-jsx-scope": 0,
+    "react-perf/jsx-no-new-object-as-prop": 0,
+    "react-perf/jsx-no-new-function-as-prop": 0,
+    "react/no-unescaped-entities": 0,
+    "unicorn/require-module-specifiers": 0,
+    "unicorn/no-null": 0,
+    "unicorn/prefer-spread": 0,
+    "unicorn/no-typeof-undefined": 0,
+    "unicorn/prefer-type-error": 0,
+    "import/no-named-export": 0,
+    "import/prefer-default-export": 0,
+    "import/exports-last": 0,
+    "import/group-exports": 0,
+    "import/no-duplicates": 0,
+    "import/no-unassigned-import": 0,
+    "only-export-components": 0,
+    "no-duplicate-imports": 0,
+    "max-lines": 0,
+    "max-lines-per-function": 0,
+    "typescript/explicit-function-return-type": 0,
+    "typescript/return-await": ["warn", "always"],
+    "typescript/only-throw-error": 0,
+    "unicorn/no-array-reduce": 0,
+    "no-shadow": 0,
+    "typescript/no-use-before-define": 0,
+    "no-inline-comments": 0,
+    "capitalized-comments": 0,
+    "max-statements": 0,
+    "react/jsx-max-depth": 0,
+    "react/no-multi-comp": 0,
+    "react/jsx-props-no-spreading": 0,
+    "import/no-nodejs-modules": 0,
+    "complexity": 0,
+    "oxc/no-map-spread": 0,
+    "react/forbid-component-props": 0,
+    "no-underscore-dangle": 0,
+    "typescript/explicit-member-accessibility": 0,
+    "typescript/method-signature-style": 0,
+    "require-unicode-regexp": 0,
+    "prefer-arrow-callback": 0,
+    "unicorn/no-negated-condition": 0,
+    "prefer-named-capture-group": 0,
+    "unicorn/import-style": 0,
+    "func-name-matching": 0,
+    "no-void": [
+      "error",
+      {
+        "allowAsStatement": true
+      }
+    ],
+    "@typescript-eslint/prefer-readonly-parameter-types": "off",
+    "@typescript-eslint/strict-void-return": "off",
+    "@typescript-eslint/consistent-return": "off"
+  },
+  "overrides": [
+    {
+      "files": ["core-rs/src/**/*.ts"],
+      "rules": { "import/no-relative-parent-imports": "off", "no-undefined": "off" }
+    },
+    {
+      // Build configurations share the exported SBOM plugin across SDKs.
+      "files": ["*/vite.lib.config.ts", "core-rs/vite.config.ts"],
+      "rules": { "import/no-relative-parent-imports": "off" }
+    },
+    {
+      "files": ["**/generated/**"],
+      "rules": {
+        "unicorn/no-abusive-eslint-disable": "off",
+        "unicorn/filename-case": "off"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx", "**/test/**"],
+      "plugins": ["vitest"],
+      "rules": {
+        "@typescript-eslint/no-non-null-assertion": "off",
+        "@typescript-eslint/no-unsafe-assignment": "off",
+        "@typescript-eslint/no-unsafe-call": "off",
+        "@typescript-eslint/no-unsafe-member-access": "off",
+        "@typescript-eslint/no-unsafe-type-assertion": "off",
+        "no-undefined": "off",
+        "vitest/no-importing-vitest-globals": "off",
+        "vitest/padding-around-test-blocks": "off",
+        "prefer-destructuring": "off",
+        "promise/prefer-await-to-then": "off",
+        "promise/catch-or-return": "off",
+        "no-void": "off",
+        "vitest/require-test-timeout": "off",
+        "vitest/prefer-describe-function-title": "off",
+        "vitest/prefer-to-be-truthy": "off",
+        "vitest/prefer-to-be-falsy": "off",
+        "vitest/prefer-called-times": "off",
+        "vitest/prefer-expect-assertions": "off",
+        "vitest/max-expects": "off",
+        "vitest/prefer-strict-equal": "off",
+        "vitest/prefer-lowercase-title": "off",
+        "vitest/no-conditional-in-test": "off",
+        "vitest/no-conditional-expect": "off",
+        "vitest/no-hooks": "off",
+        "vitest/prefer-to-have-length": "off",
+        "vitest/prefer-to-contain": "off",
+        "vitest/prefer-each": "off",
+        "import/no-relative-parent-imports": "off",
+        "import/consistent-type-specifier-style": "off",
+        "require-await": "off",
+        "@typescript-eslint/require-await": "off"
+      }
+    },
+    {
+      "files": ["**/*.config.ts", "**/*.config.js"],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    },
+    {
+      "files": ["**/*.tsx"],
+      "rules": {
+        "typescript/explicit-module-boundary-types": "off",
+        "no-rest-spread-properties": "off"
+      }
+    },
+    {
+      "files": ["**/ui/**/*.tsx"],
+      "rules": {
+        "import/no-namespace": "off"
+      }
+    },
+    {
+      "files": ["js-debugger/src/**/*.ts"],
+      "rules": {
+        "import/no-relative-parent-imports": "off",
+        "no-undefined": "off",
+        "no-negated-condition": "off",
+        "class-methods-use-this": "off",
+        "@typescript-eslint/no-unsafe-type-assertion": "off",
+        "@typescript-eslint/no-unsafe-call": "off",
+        "@typescript-eslint/no-unsafe-return": "off",
+        "@typescript-eslint/strict-boolean-expressions": "off",
+        "typescript/explicit-module-boundary-types": "off",
+        "promise-function-async": "off"
+      }
+    },
+    {
+      // The Custom Elements Manifest config drives the analyzer's untyped plugin API (TypeScript
+      // AST nodes and manifest objects arrive as `any`), so the type-aware rules see nothing but
+      // `any` there. Scoped to this one build config.
+      "files": ["web-components/custom-elements-manifest.config.mjs"],
+      "rules": {
+        "@typescript-eslint/no-unsafe-argument": "off",
+        "@typescript-eslint/no-unsafe-assignment": "off",
+        "@typescript-eslint/no-unsafe-call": "off",
+        "@typescript-eslint/no-unsafe-member-access": "off",
+        "@typescript-eslint/no-unsafe-return": "off",
+        "@typescript-eslint/strict-boolean-expressions": "off",
+        "@typescript-eslint/prefer-nullish-coalescing": "off"
+      }
+    },
+    {
+      // Lit elements: `render()` reads properties through templates, optional props are cleared
+      // with `undefined`, and components live in nested folders (as in the other SDK packages).
+      "files": ["web-components/src/**/*.ts"],
+      "rules": {
+        "import/no-relative-parent-imports": "off",
+        "no-undefined": "off",
+        "class-methods-use-this": "off",
+        "typescript/explicit-module-boundary-types": "off"
+      }
+    },
+    {
+      // Ambient declarations (an asset import's type) are scripts by design.
+      "files": ["**/*.d.ts"],
+      "rules": {
+        "unambiguous": "off"
+      }
+    },
+    {
+      "files": ["js-client/src/api/**/*.ts"],
+      "rules": {
+        "import/no-relative-parent-imports": "off"
+      }
+    },
+    {
+      "files": ["js-client/src/impl/**/*.ts"],
+      "rules": {
+        "import/no-relative-parent-imports": "off"
+      }
+    },
+    {
+      "files": ["js-tracking/src/**/*.ts"],
+      "rules": {
+        "import/no-relative-parent-imports": "off",
+        "no-undefined": "off",
+        "@typescript-eslint/no-unsafe-type-assertion": "off"
+      }
+    },
+    {
+      "files": ["js-machine/src/**/*.ts"],
+      "rules": {
+        "import/no-relative-parent-imports": "off",
+        "no-undefined": "off",
+        "@typescript-eslint/no-non-null-assertion": "off",
+        "prefer-destructuring": "off",
+        "@typescript-eslint/consistent-type-definitions": "off",
+        "@typescript-eslint/no-unsafe-type-assertion": "off",
+        "@typescript-eslint/no-unnecessary-type-assertion": "off",
+        "@typescript-eslint/consistent-type-imports": "off",
+        "import/consistent-type-specifier-style": "off"
+      }
+    },
+    {
+      "files": ["js-machine/test/**"],
+      "plugins": ["vitest"],
+      "rules": {
+        "vitest/prefer-to-be-falsy": "off"
+      }
+    },
+    {
+      "files": ["react-headless/src/**/*.{ts,tsx}"],
+      "plugins": ["jsx-a11y"],
+      "rules": {
+        "import/no-relative-parent-imports": "off",
+        "import/consistent-type-specifier-style": "off",
+        "no-undefined": "off",
+        "@typescript-eslint/no-unsafe-type-assertion": "off",
+        "jsx-a11y/alt-text": "error",
+        "jsx-a11y/anchor-is-valid": "error",
+        "jsx-a11y/aria-props": "error"
+      }
+    },
+    {
+      "files": ["react-headless/test/**"],
+      "plugins": ["vitest"],
+      "rules": {
+        "@typescript-eslint/no-non-null-assertion": "off",
+        "import/no-relative-parent-imports": "off",
+        "import/consistent-type-specifier-style": "off",
+        "require-await": "off",
+        "@typescript-eslint/require-await": "off",
+        "vitest/no-importing-vitest-globals": "off",
+        "vitest/padding-around-test-blocks": "off",
+        "vitest/prefer-strict-boolean-matchers": "off",
+        "vitest/prefer-to-be-falsy": "off"
+      }
+    },
+    {
+      "files": [
+        "react-components/src/primitive-ui/**/*.{ts,tsx}",
+        "react-components/src/batteries/**/*.{ts,tsx}"
+      ],
+      "plugins": ["jsx-a11y"],
+      "rules": {
+        "import/no-relative-parent-imports": "off",
+        "import/consistent-type-specifier-style": "off",
+        "no-undefined": "off",
+        "@typescript-eslint/no-unsafe-type-assertion": "off",
+        "no-negated-condition": "off",
+        "react-perf/jsx-no-jsx-as-prop": "off",
+        "jsx-a11y/alt-text": "error",
+        "jsx-a11y/anchor-is-valid": "error",
+        "jsx-a11y/aria-props": "error"
+      }
+    },
+    {
+      "files": ["react-components/src/**/*.{ts,tsx}"],
+      "plugins": ["jsx-a11y"],
+      "rules": {
+        "import/no-relative-parent-imports": "off",
+        "import/consistent-type-specifier-style": "off",
+        "no-undefined": "off",
+        "@typescript-eslint/no-unsafe-type-assertion": "off",
+        "jsx-a11y/alt-text": "error",
+        "jsx-a11y/anchor-is-valid": "error",
+        "jsx-a11y/aria-props": "error",
+        "jsx-a11y/prefer-tag-over-role": "off",
+        "jsx-a11y/no-redundant-roles": "off",
+        "jsx-a11y/control-has-associated-label": "off",
+        "jsx-a11y/no-noninteractive-tabindex": "off",
+        "jsx-a11y/no-noninteractive-element-interactions": "off"
+      }
+    },
+    {
+      "files": ["react-components/test/**"],
+      "plugins": ["vitest"],
+      "rules": {
+        "@typescript-eslint/no-non-null-assertion": "off",
+        "import/no-relative-parent-imports": "off",
+        "import/consistent-type-specifier-style": "off",
+        "require-await": "off",
+        "@typescript-eslint/require-await": "off",
+        "vitest/no-importing-vitest-globals": "off",
+        "vitest/padding-around-test-blocks": "off",
+        "vitest/prefer-strict-boolean-matchers": "off",
+        "vitest/prefer-to-be-falsy": "off",
+        "react-perf/jsx-no-jsx-as-prop": "off"
+      }
+    }
+  ],
+  "env": {
+    "builtin": true
+  },
+  "globals": {},
+  "ignorePatterns": ["**/generated/**"]
+}

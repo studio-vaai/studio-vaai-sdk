@@ -1,0 +1,44 @@
+{
+  "composite": true,
+  "compilerOptions": {
+    // JSX
+    "jsx": "react-jsx",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+
+    //========== Target and module ==========
+    // Nothing is ever transpiled
+    "moduleResolution": "Bundler",
+    "module": "ESNext",
+    "target": "ES2022",
+    // Don't check .d.ts files
+    "skipLibCheck": true,
+    // Emptily imported modules must exist
+    "noUncheckedSideEffectImports": true,
+    // Allow importing JSON
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+
+    //========== Type checking ==========
+    // Essential: activates several useful options
+    "strict": true,
+    // Beyond "strict": less important
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUncheckedIndexedAccess": true,
+
+    //========== Only JS at non-type level (enables type stripping) ==========
+    // Forbid non-JavaScript language constructs such as:
+    // JSX, enums, constructor parameter properties, namespaces
+    "erasableSyntaxOnly": true,
+    // Enforce keyword `type` for type imports etc.
+    "verbatimModuleSyntax": true, // implies "isolatedModules
+
+    //========== Emitted files ==========
+    // tsc only typechecks, doesn't emit any files
+    "noEmit": false,
+    "composite": true
+  }
+}

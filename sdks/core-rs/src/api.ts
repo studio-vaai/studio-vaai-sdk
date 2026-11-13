@@ -1,0 +1,35 @@
+export * from "../build/wasm2/api.js";
+export { initializeCore } from "./runtime.js";
+export { browserTransport } from "./browser-transport.js";
+export { wasmUrl } from "./wasm-url.js";
+export {
+  classifyExperienceApiError,
+  createdTryOnOutcome,
+  credentialRejected,
+  establishExperienceSession,
+  ExperienceCredential,
+  ExperienceCredentials,
+  experienceCredentialRefreshTimeoutMs,
+  ExperienceBodyRestore,
+  ExperienceImageRenewal,
+  ExperienceImageTarget,
+  experienceImageRenewalTimeoutMs,
+  ExperienceProductLookup,
+  experienceProductTimeoutMs,
+  ExperienceRequestCredential,
+  ExperienceSessionRestore,
+  experienceJobTimeoutMs,
+  runExperienceJob,
+  ExperienceEstablishment,
+  experienceCredentialShouldRefresh,
+  experienceHeightReadback,
+  experienceHeightWritten,
+  lookupExperienceProduct,
+  normalizeRecommendation,
+  recommendationOutcome,
+  refreshExperienceCredential,
+  renewExperienceImage,
+  restoreExperienceBody,
+  restoreExperienceSession,
+  uploadExperiencePhoto,
+} from "../build/wasm2/studio_vaai_core.js";

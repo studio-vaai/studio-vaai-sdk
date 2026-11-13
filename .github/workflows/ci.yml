@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "release/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  typescript:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - uses: ./.github/actions/setup-binaryen
+
+      - name: Install Rust for the web core
+        working-directory: sdks/core-rs
+        run: rustup toolchain install
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check release verification
+        run: python -m unittest discover -s sdks/build-tools/sbom -p 'test_*.py'
+
+      - name: Generate code
+        run: pnpm generate
+
+      # Generated code is committed: it must match what its sources produce.
+      - name: Verify generated code is up to date
+        run: git diff --exit-code
+
+      - name: Build
+        env:
+          STUDIO_VAAI_SBOM_DIR: ${{ runner.temp }}/sdk-bundles
+        run: pnpm build
+
+      - name: Prepare SDK package inventories
+        run: |
+          python sdks/build-tools/sbom/sbom.py release prepare \
+            --bundles "$RUNNER_TEMP/sdk-bundles" --output "$RUNNER_TEMP/sdk-release"
+
+      - name: Check SDK dependency vulnerabilities
+        uses: ./sdks/build-tools/sbom/action
+        with:
+          input: ${{ runner.temp }}/sdk-release
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Check formatting
+        run: pnpm fmt:check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Check packages
+        run: pnpm publint
+
+  rust:
+    name: Rust core
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/core-rs
+    steps:
+      - uses: actions/checkout@v6
+
+      # The toolchain pinned in rust-toolchain.toml.
+      - name: Install Rust
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,just,cargo-cyclonedx@0.5.9
+
+      - name: Format, lint and test
+        run: just ci
+
+      # Cargo metadata resolves target dependencies without compiling five platforms.
+      # These are explicitly source inventories, not attestations of binaries.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Generate native SDK source inventories
+        run: |
+          cargo fetch --locked
+          python ../build-tools/sbom/sbom.py native --output "$RUNNER_TEMP/sdk-native"
+
+      - name: Check native SDK source vulnerabilities
+        uses: ./sdks/build-tools/sbom/action
+        with:
+          input: ${{ runner.temp }}/sdk-native
+
+  ci-readiness:
+    name: CI readiness
+    if: ${{ always() }}
+    needs: [typescript, rust]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Verify required check outcomes
+        shell: bash
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          errors, summary = [], ["## CI readiness"]
+          for job in ("typescript", "rust"):
+              actual = needs.get(job, {}).get("result")
+              summary.append(f"- {job}: {actual or 'missing'}")
+              if actual != "success":
+                  errors.append(f"{job}: expected success, received {actual or 'missing'}")
+          summary.extend(["", *(f"ERROR: {error}" for error in errors)])
+          report = "\n".join(summary) + "\n"
+          print(report)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
+              output.write(report)
+          raise SystemExit(1 if errors else 0)
+          PY

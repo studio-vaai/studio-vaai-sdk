@@ -1,0 +1,134 @@
+name: Publish
+
+# Publishes the `@studio-vaai/*` packages to npm through trusted publishing
+# (OIDC), so there is no npm token. Each package needs this repository and this
+# workflow file (`publish.yml`) as its trusted publisher on npmjs.com.
+#
+# Versions come from each `sdks/*/package.json`: bump and merge them before
+# running this. Existing registry versions are skipped; publication.json records
+# whether the candidate bytes match that existing release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Pack without publishing"
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+# `id-token: write` lets pnpm mint the OIDC token that npm exchanges for a
+# short-lived publish credential.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  check-source:
+    name: Check source boundaries
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Check publication branch
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::SDK publication requires main"
+            exit 1
+          fi
+
+  publish:
+    name: Publish @studio-vaai/* to npm
+    needs: [check-source]
+    # The environment restricts the publication branch and scopes OIDC trust.
+    environment: npm-publish
+    # npm accepts provenance from GitHub-hosted runners only.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Trusted publishing needs pnpm 10.18 or later; `packageManager` pins it.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - uses: ./.github/actions/setup-binaryen
+
+      - name: Install Rust for the web core
+        working-directory: sdks/core-rs
+        run: rustup toolchain install
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate code
+        run: pnpm generate
+
+      - name: Build
+        env:
+          STUDIO_VAAI_SBOM_DIR: ${{ runner.temp }}/sdk-bundles
+        run: pnpm build
+
+      - name: Prepare SDK package inventories
+        id: prepare
+        run: |
+          python sdks/build-tools/sbom/sbom.py release prepare \
+            --bundles "$RUNNER_TEMP/sdk-bundles" --output "$RUNNER_TEMP/sdk-release"
+
+      - name: Check SDK dependency vulnerabilities
+        uses: ./sdks/build-tools/sbom/action
+        with:
+          input: ${{ runner.temp }}/sdk-release
+
+      - name: Publish prepared archives
+        id: publish
+        run: |
+          python sdks/build-tools/sbom/sbom.py release publish --output "$RUNNER_TEMP/sdk-release" \
+            ${{ inputs.dry-run && '--dry-run' || '' }}
+
+      - name: Check SDK archive inputs
+        id: archive-inputs
+        if: ${{ always() && !cancelled() && !inputs.dry-run && steps.prepare.outcome == 'success' && steps.publish.outcome != '' && steps.publish.outcome != 'skipped' }}
+        shell: bash
+        run: |
+          if [ ! -f "$RUNNER_TEMP/sdk-release/publication.json" ]; then
+            echo "::error::SDK publication has no retained publication result"
+            exit 1
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate SDK archive writer
+        id: archive-auth
+        if: ${{ always() && !cancelled() && steps.archive-inputs.outputs.ready == 'true' }}
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.COMPLIANCE_ARCHIVE_SERVICE_ACCOUNT }}
+          export_environment_variables: false
+
+      - name: Set up archive access
+        id: archive-gcloud
+        if: ${{ always() && !cancelled() && steps.archive-auth.outcome == 'success' }}
+        uses: google-github-actions/setup-gcloud@v3
+        env:
+          GOOGLE_GHA_CREDS_PATH: ${{ steps.archive-auth.outputs.credentials_file_path }}
+
+      - name: Retain published SDK packages and inventories
+        if: ${{ always() && !cancelled() && steps.archive-gcloud.outcome == 'success' }}
+        env:
+          CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: ${{ steps.archive-auth.outputs.credentials_file_path }}
+          COMPLIANCE_ARCHIVE_BUCKET: ${{ secrets.COMPLIANCE_ARCHIVE_BUCKET }}
+        run: node sdks/build-tools/sbom/archive-sdk.mts --directory "$RUNNER_TEMP/sdk-release"

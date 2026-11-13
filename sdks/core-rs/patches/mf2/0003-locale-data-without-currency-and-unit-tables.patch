@@ -1,0 +1,113 @@
+From: Paul Zhang <paul@studio-vaai.com>
+Subject: [PATCH] mf2-locale-data: no currency and unit tables
+
+`data/currencies.txt` and `data/units.txt` are 7.2 MB of the 7.5 MB of
+CLDR data, read only for `:currency` and `:unit`, which the SDK's function
+registry does not offer. The upstream pin's drop list removes them and
+`tests/measure.rs`, which tests nothing else; the two tables are now empty,
+so a message using either function fails its build with a table error
+("no DEFAULT fraction") instead of compiling.
+
+`numbers::every_locale_encodes` keeps checking every locale's number
+symbols and percent pattern, without the currency styles.
+
+Upstream: local only
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+diff --git a/mf2-locale-data/Cargo.toml b/mf2-locale-data/Cargo.toml
+index 3e33cce..b12650e 100644
+--- a/mf2-locale-data/Cargo.toml
++++ b/mf2-locale-data/Cargo.toml
+@@ -59,10 +59,6 @@ path = "src/lib.rs"
+ name = "cldr_samples"
+ path = "tests/cldr_samples.rs"
+ 
+-[[test]]
+-name = "measure"
+-path = "tests/measure.rs"
+-
+ [[test]]
+ name = "numbers"
+ path = "tests/numbers.rs"
+diff --git a/mf2-locale-data/src/currency.rs b/mf2-locale-data/src/currency.rs
+index 54415f7..e6e3273 100644
+--- a/mf2-locale-data/src/currency.rs
++++ b/mf2-locale-data/src/currency.rs
+@@ -49,8 +49,8 @@ pub fn fallback(field: &str) -> Option<&'static str> {
+     }
+ }
+ 
+-/// The shipped table (`cargo xtask locale-data`).
+-const TABLE: &str = include_str!("../data/currencies.txt");
++/// The shipped table (`cargo xtask locale-data`): not vendored, so empty.
++const TABLE: &str = "";
+ 
+ struct Loaded {
+     blocks: Blocks<'static>,
+diff --git a/mf2-locale-data/src/unit.rs b/mf2-locale-data/src/unit.rs
+index 781f48f..d14229e 100644
+--- a/mf2-locale-data/src/unit.rs
++++ b/mf2-locale-data/src/unit.rs
+@@ -50,8 +50,8 @@ pub fn fallback(field: &str) -> Option<&'static str> {
+     }
+ }
+ 
+-/// The shipped table (`cargo xtask locale-data`).
+-const TABLE: &str = include_str!("../data/units.txt");
++/// The shipped table (`cargo xtask locale-data`): not vendored, so empty.
++const TABLE: &str = "";
+ 
+ struct Loaded {
+     blocks: Blocks<'static>,
+diff --git a/mf2-locale-data/tests/numbers.rs b/mf2-locale-data/tests/numbers.rs
+index 1f6ce2c..a14a623 100644
+--- a/mf2-locale-data/tests/numbers.rs
++++ b/mf2-locale-data/tests/numbers.rs
+@@ -14,8 +14,7 @@ use mf2_catalog::number::{Patterns, SignShown, Style, Symbols};
+ use mf2_catalog::writer::{Options, catalog};
+ use mf2_catalog::{Catalog, Dir, Manifest};
+ use mf2_locale_data::{
+-    CurrencyNeeds, LocaleNeeds, NumberNeeds, locale_entries, number_data, number_locale_entries,
+-    number_locales,
++    LocaleNeeds, NumberNeeds, locale_entries, number_data, number_locale_entries, number_locales,
+ };
+ 
+ fn hex(s: &str) -> Vec<u8> {
+@@ -221,21 +220,17 @@ fn locale_resolution() {
+ fn every_locale_encodes() {
+     let locales = number_locales().expect("table");
+     assert_eq!(locales.len(), 766);
+-    let mut needs = NumberNeeds::from_functions(["percent", "currency"]);
+-    assert!(needs.percent && needs.currency == Some(CurrencyNeeds::ALL));
++    // No `currency`: its table is not vendored.
++    let mut needs = NumberNeeds::from_functions(["percent"]);
++    assert!(needs.percent);
+     needs.symbols = true;
+-    // Every pattern style, no currency codes (their data: tests/measure.rs).
+-    let mut currency = CurrencyNeeds::ALL;
+-    currency.codes = mf2_locale_data::Selection::default();
+-    needs.currency = Some(currency);
+     let mut systems = std::collections::BTreeSet::new();
+     for locale in &locales {
+         for tag in [(*locale).to_owned(), format!("{locale}-u-nu-native")] {
+             let entries = number_locale_entries(&tag, &needs).expect("entries");
+-            let [(k1, symbols), (k2, patterns), (k3, _)] = entries.as_slice() else {
+-                panic!("{tag}: three entries");
++            let [(k1, symbols), (k2, patterns)] = entries.as_slice() else {
++                panic!("{tag}: two entries");
+             };
+-            assert_eq!(*k3, locale_key::CURRENCY_DATA);
+             assert_eq!(
+                 (*k1, *k2),
+                 (locale_key::NUMBER_SYMBOLS, locale_key::NUMBER_PATTERNS)
+@@ -244,9 +239,7 @@ fn every_locale_encodes() {
+             assert!(!s.decimal().is_empty() && !s.minus().is_empty(), "{tag}");
+             let p = Patterns::new(patterns);
+             assert!(p.is_valid(), "{tag}: patterns");
+-            for style in Style::ALL {
+-                assert!(p.resolve(style).is_some(), "{tag}: {style:?}");
+-            }
++            assert!(p.resolve(Style::Percent).is_some(), "{tag}: Percent");
+             systems.insert(number_data(&tag).expect("data").numbering_system);
+         }
+     }

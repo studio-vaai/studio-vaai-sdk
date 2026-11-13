@@ -1,0 +1,9 @@
+# The SDK's messages: one flat JSON file per locale under locales/.
+
+[functions]
+# Joins a list argument as the locale writes a conjunction (ICU4X).
+list = "formatting::LIST"
+
+# Composes caller-localized axis values, optionally selected by semantic role.
+variantLabel = "formatting::variant_label::VARIANT_LABEL"
+percent = "mf2_fn_number::PERCENT"

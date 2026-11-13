@@ -1,0 +1,53 @@
+/**
+ * Generated from the studio vaai design tokens (DTCG) — do not edit by hand.
+ */
+
+:root {
+  --sv-color-bg: #ffffff;
+  --sv-color-surface: #ffffff;
+  --sv-color-surface-elevated: #f8fafd;
+  --sv-color-muted: #f4f4f5;
+  --sv-color-muted-foreground: #71717a;
+  --sv-color-foreground: #09090b;
+  --sv-color-foreground-secondary: #666666;
+  --sv-color-border: #e4e4e7;
+  --sv-color-border-strong: #d4d4d8;
+  --sv-color-grabber: #e0e0e0;
+  --sv-color-primary: #09090b;
+  --sv-color-on-primary: #fafafa;
+  --sv-color-recommendation: #080abf;
+  --sv-color-recommendation-hover: #2563eb;
+  --sv-color-link: #007aff;
+  --sv-color-link-hover: #0051d5;
+  --sv-color-legal: #666666;
+  --sv-color-accent: #0000fe;
+  --sv-color-danger: #dc2626;
+  --sv-color-overlay: rgb(0 0 0 / 0.45);
+  --sv-color-tryon-overlay: rgb(255 255 255 / 0.6);
+  --sv-color-image-placeholder: #f0f0f0;
+  --sv-color-overlay-card: rgb(242 242 240 / 0.5);
+  --sv-color-overlay-card-border: rgb(0 0 0 / 0.06);
+  --sv-color-fit-score-from: rgb(255 255 255 / 0.72);
+  --sv-color-fit-ideal: #22c55e;
+  --sv-color-fit-ideal-foreground: #15803d;
+  --sv-color-fit-warn: #f59e0b;
+  --sv-color-fit-warn-foreground: #b45309;
+  --sv-color-fit-bad: #ef4444;
+  --sv-color-fit-bad-foreground: #b91c1c;
+  --sv-color-fit-unranked: rgb(0 0 0 / 0.18);
+  --sv-color-recommendation-surface: #c6efd5;
+  --sv-color-recommendation-on-surface: #2e7d46;
+  --sv-color-recommendation-ring: #8fdcae;
+  --sv-font-family-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --sv-radius-sheet: 2rem;
+  --sv-radius-modal: 1rem;
+  --sv-radius-control: 0.5rem;
+  --sv-radius-button-primary: 0.75rem;
+  --sv-radius-chip: 624.9375rem;
+  --sv-space-1: 0.25rem;
+  --sv-space-2: 0.5rem;
+  --sv-space-3: 0.75rem;
+  --sv-space-4: 1rem;
+  --sv-space-6: 1.5rem;
+  --sv-color-slide-overlay: var(--sv-color-primary);
+}

@@ -1,0 +1,28 @@
+[package]
+name = "formatting"
+version = "0.1.0"
+edition = "2024"
+# The compiled catalogs embed CLDR-derived plural rules and number symbols.
+license = "MIT AND Unicode-3.0"
+publish = false
+description = "Unicode MessageFormat 2 messages formatted to parts, so renderers can style their markup"
+
+[dependencies]
+# rust-mf2, vendored (vendor/mf2, patches/mf2): the runtime, the catalog
+# reader, and the parser and writer that compile a host's overrides against a
+# shipped catalog's locale data. The SDK's own messages compile in build.rs.
+mf2-catalog = { path = "../vendor/mf2/mf2-catalog", features = [
+  "static-bytes",
+  "writer",
+  "decode",
+] }
+mf2-locale-data = { path = "../vendor/mf2/mf2-locale-data" }
+mf2-fn-number = { path = "../vendor/mf2/mf2-fn-number" }
+mf2-runtime = { path = "../vendor/mf2/mf2-runtime" }
+mf2-syntax = { path = "../vendor/mf2/mf2-syntax" }
+icu_list = { version = "2.4", features = ["alloc"] }
+icu_locale_core = "2.4"
+writeable = "0.6"
+
+[build-dependencies]
+mf2-build = { path = "../vendor/mf2/mf2-build" }

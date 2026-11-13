@@ -1,0 +1,14 @@
+emit:
+  - "../emitters/rust-client.js"
+options:
+  # The API client every SDK shares (sdks/core-rs/api), generated from this contract.
+  studio-vaai-rust-client:
+    "emitter-output-dir": "{project-root}/../../core-rs/api/src"
+    "output-file": "generated.rs"
+    # Feature flags go through an OpenFeature (OFREP) provider, not this client.
+    "include-internal-tags": ["demo"]
+    "include-internal-fields": ["provenance"]
+    "exclude-tags": ["experiments"]
+    "client-headers":
+      "X-Client-Api-Key": client_api_key
+      "X-Api-Version": api_version

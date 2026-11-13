@@ -1,0 +1,11 @@
+[package]
+name = "image-metadata"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "Focal-length EXIF and original pixel size read from image headers, without decoding pixels"
+
+[dependencies]
+imagesize = "0.15"
+kamadak-exif = "0.6"

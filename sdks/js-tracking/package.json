@@ -1,0 +1,28 @@
+{
+  "name": "@studio-vaai/js-tracking",
+  "version": "0.3.1",
+  "description": "Typed analytics events for studio vaai, plus a fetch-based Umami transport.",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vite build --config vite.lib.config.ts && rm -f tsconfig.tsbuildinfo && tsgo --emitDeclarationOnly",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "test": "vitest run --config ../../vitest.config.ts",
+    "test:watch": "vitest --config ../../vitest.config.ts"
+  },
+  "devDependencies": {
+    "vite": "8.3.6"
+  }
+}

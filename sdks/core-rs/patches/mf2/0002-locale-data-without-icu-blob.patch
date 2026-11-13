@@ -1,0 +1,218 @@
+From: Paul Zhang <paul@studio-vaai.com>
+Subject: [PATCH] mf2-locale-data, mf2-build: cut the ICU4X date backend
+
+`icu-blob` writes ICU4X's date data into catalogs, through
+`mf2-fn-datetime` and a dozen ICU4X crates. The SDK formats no dates in
+messages and does not vendor `mf2-fn-datetime`, so the optional dependency
+would resolve to the crates.io copies of `mf2-fn-datetime`, `mf2-runtime`,
+`mf2-catalog` and `mf2-model` beside the vendored ones (the lockfile lists
+a workspace member's optional dependencies whether or not they build).
+
+Both manifests lose the feature, its dependencies and the `icu_blob` test
+target; the upstream pin's drop list removes `tests/icu_blob.rs`. The code
+behind `feature = "icu-blob"`, `src/icu_blob.rs` among it, stays as it is,
+never compiled in, with the name declared to `check-cfg` so it draws no
+warning: a smaller patch than deleting it from `mf2-build`.
+
+Upstream: local only
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+diff --git a/mf2-build/Cargo.toml b/mf2-build/Cargo.toml
+index 320a2aa..bc4f635 100644
+--- a/mf2-build/Cargo.toml
++++ b/mf2-build/Cargo.toml
+@@ -52,12 +52,8 @@ license = "MIT"
+ repository = "https://github.com/EvanCarroll/rust-mf2"
+ 
+ [package.metadata.docs.rs]
+-features = ["icu-blob"]
+ targets = ["x86_64-unknown-linux-gnu"]
+ 
+-[features]
+-icu-blob = ["mf2-locale-data/icu-blob"]
+-
+ [lib]
+ name = "mf2_build"
+ path = "src/lib.rs"
+@@ -159,3 +155,6 @@ priority = -1
+ missing_debug_implementations = "allow"
+ unreachable_pub = "warn"
+ unsafe_code = "deny"
++# The ICU4X date backend is cut: code behind `feature = "icu-blob"` never
++# compiles in, and the name is known so it draws no warning.
++unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("icu-blob"))'] }
+diff --git a/mf2-locale-data/Cargo.toml b/mf2-locale-data/Cargo.toml
+index 9a8fe77..3e33cce 100644
+--- a/mf2-locale-data/Cargo.toml
++++ b/mf2-locale-data/Cargo.toml
+@@ -45,43 +45,11 @@ license = "MIT AND Unicode-3.0"
+ repository = "https://github.com/EvanCarroll/rust-mf2"
+ 
+ [package.metadata.docs.rs]
+-features = [
+-    "extract",
+-    "icu-blob",
+-]
++features = ["extract"]
+ targets = ["x86_64-unknown-linux-gnu"]
+ 
+ [features]
+ extract = ["dep:serde_json"]
+-icu-blob = [
+-    "dep:icu",
+-    "dep:icu_pattern",
+-    "dep:zerotrie",
+-    "dep:zerovec",
+-    "dep:icu_calendar",
+-    "dep:icu_calendar_data",
+-    "dep:icu_datetime",
+-    "dep:icu_datetime_data",
+-    "dep:icu_decimal",
+-    "dep:icu_decimal_data",
+-    "dep:icu_locale",
+-    "dep:icu_provider",
+-    "dep:icu_provider_export",
+-    "dep:icu_time",
+-    "dep:icu_time_data",
+-    "dep:mf2-fn-datetime",
+-    "dep:mf2-runtime",
+-    "dep:postcard",
+-    "icu_calendar/datagen",
+-    "icu_datetime/datagen",
+-    "icu_decimal/datagen",
+-    "icu_locale/compiled_data",
+-    "icu_provider/export",
+-    "icu_provider_export/blob_exporter",
+-    "icu_time/datagen",
+-    "mf2-fn-datetime/std-icu",
+-    "postcard/alloc",
+-]
+ 
+ [lib]
+ name = "mf2_locale_data"
+@@ -91,10 +59,6 @@ path = "src/lib.rs"
+ name = "cldr_samples"
+ path = "tests/cldr_samples.rs"
+ 
+-[[test]]
+-name = "icu_blob"
+-path = "tests/icu_blob.rs"
+-
+ [[test]]
+ name = "measure"
+ path = "tests/measure.rs"
+@@ -103,90 +67,15 @@ path = "tests/measure.rs"
+ name = "numbers"
+ path = "tests/numbers.rs"
+ 
+-[dependencies.icu]
+-version = "2.3.1"
+-optional = true
+-default-features = false
+-
+-[dependencies.icu_calendar]
+-version = "2.3.0"
+-optional = true
+-default-features = false
+-
+-[dependencies.icu_calendar_data]
+-version = "2.3.0"
+-optional = true
+-
+-[dependencies.icu_datetime]
+-version = "2.3.0"
+-optional = true
+-default-features = false
+-
+-[dependencies.icu_datetime_data]
+-version = "2.3.0"
+-optional = true
+-
+-[dependencies.icu_decimal]
+-version = "2.3.0"
+-optional = true
+-default-features = false
+-
+-[dependencies.icu_decimal_data]
+-version = "2.3.0"
+-optional = true
+-
+-[dependencies.icu_locale]
+-version = "2.3.1"
+-optional = true
+-default-features = false
+-
+-[dependencies.icu_pattern]
+-version = "0.5.0"
+-optional = true
+-default-features = false
+-
+-[dependencies.icu_provider]
+-version = "2.3.1"
+-optional = true
+-default-features = false
+-
+-[dependencies.icu_provider_export]
+-version = "2.3.0"
+-optional = true
+-default-features = false
+-
+-[dependencies.icu_time]
+-version = "2.3.0"
+-optional = true
+-default-features = false
+-
+-[dependencies.icu_time_data]
+-version = "2.3.0"
+-optional = true
+-
+ [dependencies.mf2-catalog]
+ path = "../mf2-catalog"
+ version = "=3.0.0"
+ features = ["writer"]
+ 
+-[dependencies.mf2-fn-datetime]
+-version = "=3.0.0"
+-optional = true
+-
+ [dependencies.mf2-model]
+ path = "../mf2-model"
+ version = "=3.0.0"
+ 
+-[dependencies.mf2-runtime]
+-path = "../mf2-runtime"
+-version = "=3.0.0"
+-optional = true
+-
+-[dependencies.postcard]
+-version = "1.1.3"
+-optional = true
+-default-features = false
+-
+ [dependencies.serde_json]
+ version = "1.0.151"
+ optional = true
+@@ -201,16 +90,6 @@ version = "0.1.4"
+ features = ["general-category"]
+ default-features = false
+ 
+-[dependencies.zerotrie]
+-version = "0.2.5"
+-optional = true
+-default-features = false
+-
+-[dependencies.zerovec]
+-version = "0.11.8"
+-optional = true
+-default-features = false
+-
+ [dev-dependencies.flate2]
+ version = "1.1.10"
+ 
+@@ -241,3 +120,6 @@ priority = -1
+ missing_debug_implementations = "allow"
+ unreachable_pub = "warn"
+ unsafe_code = "deny"
++# The ICU4X date backend is cut: code behind `feature = "icu-blob"` never
++# compiles in, and the name is known so it draws no warning.
++unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("icu-blob"))'] }

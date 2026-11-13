@@ -1,0 +1,8 @@
+[bindings.swift]
+module_name = "StudioVaaiCore"
+ffi_module_name = "StudioVaaiCoreFFI"
+ffi_module_filename = "StudioVaaiCoreFFI"
+
+[bindings.kotlin]
+package_name = "com.studiovaai.core"
+cdylib_name = "studio_vaai_core"

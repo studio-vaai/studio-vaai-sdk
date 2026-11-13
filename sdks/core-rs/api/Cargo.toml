@@ -1,0 +1,21 @@
+[package]
+name = "api"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "The studio vaai public API client, generated from the TypeSpec contract; the host sends its requests"
+
+[features]
+# Exports the client through UniFFI, in its own namespace: its models, errors, the client object
+# and the transport trait the platforms implement.
+uniffi = ["dep:uniffi"]
+
+[dependencies]
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uniffi = { version = "0.32.2", optional = true }
+
+[dev-dependencies]
+pollster = "0.4"

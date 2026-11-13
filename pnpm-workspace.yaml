@@ -1,0 +1,18 @@
+packages:
+  - "sdks/*"
+
+# tsgo can't follow pnpm's default symlinked layout to find transitive types.
+# https://github.com/microsoft/typescript-go/pull/1902
+nodeLinker: hoisted
+
+# Every version comes from the lockfile, which is resolved as a whole when it
+# changes; no release-age cooldown on top.
+minimumReleaseAge: 0
+
+# Install scripts that may run: esbuild's fetches its binary; exifreader's
+# custom-bundle hook stays off.
+allowBuilds:
+  esbuild: true
+  exifreader: false
+  # Its postinstall is only needed when the bundle analyzer scans dependencies.
+  rs-module-lexer: false

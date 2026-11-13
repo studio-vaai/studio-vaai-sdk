@@ -1,0 +1,374 @@
+From: Paul Zhang <paul@studio-vaai.com>
+Subject: [PATCH] mf2-catalog: find decomposing code points from a table
+
+The writer's canonical-equivalence map (`writer::nfc_map::build`) looked
+for every code point whose decomposition stays inside a catalog's keys by
+decomposing all 1,114,112 of them: 5-6 ms per catalog with a variable or a
+variant key, and about 8 ms in WebAssembly, where the SDK compiles a host's
+override at run time.
+
+Only the 2,081 code points whose canonical decomposition is not themselves
+(Hangul syllables aside) can qualify, besides the keys' own characters, so
+the builder now visits those, listed as 241 ranges in
+`writer/decomposing.rs`. The map comes out the same; a compile with a
+variable takes about 20 µs. A test rebuilds the list from
+`unicode-normalization` and prints the current one when it is out of date.
+
+Upstream: not proposed (rust-mf2 d598787)
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+diff --git b/mf2-catalog/src/writer/decomposing.rs b/mf2-catalog/src/writer/decomposing.rs
+new file mode 100644
+index 0000000..be0fe9a
+--- /dev/null
++++ b/mf2-catalog/src/writer/decomposing.rs
+@@ -0,0 +1,297 @@
++//! The code points with a canonical decomposition that is not themselves,
++//! Hangul syllables aside: the only candidates, beside a key's own
++//! characters, for the canonical-equivalence map (`nfc_map::build`). Listing
++//! them saves that builder a pass over every code point, which cost a few
++//! milliseconds per catalog.
++//!
++//! Generated from `unicode-normalization`'s tables; the test below rebuilds
++//! the list from them and prints it when the two disagree, as after an
++//! update that brings a new Unicode version.
++
++/// Inclusive ranges, ascending: 2,081 code points.
++pub(super) const DECOMPOSING: &[(u32, u32)] = &[
++    (0x00C0, 0x00C5),
++    (0x00C7, 0x00CF),
++    (0x00D1, 0x00D6),
++    (0x00D9, 0x00DD),
++    (0x00E0, 0x00E5),
++    (0x00E7, 0x00EF),
++    (0x00F1, 0x00F6),
++    (0x00F9, 0x00FD),
++    (0x00FF, 0x010F),
++    (0x0112, 0x0125),
++    (0x0128, 0x0130),
++    (0x0134, 0x0137),
++    (0x0139, 0x013E),
++    (0x0143, 0x0148),
++    (0x014C, 0x0151),
++    (0x0154, 0x0165),
++    (0x0168, 0x017E),
++    (0x01A0, 0x01A1),
++    (0x01AF, 0x01B0),
++    (0x01CD, 0x01DC),
++    (0x01DE, 0x01E3),
++    (0x01E6, 0x01F0),
++    (0x01F4, 0x01F5),
++    (0x01F8, 0x021B),
++    (0x021E, 0x021F),
++    (0x0226, 0x0233),
++    (0x0340, 0x0341),
++    (0x0343, 0x0344),
++    (0x0374, 0x0374),
++    (0x037E, 0x037E),
++    (0x0385, 0x038A),
++    (0x038C, 0x038C),
++    (0x038E, 0x0390),
++    (0x03AA, 0x03B0),
++    (0x03CA, 0x03CE),
++    (0x03D3, 0x03D4),
++    (0x0400, 0x0401),
++    (0x0403, 0x0403),
++    (0x0407, 0x0407),
++    (0x040C, 0x040E),
++    (0x0419, 0x0419),
++    (0x0439, 0x0439),
++    (0x0450, 0x0451),
++    (0x0453, 0x0453),
++    (0x0457, 0x0457),
++    (0x045C, 0x045E),
++    (0x0476, 0x0477),
++    (0x04C1, 0x04C2),
++    (0x04D0, 0x04D3),
++    (0x04D6, 0x04D7),
++    (0x04DA, 0x04DF),
++    (0x04E2, 0x04E7),
++    (0x04EA, 0x04F5),
++    (0x04F8, 0x04F9),
++    (0x0622, 0x0626),
++    (0x06C0, 0x06C0),
++    (0x06C2, 0x06C2),
++    (0x06D3, 0x06D3),
++    (0x0929, 0x0929),
++    (0x0931, 0x0931),
++    (0x0934, 0x0934),
++    (0x0958, 0x095F),
++    (0x09CB, 0x09CC),
++    (0x09DC, 0x09DD),
++    (0x09DF, 0x09DF),
++    (0x0A33, 0x0A33),
++    (0x0A36, 0x0A36),
++    (0x0A59, 0x0A5B),
++    (0x0A5E, 0x0A5E),
++    (0x0B48, 0x0B48),
++    (0x0B4B, 0x0B4C),
++    (0x0B5C, 0x0B5D),
++    (0x0B94, 0x0B94),
++    (0x0BCA, 0x0BCC),
++    (0x0C48, 0x0C48),
++    (0x0CC0, 0x0CC0),
++    (0x0CC7, 0x0CC8),
++    (0x0CCA, 0x0CCB),
++    (0x0D4A, 0x0D4C),
++    (0x0DDA, 0x0DDA),
++    (0x0DDC, 0x0DDE),
++    (0x0F43, 0x0F43),
++    (0x0F4D, 0x0F4D),
++    (0x0F52, 0x0F52),
++    (0x0F57, 0x0F57),
++    (0x0F5C, 0x0F5C),
++    (0x0F69, 0x0F69),
++    (0x0F73, 0x0F73),
++    (0x0F75, 0x0F76),
++    (0x0F78, 0x0F78),
++    (0x0F81, 0x0F81),
++    (0x0F93, 0x0F93),
++    (0x0F9D, 0x0F9D),
++    (0x0FA2, 0x0FA2),
++    (0x0FA7, 0x0FA7),
++    (0x0FAC, 0x0FAC),
++    (0x0FB9, 0x0FB9),
++    (0x1026, 0x1026),
++    (0x1B06, 0x1B06),
++    (0x1B08, 0x1B08),
++    (0x1B0A, 0x1B0A),
++    (0x1B0C, 0x1B0C),
++    (0x1B0E, 0x1B0E),
++    (0x1B12, 0x1B12),
++    (0x1B3B, 0x1B3B),
++    (0x1B3D, 0x1B3D),
++    (0x1B40, 0x1B41),
++    (0x1B43, 0x1B43),
++    (0x1E00, 0x1E99),
++    (0x1E9B, 0x1E9B),
++    (0x1EA0, 0x1EF9),
++    (0x1F00, 0x1F15),
++    (0x1F18, 0x1F1D),
++    (0x1F20, 0x1F45),
++    (0x1F48, 0x1F4D),
++    (0x1F50, 0x1F57),
++    (0x1F59, 0x1F59),
++    (0x1F5B, 0x1F5B),
++    (0x1F5D, 0x1F5D),
++    (0x1F5F, 0x1F7D),
++    (0x1F80, 0x1FB4),
++    (0x1FB6, 0x1FBC),
++    (0x1FBE, 0x1FBE),
++    (0x1FC1, 0x1FC4),
++    (0x1FC6, 0x1FD3),
++    (0x1FD6, 0x1FDB),
++    (0x1FDD, 0x1FEF),
++    (0x1FF2, 0x1FF4),
++    (0x1FF6, 0x1FFD),
++    (0x2000, 0x2001),
++    (0x2126, 0x2126),
++    (0x212A, 0x212B),
++    (0x219A, 0x219B),
++    (0x21AE, 0x21AE),
++    (0x21CD, 0x21CF),
++    (0x2204, 0x2204),
++    (0x2209, 0x2209),
++    (0x220C, 0x220C),
++    (0x2224, 0x2224),
++    (0x2226, 0x2226),
++    (0x2241, 0x2241),
++    (0x2244, 0x2244),
++    (0x2247, 0x2247),
++    (0x2249, 0x2249),
++    (0x2260, 0x2260),
++    (0x2262, 0x2262),
++    (0x226D, 0x2271),
++    (0x2274, 0x2275),
++    (0x2278, 0x2279),
++    (0x2280, 0x2281),
++    (0x2284, 0x2285),
++    (0x2288, 0x2289),
++    (0x22AC, 0x22AF),
++    (0x22E0, 0x22E3),
++    (0x22EA, 0x22ED),
++    (0x2329, 0x232A),
++    (0x2ADC, 0x2ADC),
++    (0x304C, 0x304C),
++    (0x304E, 0x304E),
++    (0x3050, 0x3050),
++    (0x3052, 0x3052),
++    (0x3054, 0x3054),
++    (0x3056, 0x3056),
++    (0x3058, 0x3058),
++    (0x305A, 0x305A),
++    (0x305C, 0x305C),
++    (0x305E, 0x305E),
++    (0x3060, 0x3060),
++    (0x3062, 0x3062),
++    (0x3065, 0x3065),
++    (0x3067, 0x3067),
++    (0x3069, 0x3069),
++    (0x3070, 0x3071),
++    (0x3073, 0x3074),
++    (0x3076, 0x3077),
++    (0x3079, 0x307A),
++    (0x307C, 0x307D),
++    (0x3094, 0x3094),
++    (0x309E, 0x309E),
++    (0x30AC, 0x30AC),
++    (0x30AE, 0x30AE),
++    (0x30B0, 0x30B0),
++    (0x30B2, 0x30B2),
++    (0x30B4, 0x30B4),
++    (0x30B6, 0x30B6),
++    (0x30B8, 0x30B8),
++    (0x30BA, 0x30BA),
++    (0x30BC, 0x30BC),
++    (0x30BE, 0x30BE),
++    (0x30C0, 0x30C0),
++    (0x30C2, 0x30C2),
++    (0x30C5, 0x30C5),
++    (0x30C7, 0x30C7),
++    (0x30C9, 0x30C9),
++    (0x30D0, 0x30D1),
++    (0x30D3, 0x30D4),
++    (0x30D6, 0x30D7),
++    (0x30D9, 0x30DA),
++    (0x30DC, 0x30DD),
++    (0x30F4, 0x30F4),
++    (0x30F7, 0x30FA),
++    (0x30FE, 0x30FE),
++    (0xF900, 0xFA0D),
++    (0xFA10, 0xFA10),
++    (0xFA12, 0xFA12),
++    (0xFA15, 0xFA1E),
++    (0xFA20, 0xFA20),
++    (0xFA22, 0xFA22),
++    (0xFA25, 0xFA26),
++    (0xFA2A, 0xFA6D),
++    (0xFA70, 0xFAD9),
++    (0xFB1D, 0xFB1D),
++    (0xFB1F, 0xFB1F),
++    (0xFB2A, 0xFB36),
++    (0xFB38, 0xFB3C),
++    (0xFB3E, 0xFB3E),
++    (0xFB40, 0xFB41),
++    (0xFB43, 0xFB44),
++    (0xFB46, 0xFB4E),
++    (0x105C9, 0x105C9),
++    (0x105E4, 0x105E4),
++    (0x1109A, 0x1109A),
++    (0x1109C, 0x1109C),
++    (0x110AB, 0x110AB),
++    (0x1112E, 0x1112F),
++    (0x1134B, 0x1134C),
++    (0x11383, 0x11383),
++    (0x11385, 0x11385),
++    (0x1138E, 0x1138E),
++    (0x11391, 0x11391),
++    (0x113C5, 0x113C5),
++    (0x113C7, 0x113C8),
++    (0x114BB, 0x114BC),
++    (0x114BE, 0x114BE),
++    (0x115BA, 0x115BB),
++    (0x11938, 0x11938),
++    (0x16121, 0x16128),
++    (0x16D68, 0x16D6A),
++    (0x1D15E, 0x1D164),
++    (0x1D1BB, 0x1D1C0),
++    (0x2F800, 0x2FA1D),
++];
++
++#[cfg(test)]
++mod tests {
++    use alloc::string::String;
++    use alloc::vec::Vec;
++    use core::fmt::Write as _;
++
++    use unicode_normalization::char::decompose_canonical;
++
++    use super::DECOMPOSING;
++    use crate::nfc_map::{HANGUL_S_BASE, HANGUL_S_COUNT};
++
++    #[test]
++    fn the_list_is_every_code_point_that_decomposes() {
++        let mut ranges: Vec<(u32, u32)> = Vec::new();
++        let mut buf = Vec::new();
++        for cp in 0..=0x10_FFFF_u32 {
++            if cp.wrapping_sub(HANGUL_S_BASE) < HANGUL_S_COUNT {
++                continue;
++            }
++            let Some(ch) = char::from_u32(cp) else {
++                continue;
++            };
++            buf.clear();
++            decompose_canonical(ch, |c| buf.push(c));
++            if buf.as_slice() == [ch] {
++                continue;
++            }
++            match ranges.last_mut() {
++                Some((_, end)) if *end + 1 == cp => *end = cp,
++                _ => ranges.push((cp, cp)),
++            }
++        }
++        let mut list = String::new();
++        for (start, end) in &ranges {
++            let _ = writeln!(list, "    (0x{start:04X}, 0x{end:04X}),");
++        }
++        assert!(
++            ranges == DECOMPOSING,
++            "DECOMPOSING is out of date; the current list:\n{list}"
++        );
++    }
++}
+diff --git a/mf2-catalog/src/writer/nfc_map.rs b/mf2-catalog/src/writer/nfc_map.rs
+index 0ad757b..80b17de 100644
+--- a/mf2-catalog/src/writer/nfc_map.rs
++++ b/mf2-catalog/src/writer/nfc_map.rs
+@@ -24,10 +24,8 @@ use alloc::vec::Vec;
+ use unicode_normalization::UnicodeNormalization;
+ use unicode_normalization::char::{canonical_combining_class, decompose_canonical};
+ 
+-use crate::nfc_map::{HANGUL_S_BASE, HANGUL_S_COUNT};
++use super::decomposing::DECOMPOSING;
+ 
+-/// The highest code point.
+-const MAX_CODE_POINT: u32 = 0x10_FFFF;
+ /// Below this, a character is its own NFC form and cannot combine, which is
+ /// the runtime's quick check (`nfc_quick`: every UTF-8 byte below 0xCC).
+ const QUICK_LIMIT: u32 = 0x300;
+@@ -48,14 +46,18 @@ where
+ 
+     // Every code point whose full canonical decomposition stays inside the
+     // set. Hangul syllables are left out: the reader decomposes them by
+-    // arithmetic instead of carrying 11,172 entries.
++    // arithmetic instead of carrying 11,172 entries. The set's characters
++    // decompose to themselves (they came out of NFD forms); any other code
++    // point qualifies only through a decomposition that is not itself, and
++    // those are the `DECOMPOSING` ranges.
+     let mut entries: BTreeMap<char, Vec<char>> = BTreeMap::new();
+     let mut reaches_slow_path = false;
+     let mut buf: Vec<char> = Vec::new();
+-    for cp in 0..=MAX_CODE_POINT {
+-        if cp.wrapping_sub(HANGUL_S_BASE) < HANGUL_S_COUNT {
+-            continue;
+-        }
++    let candidates = set
++        .iter()
++        .map(|&c| u32::from(c))
++        .chain(DECOMPOSING.iter().flat_map(|&(start, end)| start..=end));
++    for cp in candidates {
+         let Some(ch) = char::from_u32(cp) else {
+             continue;
+         };
+diff --git a/mf2-catalog/src/writer.rs b/mf2-catalog/src/writer.rs
+index e203683..0b1cad2 100644
+--- a/mf2-catalog/src/writer.rs
++++ b/mf2-catalog/src/writer.rs
+@@ -7,6 +7,7 @@
+ //! format and the writer policies are this module's code.
+ 
+ pub mod currency;
++mod decomposing;
+ mod encode;
+ pub mod nfc_map;
+ pub mod number;

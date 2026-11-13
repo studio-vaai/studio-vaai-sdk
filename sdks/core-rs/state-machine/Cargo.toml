@@ -1,0 +1,16 @@
+[package]
+name = "state-machine"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "The try-on state machine: a headless domain engine, a default experience controller, and the ordered effect runtime they share"
+
+[features]
+# Exports the state machine through UniFFI: its records, enums, objects and
+# error, and its identifiers and counters as custom types.
+uniffi = ["dep:uniffi"]
+
+[dependencies]
+uniffi = { version = "0.32.2", optional = true }
+uuid = { version = "1.29", default-features = false }

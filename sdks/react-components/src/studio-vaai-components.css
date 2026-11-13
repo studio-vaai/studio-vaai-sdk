@@ -1,0 +1,367 @@
+/**
+ * studio vaai components — design tokens + Tailwind v4 utilities (`prefix(sv)` → `sv:flex`, `sv:hover:opacity-50`, …).
+ *
+ * Token values are generated from the design tokens (DTCG) into `./generated/tokens.css`. Only the scrollbar computed values + the Tailwind `@theme` bridge live here.
+ *
+ * `@import` must be first (CSS + strict PostCSS in Vite/Storybook).
+ */
+@import "tailwindcss/theme" prefix(sv);
+@import "tailwindcss/utilities" prefix(sv);
+@import "./generated/tokens.css";
+
+:root {
+  /* Scrollbars — computed wash from `--sv-color-muted-foreground` (CSS-only; not a design token). */
+  --sv-scrollbar-thumb: color-mix(in srgb, var(--sv-color-muted-foreground) 38%, transparent);
+  --sv-scrollbar-thumb-hover: color-mix(in srgb, var(--sv-color-muted-foreground) 58%, transparent);
+}
+
+@source "./**/*.{ts,tsx}";
+
+/* Bridge the design-token font stack into Tailwind's `sv:font-sans` utility.
+   Name differs from `--sv-font-sans` (Tailwind's own output) to avoid recursion. */
+@theme {
+  --font-sans: var(--sv-font-family-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/*
+ * Scrollable, with no visible bar. For the horizontal size/colour runs: they must stay
+ * scrollable (a long waist run does not fit, and wrapping would make the recommended chip jump
+ * lines as the viewport changes), but the bar itself is pure noise sitting under the chips —
+ * and on macOS with "always show scrollbars" it never fades out. The clipped chip at the edge
+ * is the affordance instead.
+ *
+ * `sv-sheet-shell-scrollbar` is deliberately NOT reused here: it styles a 6px-wide vertical
+ * bar for the sheet body, which is what was painting that grey rule.
+ */
+.sv-scroll-x-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sv-scroll-x-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* Sheet shell (`SheetShell` scroll region): thin rounded thumb, transparent track. */
+.sv-sheet-shell-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sv-scrollbar-thumb) transparent;
+}
+
+.sv-sheet-shell-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sv-sheet-shell-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sv-sheet-shell-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 100px;
+  background: var(--sv-scrollbar-thumb);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.sv-sheet-shell-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--sv-scrollbar-thumb-hover);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.sv-sheet-shell-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Sheet backdrop: fade in on open, fade out on close; dims proportionally during swipe */
+.sv-sheet-backdrop {
+  opacity: calc(1 - var(--drawer-swipe-progress, 0));
+  transition: opacity 350ms ease;
+}
+.sv-sheet-backdrop[data-starting-style] {
+  opacity: 0;
+}
+.sv-sheet-backdrop[data-ending-style] {
+  opacity: 0;
+  transition-duration: calc(var(--drawer-swipe-strength, 1) * 350ms);
+}
+.sv-sheet-backdrop[data-swiping] {
+  transition-duration: 0ms;
+}
+
+/* Sheet panel: slide up on open, slide down on close; tracks finger in real-time during swipe */
+.sv-sheet-content {
+  --sv-sheet-max-height: min(98vh, 100dvh);
+  max-height: var(--sv-sheet-max-height);
+  transform: translateY(
+    calc(var(--drawer-snap-point-offset, 0px) + var(--drawer-swipe-movement-y, 0px))
+  );
+  transition: transform 350ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.sv-sheet-content[data-starting-style] {
+  transform: translateY(100%);
+}
+.sv-sheet-content[data-ending-style] {
+  transform: translateY(100%);
+  transition-duration: calc(var(--drawer-swipe-strength, 1) * 350ms);
+}
+.sv-sheet-content[data-swiping] {
+  transition-duration: 0ms;
+}
+
+/*
+ * Screens that opt into filling the sheet (`SheetShell fillHeight`). The panel is normally
+ * `height: auto` so a short step — the height picker, an error — only takes the room it needs.
+ * The try-on view is the opposite: it runs a full-bleed photo with controls floating over the
+ * bottom, so a content-height panel leaves a dead gap between the sheet top and the viewport.
+ *
+ * Done with `:has()` rather than a prop threaded through `SheetContent` because the screen is a
+ * descendant of the panel, not its parent — it cannot style its own ancestor any other way, and
+ * the mount that renders the panel is generic across every step.
+ */
+.sv-sheet-content:has([data-sv-sheet-fill]) {
+  height: var(--sv-sheet-max-height);
+}
+/*
+ * Full-viewport variant (the try-on hero steps): the reference runs the photo to the very
+ * top of the screen with the header floating over it, so the panel drops the backdrop
+ * sliver AND the top radius — there is no edge left to round.
+ */
+.sv-sheet-content:has([data-sv-sheet-viewport]) {
+  --sv-sheet-max-height: 100dvh;
+  border-radius: 0;
+}
+/*
+ * Height only — the top radius stays. Squaring it off here made the sheet chrome depend on
+ * which screen was mounted, and the panel does not actually reach the viewport edge
+ * (`--sv-sheet-max-height` leaves a sliver), so there is still an edge to round. Where it
+ * does reach, rounded corners showing the dimmed backdrop is what a sheet is supposed to
+ * look like.
+ */
+
+/*
+ * The desktop dialog holds ONE height for the whole flow instead of sizing to each step.
+ * Steps differ a lot — a height picker against a two-column try-on — and a disclosure that
+ * expands mid-step (the intro's "what happens to your photo") would resize the dialog under
+ * the pointer. A stable frame is worth the empty space on the shortest steps.
+ *
+ * Exposed as a variable so a host can tune it for an unusually short viewport or a
+ * heavily-overridden flow; `max-height` above it still wins on small screens.
+ */
+.sv-modal-content {
+  /*
+   * Sized against the reference frames, which sit near 790 x 500 — a landscape dialog, not a
+   * tall one. `max-width` is 790px, so this keeps roughly that proportion and lets the
+   * two-column steps (guide graphic + steps, camera preview + guidance) breathe without
+   * stranding the shorter steps in dead space. Clamped to the viewport on short screens,
+   * where `max-height` still wins.
+   */
+  --sv-modal-height: min(600px, 90vh);
+  height: var(--sv-modal-height);
+}
+
+@keyframes sv-image-view-shine {
+  from {
+    transform: translateX(-150%) skewX(-45deg);
+    opacity: 0;
+  }
+
+  0% {
+    transform: translateX(-150%) skewX(-45deg);
+    opacity: 1;
+  }
+
+  to {
+    transform: translateX(150%) skewX(-45deg);
+    opacity: 1;
+  }
+}
+
+.sv-image-view-shine {
+  pointer-events: none;
+  background: color-mix(in srgb, var(--sv-color-muted) 92%, white 8%);
+}
+
+.sv-image-zoom-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: var(--sv-color-tryon-overlay);
+  pointer-events: none;
+}
+
+/* No transition while fingers are active — dim must track the pinch */
+.sv-image-zoom-backdrop--pinching {
+  transition: none;
+}
+
+/* Fade out alongside the spring-back */
+.sv-image-zoom-backdrop--springing {
+  transition: opacity 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sv-image-zoom-portal {
+  position: fixed;
+  z-index: 9999;
+  overflow: hidden;
+  border-radius: var(--sv-radius-button-primary);
+  pointer-events: none;
+  transform-origin: center;
+}
+
+/* No transition while fingers are active — must track immediately.
+   will-change only here so the compositor layer is promoted just for the
+   active gesture, not held permanently. */
+.sv-image-zoom-portal--pinching {
+  transition: none;
+  will-change: transform;
+}
+
+/* Release: calm ease-out without overshoot, Instagram-style. */
+.sv-image-zoom-portal--springing {
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Carousel scroll track: hide the native scrollbar across browsers. The track scrolls
+   via touch / trackpad / arrows, so the bar is just visual noise. */
+.sv-image-view-carousel-track {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.sv-image-view-carousel-track::-webkit-scrollbar {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sv-carousel-arrow:not(:disabled),
+  .sv-carousel-arrow:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.sv-image-view-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    rgb(192 132 252 / 0.35),
+    rgb(96 165 250 / 0.35),
+    transparent
+  );
+  animation: sv-image-view-shine 1.5s linear 0.5s infinite both;
+}
+
+/* Try-on shimmer: translucent — sits over the visible photo (no opaque background, unlike `sv-image-view-shine`). */
+.sv-tryon-shimmer {
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.sv-tryon-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    rgb(192 132 252 / 0.6),
+    rgb(96 165 250 / 0.6),
+    transparent
+  );
+  animation: sv-image-view-shine 1.5s linear 0s infinite both;
+}
+
+/**
+ * The try-on CTA's label as it swaps meaning — "try another size or color" while the picker is
+ * closed, the commit label while it is open. The panel is growing underneath at the same moment,
+ * so a hard text change reads as a glitch; a short rise + fade ties the two together.
+ *
+ * Deliberately shorter (200ms) than the disclosure's 250ms: the label should have settled by the
+ * time the panel stops moving, not finish after it.
+ */
+@keyframes sv-cta-label {
+  from {
+    transform: translateY(0.25rem);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes sv-tryon-message-slide-up {
+  from {
+    transform: translateY(0.6rem);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.sv-tryon-message {
+  animation: sv-tryon-message-slide-up 500ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes sv-tryon-message-slide-up-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-0.6rem);
+    opacity: 0;
+  }
+}
+
+.sv-tryon-message--out {
+  animation: sv-tryon-message-slide-up-out 500ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+/* Hero overlay: dim wash that fades in over the image while the try-on shimmer plays. */
+@keyframes sv-tryon-hero-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sv-tryon-hero-overlay {
+  pointer-events: none;
+  background: var(--sv-color-tryon-overlay);
+  animation: sv-tryon-hero-overlay-in 600ms ease both;
+}
+
+/* Hero cross-fade: when the active try-on src changes, the outgoing image fades out while the incoming fades in. */
+@keyframes sv-tryon-hero-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sv-tryon-hero-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.sv-tryon-hero-slide-in {
+  animation: sv-tryon-hero-fade-in 600ms ease both;
+}
+
+.sv-tryon-hero-slide-out {
+  animation: sv-tryon-hero-fade-out 600ms ease both;
+}

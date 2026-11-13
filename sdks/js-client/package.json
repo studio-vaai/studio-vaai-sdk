@@ -1,0 +1,42 @@
+{
+  "name": "@studio-vaai/js-client",
+  "version": "0.3.1",
+  "description": "TypeScript contract types for the studio vaai public HTTP API, plus an optional fetch-based transport (Hey API codegen under src/impl/generated).",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./internal/openapi": {
+      "types": "./dist/generated/openapi.d.ts",
+      "import": "./dist/generated/openapi.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../api/generated/openapi.yaml -o src/generated/openapi.ts && openapi-ts",
+    "build": "vite build --config vite.lib.config.ts && rm -f tsconfig.tsbuildinfo && tsgo --emitDeclarationOnly",
+    "test": "vitest run --config ../../vitest.config.ts",
+    "test:watch": "vitest --config ../../vitest.config.ts",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo"
+  },
+  "dependencies": {
+    "@studio-vaai/js-tracking": "workspace:*"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "^0.99.0",
+    "@studio-vaai/api": "workspace:*",
+    "exifreader": "^4.54.0",
+    "heic-to": "^1.6.7",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
+    "vite": "8.3.6"
+  }
+}

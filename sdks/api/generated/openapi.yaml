@@ -1,0 +1,2987 @@
+openapi: 3.0.0
+info:
+  title: studio vaai Public API
+  version: '2026-11-05'
+  summary: Integrate virtual try-on into your storefront.
+  description: Create shopper sessions, upload photos, retrieve size recommendations, and generate virtual try-ons. Business API requests use your shop's `X-Client-Api-Key`; OFREP evaluations use `X-API-Key`. Shopper-specific operations also require a Bearer session token or session cookie.
+tags:
+  - name: meta
+  - name: session
+  - name: body
+  - name: catalog
+  - name: experiments
+  - name: try-on
+paths:
+  /bodies:
+    post:
+      operationId: createBody
+      summary: Create a body
+      description: Create a body from an uploaded image. This request waits for processing to finish. On success, use `body.bodyId` for height updates, size recommendations, and try-ons. The response also includes the height estimate and source image URL. Unsuitable images return `422` without creating a body. Missing, expired, or inaccessible uploads return `404`.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BodyReady'
+        '400':
+          description: Some request fields are missing, invalid, or conflicting.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BodyBadRequestProblem'
+        '401':
+          description: The session credential is missing, malformed, invalid, expired, or used with the wrong transport.
+          headers:
+            WWW-Authenticate:
+              required: true
+              description: HTTP authentication challenge for the session credential accepted by this endpoint.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionUnauthorizedProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '404':
+          description: The body or uploaded image was not found in this session.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BodyNotFoundProblem'
+        '422':
+          description: The image was rejected. Use `reason` to explain what needs to change.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/BodyValidationFailed'
+                  - $ref: '#/components/schemas/BodyUnusableProblem'
+        '500':
+          description: An internal failure prevented the request from being completed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/InternalServerErrorProblem'
+      tags:
+        - body
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinalizeBodyUploadBody'
+    get:
+      operationId: listBodies
+      summary: List bodies
+      description: List the bodies in the current session. Includes bodies whose height has not been set; these omit `userProvidedHeightCm`. Each body includes a valid source image URL and its expiry, so this operation can also refresh expired URLs. Returns an empty `bodies` array when there are no bodies.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+      responses:
+        '200':
+          description: The request has succeeded.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListBodiesResponse'
+        '400':
+          description: Some request fields are missing, invalid, or conflicting.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BodyBadRequestProblem'
+        '401':
+          description: The session credential is missing, malformed, invalid, expired, or used with the wrong transport.
+          headers:
+            WWW-Authenticate:
+              required: true
+              description: HTTP authentication challenge for the session credential accepted by this endpoint.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionUnauthorizedProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '500':
+          description: An internal failure prevented the request from being completed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/InternalServerErrorProblem'
+      tags:
+        - body
+  /bodies/upload-urls:
+    post:
+      operationId: prepareBodyUpload
+      summary: Prepare a body image upload
+      description: Get a temporary URL for uploading an image. Upload the image bytes using the returned `method` and `requiredHeaders`, then pass `stagingKey` to `createBody`.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+      responses:
+        '200':
+          description: The request has succeeded.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrepareBodyUploadResponse'
+        '400':
+          description: Some request fields are missing, invalid, or conflicting.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BodyBadRequestProblem'
+        '401':
+          description: The session credential is missing, malformed, invalid, expired, or used with the wrong transport.
+          headers:
+            WWW-Authenticate:
+              required: true
+              description: HTTP authentication challenge for the session credential accepted by this endpoint.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionUnauthorizedProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '500':
+          description: An internal failure prevented the request from being completed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/InternalServerErrorProblem'
+      tags:
+        - body
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrepareBodyUploadBody'
+  /bodies/{bodyId}/height:
+    patch:
+      operationId: setBodyHeight
+      summary: Set Body Height
+      description: Set the body's height in centimetres. A successful update returns `204` with no response body by default. With `returnRevision` it returns `200` with the exact revision written. Invalid input returns `400`. If the body cannot be adjusted to the requested height, the API returns `422` and keeps the previous values. Missing or inaccessible bodies return `404`.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+        - name: bodyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BodyHeightRevision'
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+        '400':
+          description: Some request fields are missing, invalid, or conflicting.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BodyBadRequestProblem'
+        '401':
+          description: The session credential is missing, malformed, invalid, expired, or used with the wrong transport.
+          headers:
+            WWW-Authenticate:
+              required: true
+              description: HTTP authentication challenge for the session credential accepted by this endpoint.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionUnauthorizedProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '404':
+          description: The body or uploaded image was not found in this session.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BodyNotFoundProblem'
+        '422':
+          description: The body could not be adjusted to the requested height.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BodyHeightUnusableProblem'
+        '500':
+          description: An internal failure prevented the request from being completed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/InternalServerErrorProblem'
+      tags:
+        - body
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetBodyHeightBody'
+  /health:
+    get:
+      operationId: getHealth
+      summary: Check API availability
+      description: Check whether the public API is available to accept requests. Returns 200 when available or 503 when unavailable. No API key or session is required. Responses must not be cached.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: The service is temporarily unavailable.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ServiceUnavailableProblem'
+      tags:
+        - meta
+      security:
+        - {}
+  /ofrep/v1/evaluate/flags:
+    post:
+      operationId: evaluateFlagsBulk
+      summary: Evaluate all flags
+      description: Evaluate all flags available to the shop for the supplied context. The 200 response includes off values and individual flag errors; a failure affecting one flag does not discard other results. Use ETag and If-None-Match for polling. After validating the API key and request context, return 304 with no body only when the evaluated result is unchanged for this shop and context.
+      parameters:
+        - name: If-None-Match
+          in: header
+          required: false
+          description: ETag from a previous bulk response. An unchanged evaluated result returns 304; otherwise a complete 200 response replaces the previous flag set.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - private, no-cache
+            ETag:
+              required: true
+              description: Opaque quoted validator for the evaluated result, scoped to the shop and supplied context. Send it in If-None-Match on the next bulk request. A changed context or result must not reuse a validator that would preserve a stale decision.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfrepBulkEvaluationSuccess'
+        '304':
+          description: The client has made a conditional request and the resource has not been modified.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - private, no-cache
+            ETag:
+              required: true
+              description: Opaque quoted validator for the evaluated result, scoped to the shop and supplied context. Send it in If-None-Match on the next bulk request. A changed context or result must not reuse a validator that would preserve a stale decision.
+              schema:
+                type: string
+        '400':
+          description: The bulk request or its context is invalid.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfrepBulkEvaluationFailure'
+        '401':
+          description: The shop API key is missing or invalid.
+          headers:
+            WWW-Authenticate:
+              required: true
+              description: Authentication challenge for this service's API-key authentication.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+        '403':
+          description: Access to the shop's flags is not allowed for this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+        '429':
+          description: The request was rate-limited. Wait until Retry-After before sending another evaluation request.
+          headers:
+            Retry-After:
+              required: true
+              description: When to retry, expressed as an HTTP date or a delay in seconds.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+        '500':
+          description: The service could not complete the evaluation.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfrepError'
+      tags:
+        - experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfrepEvaluationRequest'
+      security:
+        - OfrepApiKeyAuth: []
+  /ofrep/v1/evaluate/flags/{key}:
+    post:
+      operationId: evaluateFlag
+      summary: Evaluate a flag
+      description: Evaluate a flag for the supplied context. Returns its value and reason on success, 400 for an evaluation failure, or 404 for an unknown key. Disabled flags return a successful value of false. Evaluation errors never masquerade as off decisions.
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Flag key to evaluate, such as try-on-enabled.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfrepEvaluationSuccess'
+        '400':
+          description: The flag evaluation request is invalid or its context does not meet the flag's requirements.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfrepEvaluationFailure'
+        '401':
+          description: The shop API key is missing or invalid.
+          headers:
+            WWW-Authenticate:
+              required: true
+              description: Authentication challenge for this service's API-key authentication.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+        '403':
+          description: Access to the shop's flags is not allowed for this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+        '404':
+          description: The requested flag key does not exist for this shop.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfrepFlagNotFound'
+        '429':
+          description: The request was rate-limited. Wait until Retry-After before sending another evaluation request.
+          headers:
+            Retry-After:
+              required: true
+              description: When to retry, expressed as an HTTP date or a delay in seconds.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+        '500':
+          description: The service could not complete the evaluation.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfrepError'
+      tags:
+        - experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfrepEvaluationRequest'
+      security:
+        - OfrepApiKeyAuth: []
+  /products:
+    get:
+      operationId: listProducts
+      summary: List products
+      description: List the products of your shop that can be tried on. Requires the shop client API key; no shopper session is needed.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductCatalog'
+        '400':
+          description: The request could not be completed. See `kind` and `detail` for the reason.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: The service could not complete the request. The request may be retried.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      tags:
+        - catalog
+      security:
+        - {}
+  /products/by-foreign-id/{foreignId}:
+    get:
+      operationId: getProductByForeignId
+      summary: Find a product by your own id
+      description: Retrieve a product by the id your storefront uses for it. A `product-not-found` error means the product cannot be tried on, so hide the try-on entry point. Requires the shop client API key; no shopper session is needed.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+        - name: foreignId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: include
+          in: query
+          required: false
+          description: Optional diagnostic fields for internal tooling.
+          schema:
+            type: string
+          x-internal: true
+          explode: false
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetails'
+        '400':
+          description: The request could not be completed. See `kind` and `detail` for the reason.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Your shop has no such product.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: The service could not complete the request. The request may be retried.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      tags:
+        - catalog
+      security:
+        - {}
+  /products/{productId}:
+    get:
+      operationId: getProductDetails
+      summary: Get product details
+      description: Retrieve a product's variants and fit details. Requires the shop client API key; no shopper session is needed. Products outside your shop return a `product-not-found` error.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: include
+          in: query
+          required: false
+          description: Optional diagnostic fields for internal tooling.
+          schema:
+            type: string
+          x-internal: true
+          explode: false
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetails'
+        '400':
+          description: The request could not be completed. See `kind` and `detail` for the reason.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Your shop has no such product.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: The service could not complete the request. The request may be retried.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      tags:
+        - catalog
+      security:
+        - {}
+  /products/{productId}/recommended-size:
+    get:
+      operationId: getRecommendedSize
+      summary: Get size recommendations
+      description: Get ranked size recommendations for a product and a body whose height has been set. If no size is eligible for try-on, `recommendedForeignIds` is absent; the ranked breakdown remains available.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: bodyId
+          in: query
+          required: true
+          description: Body to use for the recommendation. Must belong to the current session.
+          schema:
+            type: string
+          explode: false
+        - name: bodyRevisionId
+          in: query
+          required: false
+          description: Pin the exact body revision to score. Omit to use the current revision.
+          schema:
+            type: string
+          explode: false
+      responses:
+        '200':
+          description: The request has succeeded.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendedSize'
+        '400':
+          description: Some request fields are missing, invalid, or conflicting.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/TryOnBadRequestProblem'
+                  - $ref: '#/components/schemas/SizeRecommendationUnavailableProblem'
+        '401':
+          description: The session credential is missing, malformed, invalid, expired, or used with the wrong transport.
+          headers:
+            WWW-Authenticate:
+              required: true
+              description: HTTP authentication challenge for the session credential accepted by this endpoint.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionUnauthorizedProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '404':
+          description: The requested body, product, variant, or try-on was not found.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/TryOnNotFoundProblem'
+        '500':
+          description: An internal failure prevented the request from being completed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/InternalServerErrorProblem'
+      tags:
+        - try-on
+  /products/{productId}/try-on:
+    post:
+      operationId: createTryOn
+      summary: Generate a try-on
+      description: Generate a try-on for a body and a published product variant. This request waits for completion. Success returns 201 with the image. A size rejection returns a 422 problem response with a reason and a suggested alternative size. Use `getProductDetails` to discover the product's variants.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: bodyId
+          in: query
+          required: true
+          description: Body to use for the try-on. Must belong to the current session.
+          schema:
+            type: string
+          explode: false
+        - name: include
+          in: query
+          required: false
+          description: Optional diagnostic fields for internal tooling.
+          schema:
+            type: string
+          x-internal: true
+          explode: false
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TryOnSuccess'
+        '400':
+          description: Some request fields are missing, invalid, or conflicting.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/TryOnBadRequestProblem'
+        '401':
+          description: The session credential is missing, malformed, invalid, expired, or used with the wrong transport.
+          headers:
+            WWW-Authenticate:
+              required: true
+              description: HTTP authentication challenge for the session credential accepted by this endpoint.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionUnauthorizedProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '404':
+          description: The requested body, product, variant, or try-on was not found.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/TryOnNotFoundProblem'
+        '422':
+          description: The requested garment size was rejected. Use reason to choose a localized message; title and detail provide fallback text.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/TryOnGarmentTooSmall'
+                  - $ref: '#/components/schemas/TryOnGarmentTooLarge'
+        '500':
+          description: An internal failure prevented the request from being completed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/InternalServerErrorProblem'
+      tags:
+        - try-on
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTryOnBody'
+  /session:
+    get:
+      operationId: getSession
+      summary: Get the current session
+      description: Retrieve the expiry time of the current Bearer or cookie session. Requires the shop client API key.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+      responses:
+        '200':
+          description: The request has succeeded.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionView'
+        '400':
+          description: The request has missing, malformed, or conflicting input.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionBadRequestProblem'
+        '401':
+          description: The session credential is missing, malformed, invalid, expired, or used with the wrong transport.
+          headers:
+            WWW-Authenticate:
+              required: true
+              description: HTTP authentication challenge for the session credential accepted by this endpoint.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionUnauthorizedProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '500':
+          description: The service could not complete the session operation.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionInternalServerErrorProblem'
+      tags:
+        - session
+    delete:
+      operationId: deleteSession
+      summary: Delete the current session
+      description: End the current Bearer or cookie session. Invalidates the credential and clears the cookie in cookie mode.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+      responses:
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+            Set-Cookie:
+              required: false
+              schema:
+                type: string
+        '400':
+          description: The request has missing, malformed, or conflicting input.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionBadRequestProblem'
+        '401':
+          description: The session credential is missing, malformed, invalid, expired, or used with the wrong transport.
+          headers:
+            WWW-Authenticate:
+              required: true
+              description: HTTP authentication challenge for the session credential accepted by this endpoint.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionUnauthorizedProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '500':
+          description: The service could not complete the session operation.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionInternalServerErrorProblem'
+      tags:
+        - session
+  /session/bearer:
+    post:
+      operationId: createBearerSession
+      summary: Create a bearer shopper session
+      description: "Create a bearer session after obtaining the shopper's consent. Send X-Client-Api-Key, omit Authorization, and use credentials: omit. No cookie preparation or challenge is required. Returns the session token in JSON and does not set a session cookie. Send the token as Authorization: Bearer <session_token> on subsequent requests, with credentials omitted."
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BearerSessionCreated'
+        '400':
+          description: The request has missing, malformed, or conflicting input.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionBadRequestProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '500':
+          description: The service could not complete the session operation.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionInternalServerErrorProblem'
+      tags:
+        - session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBearerSessionBody'
+      security:
+        - {}
+  /session/bearer/refresh:
+    post:
+      operationId: refreshBearerSession
+      summary: Refresh the current bearer session
+      description: 'Replace the current bearer session token and extend the session. Send the shop client key and Authorization: Bearer <session_token> with credentials omitted. Returns the replacement token in JSON and does not set a session cookie. The previous credential becomes invalid. Cookie credentials are not accepted on this endpoint.'
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+      responses:
+        '200':
+          description: The request has succeeded.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BearerSessionRefreshed'
+        '400':
+          description: The request has missing, malformed, or conflicting input.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionBadRequestProblem'
+        '401':
+          description: The session credential is missing, malformed, invalid, expired, or used with the wrong transport.
+          headers:
+            WWW-Authenticate:
+              required: true
+              description: HTTP authentication challenge for the session credential accepted by this endpoint.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionUnauthorizedProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '500':
+          description: The service could not complete the session operation.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionInternalServerErrorProblem'
+      tags:
+        - session
+      security:
+        - BearerAuth: []
+  /session/cookie:
+    post:
+      operationId: createCookieSession
+      summary: Create a cookie shopper session
+      description: "Create a cookie session after obtaining the shopper's consent. First call prepareCookieSession, then send its challenge as cookieChallenge with credentials included, the same shop client key and registered Origin, and no Authorization header. The server validates the challenge and checks its preparation cookie before creating a shopper, session, or consent record. Missing, invalid, expired, or incorrectly scoped challenges, or a present but mismatched preparation cookie, return session-preparation-invalid. A valid challenge with no preparation cookie returns session-cookie-unavailable. Both errors leave the shopper, session, and consent record uncreated; this operation never creates a bearer session. Success sets a shop-scoped Secure, HttpOnly, SameSite=None, Partitioned session cookie without exposing the token in JSON. Use credentials: include on subsequent requests. Verify the actual session with getSession; a failed verification must not trigger automatic bearer fallback."
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+            Set-Cookie:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CookieSessionCreated'
+        '400':
+          description: The request has missing, malformed, or conflicting input.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/SessionBadRequestProblem'
+                  - $ref: '#/components/schemas/CookieSessionPreparationInvalidProblem'
+                  - $ref: '#/components/schemas/CookieSessionUnavailableProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '500':
+          description: The service could not complete the session operation.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionInternalServerErrorProblem'
+      tags:
+        - session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCookieSessionBody'
+      security:
+        - {}
+  /session/cookie/prepare:
+    post:
+      operationId: prepareCookieSession
+      summary: Prepare cookie-based session creation
+      description: Call once with credentials included, the shop client key, a registered Origin, and no Authorization header. No request body is required. Sets a temporary, non-authenticating shop-scoped cookie with Secure, HttpOnly, SameSite=None, Partitioned, and a 60-second lifetime, and returns a challenge. No shopper, session, or consent record is created. Next call createCookieSession with the challenge and credentials included; cookie verification happens during creation. Preparation alone does not establish cookie support or verify browser enforcement of partition isolation. Bearer session creation does not require preparation.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+      responses:
+        '200':
+          description: The request has succeeded.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+            Set-Cookie:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CookieSessionPreparation'
+        '400':
+          description: The request has missing, malformed, or conflicting input.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionBadRequestProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '500':
+          description: The service could not complete the session operation.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionInternalServerErrorProblem'
+      tags:
+        - session
+      security:
+        - {}
+  /session/cookie/refresh:
+    post:
+      operationId: refreshCookieSession
+      summary: Refresh the current cookie session
+      description: Replace the current cookie session credential and extend the session. Send the shop client key and session cookie with credentials included, a registered Origin, and no Authorization header. Cookie preparation is not required. Returns expiry metadata and sets a replacement HttpOnly session cookie without exposing the credential in JSON. The previous credential becomes invalid. Bearer credentials are not accepted on this endpoint.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+      responses:
+        '200':
+          description: The request has succeeded.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+            Set-Cookie:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CookieSessionRefreshed'
+        '400':
+          description: The request has missing, malformed, or conflicting input.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionBadRequestProblem'
+        '401':
+          description: The session credential is missing, malformed, invalid, expired, or used with the wrong transport.
+          headers:
+            WWW-Authenticate:
+              required: true
+              description: HTTP authentication challenge for the session credential accepted by this endpoint.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionUnauthorizedProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '500':
+          description: The service could not complete the session operation.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionInternalServerErrorProblem'
+      tags:
+        - session
+      security:
+        - SessionCookieAuth: []
+  /try-ons/{tryOnId}:
+    get:
+      operationId: getTryOn
+      summary: Get a try-on
+      description: Retrieve a try-on result from the current session. An image returns 200. A stored size rejection returns the same 422 problem response as creation. A missing or inaccessible try-on returns 404.
+      parameters:
+        - $ref: '#/components/parameters/ApiVersionHeader'
+        - $ref: '#/components/parameters/ClientApiKeyHeader'
+        - name: tryOnId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: include
+          in: query
+          required: false
+          description: Optional diagnostic fields for internal tooling.
+          schema:
+            type: string
+          x-internal: true
+          explode: false
+      responses:
+        '200':
+          description: The request has succeeded.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TryOnSuccess'
+        '400':
+          description: Some request fields are missing, invalid, or conflicting.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/TryOnBadRequestProblem'
+        '401':
+          description: The session credential is missing, malformed, invalid, expired, or used with the wrong transport.
+          headers:
+            WWW-Authenticate:
+              required: true
+              description: HTTP authentication challenge for the session credential accepted by this endpoint.
+              schema:
+                type: string
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionUnauthorizedProblem'
+        '403':
+          description: The shop, Origin, or session scope does not permit this request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SessionForbiddenProblem'
+        '404':
+          description: The requested body, product, variant, or try-on was not found.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/TryOnNotFoundProblem'
+        '422':
+          description: The requested garment size was rejected. Use reason to choose a localized message; title and detail provide fallback text.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/TryOnGarmentTooSmall'
+                  - $ref: '#/components/schemas/TryOnGarmentTooLarge'
+        '500':
+          description: An internal failure prevented the request from being completed.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/InternalServerErrorProblem'
+      tags:
+        - try-on
+security:
+  - BearerAuth: []
+  - SessionCookieAuth: []
+components:
+  parameters:
+    ApiVersionHeader:
+      name: X-Api-Version
+      in: header
+      required: false
+      description: Optional API compatibility version. The SDK sends `2026-11-05`.
+      schema:
+        type: string
+    ClientApiKeyHeader:
+      name: X-Client-Api-Key
+      in: header
+      required: true
+      description: Your shop's public client API key, received during onboarding. Not a secret; safe for browser code. Required on business API requests except the health check. OFREP evaluations use X-API-Key instead.
+      schema:
+        type: string
+  schemas:
+    BearerSessionCreated:
+      type: object
+      required:
+        - token
+        - expiresAt
+      properties:
+        token:
+          type: string
+          description: 'Send as `Authorization: Bearer <session_token>` on shopper-specific requests, with credentials omitted.'
+          example: SESSION_TOKEN
+        expiresAt:
+          type: string
+          format: date-time
+          description: Session expiry time in RFC 3339 format (UTC).
+          example: '2026-10-01T12:00:00Z'
+      description: Created bearer session and its credential.
+    BearerSessionRefreshed:
+      type: object
+      required:
+        - token
+        - expiresAt
+      properties:
+        token:
+          type: string
+          description: Replacement session token; stop using the previous token after a successful refresh.
+        expiresAt:
+          type: string
+          format: date-time
+          description: Session expiry time in RFC 3339 format (UTC).
+      description: Refreshed bearer session and its replacement credential.
+    BodyBadRequestProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - invalid-request
+            - client-api-key-required
+            - client-api-key-header-invalid
+            - client-api-key-malformed
+            - origin-header-invalid
+            - origin-not-a-url
+            - cookie-origin-required
+            - ambiguous-session
+            - invalid-content-type
+            - invalid-byte-size
+            - invalid-body-id
+            - invalid-height
+            - invalid-staging-key
+            - invalid-image-metadata
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: Some request fields are missing, invalid, or conflicting.
+    BodyHeightRevision:
+      type: object
+      required:
+        - bodyRevisionId
+      properties:
+        bodyRevisionId:
+          type: string
+          description: Identifier of the immutable body revision written by this request.
+    BodyHeightUnusableProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - height-calibration-failed
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: The body could not be adjusted to this height. No changes were saved.
+    BodyNotFoundProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - body-not-found
+            - upload-not-found
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: The body or uploaded image is not available in this session. This also applies to bodies and uploads from another session.
+    BodyReady:
+      type: object
+      required:
+        - status
+        - body
+      properties:
+        status:
+          type: string
+          enum:
+            - ready
+          description: Body creation has completed.
+        body:
+          allOf:
+            - $ref: '#/components/schemas/InitialBodySummary'
+          description: The created body.
+      description: The body was created successfully. Use `setBodyHeight` to set its height.
+    BodySummary:
+      type: object
+      properties:
+        bodyRevisionId:
+          type: string
+          description: Identifier of the immutable revision represented by this summary. Pass it when requesting a try-on or size recommendation for this height.
+        userProvidedHeightCm:
+          type: number
+          format: float
+          description: Height set by `setBodyHeight`, in centimetres. Omitted until height is set.
+      allOf:
+        - $ref: '#/components/schemas/InitialBodySummary'
+      description: A body in the current session. Includes `userProvidedHeightCm` after height is set.
+    BodyUnusableProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - body-unusable
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: The image could not be used to create a body. Upload a different image.
+    BodyValidationCode:
+      type: string
+      enum:
+        - no_human_detected
+        - human_occluded
+        - human_not_standing
+        - human_too_small
+        - inappropriate_clothing
+      description: Reasons an image cannot be used to create a body.
+    BodyValidationFailed:
+      type: object
+      required:
+        - kind
+        - reason
+      properties:
+        kind:
+          type: string
+          enum:
+            - body-validation-failed
+        reason:
+          allOf:
+            - $ref: '#/components/schemas/BodyValidationCode'
+          description: Why the image was rejected. Use this code to choose a localized message.
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: The image was rejected and no body was created. Use `title` or `detail` as a fallback explanation if no localized message is available.
+    CookieSessionCreated:
+      type: object
+      required:
+        - expiresAt
+      properties:
+        expiresAt:
+          type: string
+          format: date-time
+          description: Session expiry time in RFC 3339 format (UTC).
+          example: '2026-10-01T12:00:00Z'
+      description: Created cookie session metadata. The credential is delivered only through Set-Cookie and is inaccessible to JavaScript.
+    CookieSessionPreparation:
+      type: object
+      required:
+        - challenge
+      properties:
+        challenge:
+          type: string
+          description: A non-authenticating challenge valid for 60 seconds and bound to the shop and Origin. Pass unchanged as cookieChallenge to createCookieSession. The server validates issuance, expiry, and scope independently of whether the preparation cookie is returned.
+      description: Preparation for cookie session creation. No shopper, session, or consent record is created.
+    CookieSessionPreparationInvalidProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - session-preparation-invalid
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: The preparation challenge is missing, invalid, expired, or scoped to another shop or Origin, or its returned cookie does not match. Restart preparation; do not fall back to bearer on this error. No shopper, session, or consent record is created.
+    CookieSessionRefreshed:
+      type: object
+      required:
+        - expiresAt
+      properties:
+        expiresAt:
+          type: string
+          format: date-time
+          description: Session expiry time in RFC 3339 format (UTC).
+      description: Refreshed cookie session metadata. The replacement credential is delivered only through Set-Cookie.
+    CookieSessionUnavailableProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - session-cookie-unavailable
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: The preparation challenge is valid, but the browser did not return its cookie. The integration may choose to create a bearer session instead. No shopper, session, or consent record is created.
+    CreateBearerSessionBody:
+      type: object
+      required:
+        - dataProcessingConsent
+      properties:
+        dataProcessingConsent:
+          type: boolean
+          enum:
+            - true
+          description: The shopper has explicitly consented to processing their photo and body measurements. Must be `true`.
+      description: The shopper's explicit consent to process their photo and body measurements. Obtain consent before creating a bearer session.
+    CreateCookieSessionBody:
+      type: object
+      required:
+        - dataProcessingConsent
+        - cookieChallenge
+      properties:
+        dataProcessingConsent:
+          type: boolean
+          enum:
+            - true
+          description: The shopper has explicitly consented to processing their photo and body measurements. Must be `true`.
+        cookieChallenge:
+          type: string
+          description: Challenge returned by prepareCookieSession. Send unchanged within 60 seconds, using the same shop client key and registered Origin, with credentials included so the browser can return the preparation cookie. The challenge is not a session credential.
+      description: Consent and cookie preparation challenge for creating a cookie session. Obtain consent before creating the session.
+    CreateTryOnBody:
+      type: object
+      required:
+        - variantId
+      properties:
+        bodyRevisionId:
+          type: string
+          description: Pin the exact body revision to render. Omit to use the current revision.
+        variantId:
+          type: string
+          description: "`id` of one of the product's `ProductDetails.variants`. An unknown id returns `variant-not-found`."
+      description: The variant to try on.
+    FinalizeBodyUploadBody:
+      type: object
+      required:
+        - stagingKey
+        - mimeType
+      properties:
+        stagingKey:
+          type: string
+          description: Upload identifier returned by `prepareBodyUpload`.
+        mimeType:
+          type: string
+          description: MIME type of the uploaded image. Use the same value sent to `prepareBodyUpload`.
+        imageMetadata:
+          allOf:
+            - $ref: '#/components/schemas/ImageMetadata'
+          description: Image dimensions and EXIF values supplied separately from the uploaded image.
+      description: The uploaded still JPEG, PNG, WebP, HEIC/HEIF or JPEG XL image to use when creating a body. The decoded image must have at most 16,384 pixels per edge and 64,000,000 pixels in total, whether or not `imageMetadata` is supplied.
+    FitAnchor:
+      type: object
+      required:
+        - dimension
+        - x
+        - 'y'
+      properties:
+        dimension:
+          type: string
+          description: 'Body-dimension slug matching `FitCheck.dimension`: `chest` | `waist` | `sleeve_length` | `total_length`.'
+        side:
+          type: string
+          description: Side of a paired annotation (`left` or `right`). Omitted for central annotations. Choose the better-positioned side when both are available.
+        x:
+          type: number
+          format: double
+          description: Normalized x in the output image (0 = left edge, 1 = right edge).
+        'y':
+          type: number
+          format: double
+          description: Normalized y in the output image (0 = top edge, 1 = bottom edge).
+      description: Position of a fit annotation in the try-on image. Coordinates range from 0 to 1 relative to the complete image, with x increasing rightwards and y increasing downwards.
+    FitCheck:
+      type: object
+      required:
+        - pointId
+        - label
+        - dimension
+        - garmentMm
+        - bodyMm
+        - easeMm
+        - easeNorm
+        - idealShiftNorm
+        - intentSigmaNorm
+        - fit
+        - sentence
+      properties:
+        pointId:
+          type: string
+          description: Size-chart measurement identifier, such as `chest_width`.
+        label:
+          type: string
+          description: The brand-authored column label (e.g. `"Chest Width"`).
+        dimension:
+          type: string
+          description: 'Body measurement identifier for display and icon mapping: `chest` | `waist` | `hip` | `bottom` | `total_length` | `sleeve_length` | `shoulder_width` | `inseam` | `other`.'
+        garmentMm:
+          type: number
+          format: double
+          description: Garment circumference for this size, in millimetres.
+        bodyMm:
+          type: number
+          format: double
+          description: Matching shopper body circumference, in millimetres.
+        easeMm:
+          type: number
+          format: double
+          description: Garment circumference minus body circumference, in millimetres. Negative values indicate that the garment is smaller than the body.
+        easeNorm:
+          type: number
+          format: double
+          description: Distance from the intended fit, normalized by the fit tolerance. `0` is the intended fit; `-1` and `1` mark the boundaries of the intended range.
+        idealShiftNorm:
+          type: number
+          format: double
+          description: Offset of the intended-fit range on the fit scale, in the same units as `easeNorm`. Positive values indicate a looser or longer intended fit.
+        intentSigmaNorm:
+          type: number
+          format: double
+          description: Uncertainty of the intended-fit estimate, in the same units as `easeNorm`. Larger values indicate greater uncertainty.
+        fit:
+          type: string
+          description: 'Fit category: `too_small` | `runs_tight` | `ideal` | `runs_loose` | `too_loose`.'
+        sentence:
+          type: string
+          description: English explanation of this measurement. Use `fit` to provide your own localized text.
+      description: Fit assessment for one size-chart measurement, including garment and shopper measurements and the resulting fit category.
+    HealthStatus:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+      description: The public API is available to accept requests.
+    ImageMetadata:
+      type: object
+      required:
+        - originalWidth
+        - originalHeight
+      properties:
+        originalWidth:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Width of the original image in pixels, before resizing.
+        originalHeight:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Height of the original image in pixels, before resizing.
+        uploadedWidth:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 16384
+          description: Width of the uploaded image in pixels. Supply together with `uploadedHeight` when resizing the image; otherwise omit both.
+        uploadedHeight:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 16384
+          description: Height of the uploaded image in pixels. Supply together with `uploadedWidth` when resizing the image; otherwise omit both.
+        focalLengthMm:
+          type: number
+          format: float
+          description: Camera focal length in millimetres (`EXIF FocalLength`).
+        focalLength35mm:
+          type: number
+          format: float
+          description: 35 mm equivalent focal length in millimetres (`EXIF FocalLengthIn35mmFilm`).
+        focalPlaneXResolution:
+          type: number
+          format: float
+          description: Horizontal focal-plane resolution (`EXIF FocalPlaneXResolution`), in pixels per `focalPlaneResolutionUnit`.
+        focalPlaneYResolution:
+          type: number
+          format: float
+          description: Vertical focal-plane resolution (`EXIF FocalPlaneYResolution`), in pixels per `focalPlaneResolutionUnit`.
+        focalPlaneResolutionUnit:
+          type: integer
+          format: int32
+          description: 'Unit for the focal-plane resolutions: `2` for inches or `3` for centimetres (`EXIF FocalPlaneResolutionUnit`).'
+      description: |-
+        Image dimensions and optional EXIF values. When resizing an image before upload,
+        send its original dimensions and any EXIF values that would be lost. If this
+        object is omitted, the API reads metadata embedded in the uploaded image.
+    InitialBodySummary:
+      type: object
+      required:
+        - bodyId
+        - createdAt
+        - estimatedHeightCm
+        - sourceImageUrl
+        - sourceImageUrlExpiresAt
+      properties:
+        bodyId:
+          type: string
+          description: Stable body identifier. Use it to set height, request size recommendations, and create try-ons.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the body was created (UTC).
+        estimatedHeightCm:
+          type: number
+          format: float
+          description: Initial height estimate from the source image, in centimetres.
+        sourceImageUrl:
+          type: string
+          description: Temporary signed URL for the image used to create the body. Use it before `sourceImageUrlExpiresAt`; call `listBodies` for a fresh URL after expiry.
+        sourceImageUrlExpiresAt:
+          type: string
+          format: date-time
+          description: When `sourceImageUrl` expires (UTC). Each `createBody` or `listBodies` response includes a valid URL and its expiry.
+      description: A newly created body, with its initial height estimate and source image.
+    InternalServerErrorProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - internal-server-error
+            - client-api-key-validation-failed
+            - session-lookup-failed
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: The service could not complete the request because of an internal failure.
+    ListBodiesResponse:
+      type: object
+      required:
+        - bodies
+      properties:
+        bodies:
+          type: array
+          items:
+            $ref: '#/components/schemas/BodySummary'
+          description: Includes bodies whose height has not been set. Empty when the session has no bodies.
+      description: Bodies in the current session.
+    ListingProvenance:
+      type: object
+      required:
+        - productId
+        - sizes
+      properties:
+        productId:
+          type: string
+        templateId:
+          type: string
+          description: The catalog template the library garment sells as. Absent when no library binding sells the product (git-seeded fixtures). With several bound templates, this and the binding, garment and revision fields below are the first template's (by slug); `templates` has each one's.
+        bindingId:
+          type: string
+          description: The catalog binding that sells the library garment in this shop.
+        garmentSlug:
+          type: string
+          description: Library garment slug.
+        revisionNumber:
+          type: integer
+          format: int32
+          description: Number of the promoted library revision (`5` reads `r5`).
+        revisionId:
+          type: string
+        revisionMessage:
+          type: string
+          description: First line of the promoted revision's commit message, at most 120 characters.
+        manifestHash:
+          type: string
+          description: blake3 (hex) of the promoted publication manifest.
+        listingHash:
+          type: string
+          description: Content hash (hex) of the listing the promotion applied.
+        promotedAt:
+          type: string
+          description: RFC 3339.
+        environment:
+          type: string
+          description: Deployment environment that served the listing (`int`, `prod`, `dev`).
+        apiBuild:
+          type: string
+          description: API server build (image tag, a commit) that served the listing.
+        sizes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ListingSizeProvenance'
+          description: Every published size, by rank.
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/ListingTemplateProvenance'
+          description: Every bound template's binding, garment and promoted revision, by template slug. A size belongs to the template its `templateSlug` names. Absent when no library binding sells the product.
+      description: 'Where a listing came from, so a reviewer can check the shop serves exactly what Studio pushed and promoted: the library garment and revision, the publication, and the stored drape per size. Hashes, ids and timestamps only, never who pushed or promoted.'
+      x-internal: true
+    ListingSizeProvenance:
+      type: object
+      required:
+        - sizeSlug
+        - templateSlug
+        - pieceId
+      properties:
+        sizeSlug:
+          type: string
+          description: Storefront size slug (`27-l30`, `s`).
+        templateSlug:
+          type: string
+          description: Style slug of the piece's template.
+        pieceId:
+          type: string
+        manifestHash:
+          type: string
+          description: blake3 (hex) of the publication manifest the piece points at. Equals `ListingProvenance.manifestHash` once the promotion reached every size.
+        realizationId:
+          type: string
+          description: The publication's size (realization) id the piece selects, decimal.
+        bakeHash:
+          type: string
+          description: blake3 (hex) of the stored drape (the publication's executable drape object) this size renders. Absent when the manifest could not be read.
+      description: "One size of a listing's provenance: the catalog piece and the stored drape it renders."
+      x-internal: true
+    ListingTemplateProvenance:
+      type: object
+      required:
+        - templateSlug
+        - templateId
+        - bindingId
+        - garmentSlug
+      properties:
+        templateSlug:
+          type: string
+          description: Style slug of the template (`ListingSizeProvenance.templateSlug`).
+        templateId:
+          type: string
+        bindingId:
+          type: string
+          description: The catalog binding that sells the library garment as this template.
+        garmentSlug:
+          type: string
+          description: Library garment slug.
+        revisionNumber:
+          type: integer
+          format: int32
+          description: Number of the promoted library revision (`5` reads `r5`). Absent before the template's first promotion.
+        revisionId:
+          type: string
+        revisionMessage:
+          type: string
+          description: First line of the promoted revision's commit message, at most 120 characters.
+        manifestHash:
+          type: string
+          description: "blake3 (hex) of the template's promoted publication manifest: what its sizes' `manifestHash` equal once the promotion reached every size."
+        listingHash:
+          type: string
+          description: Content hash (hex) of the listing the promotion applied.
+        promotedAt:
+          type: string
+          description: RFC 3339.
+      description: 'The library binding of one template (style) of a listing: a product with several templates binds each to its own library garment and promotes each on its own.'
+      x-internal: true
+    OfrepBulkEvaluationFailure:
+      type: object
+      required:
+        - errorCode
+      properties:
+        errorCode:
+          type: string
+          enum:
+            - PARSE_ERROR
+            - TARGETING_KEY_MISSING
+            - INVALID_CONTEXT
+            - GENERAL
+      allOf:
+        - $ref: '#/components/schemas/OfrepError'
+      description: The entire bulk request is invalid. Individual flag failures belong in a successful bulk response instead.
+    OfrepBulkEvaluationSuccess:
+      type: object
+      required:
+        - flags
+      properties:
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfrepFlagEvaluation'
+      description: All flags available to the shop, including off decisions and any per-flag errors. An empty flags array means no flags are available, not that every flag is off.
+      example:
+        flags:
+          - key: try-on-enabled
+            value: false
+            reason: SPLIT
+    OfrepBulkResponseHeaders:
+      type: object
+      description: Headers for bulk results and cache validation. These responses are private and must be revalidated before reuse.
+    OfrepError:
+      type: object
+      properties:
+        errorDetails:
+          type: string
+          description: Optional explanation for diagnostics.
+      description: Details of an unexpected service failure.
+    OfrepEvaluationContext:
+      type: object
+      properties:
+        targetingKey:
+          type: string
+          description: Stable anonymous visitor identifier. Reuse it across requests. The try-on-enabled flag requires this field and reports TARGETING_KEY_MISSING when it is absent.
+      allOf:
+        - type: object
+          additionalProperties: {}
+      description: Context used to evaluate flags. Additional attributes are accepted; the current rollout uses targetingKey.
+    OfrepEvaluationFailure:
+      type: object
+      required:
+        - key
+        - errorCode
+      properties:
+        key:
+          type: string
+        errorCode:
+          type: string
+          enum:
+            - PARSE_ERROR
+            - TARGETING_KEY_MISSING
+            - INVALID_CONTEXT
+            - GENERAL
+      allOf:
+        - $ref: '#/components/schemas/OfrepError'
+      description: A flag could not be evaluated. The client should use its configured default for this flag; no value is returned.
+      example:
+        key: try-on-enabled
+        errorCode: TARGETING_KEY_MISSING
+    OfrepEvaluationRequest:
+      type: object
+      required:
+        - context
+      properties:
+        context:
+          $ref: '#/components/schemas/OfrepEvaluationContext'
+      description: Context for a single or bulk flag evaluation. Send an empty context object when evaluating flags that do not require visitor information.
+      example:
+        context:
+          targetingKey: visitor-123
+    OfrepEvaluationSuccess:
+      type: object
+      required:
+        - key
+        - value
+        - reason
+      properties:
+        key:
+          type: string
+          description: Stable flag key. The initial flag is try-on-enabled; additional keys can be introduced later.
+        value:
+          allOf:
+            - $ref: '#/components/schemas/OfrepFlagValue'
+          description: Evaluated value. A boolean false is a successful off decision, not an evaluation error.
+        reason:
+          type: string
+          enum:
+            - STATIC
+            - TARGETING_MATCH
+            - SPLIT
+            - DISABLED
+            - UNKNOWN
+          description: Why the flag resolved to this value.
+      description: A successfully evaluated flag. This profile always returns an explicit value.
+      example:
+        key: try-on-enabled
+        value: true
+        reason: SPLIT
+    OfrepFlagEvaluation:
+      oneOf:
+        - $ref: '#/components/schemas/OfrepEvaluationSuccess'
+        - $ref: '#/components/schemas/OfrepEvaluationFailure'
+      description: 'One flag result: either an evaluated value or an evaluation error. A result never contains both.'
+    OfrepFlagNotFound:
+      type: object
+      required:
+        - key
+        - errorCode
+      properties:
+        key:
+          type: string
+        errorCode:
+          type: string
+          enum:
+            - FLAG_NOT_FOUND
+      allOf:
+        - $ref: '#/components/schemas/OfrepError'
+      description: The requested flag key does not exist for this shop.
+    OfrepFlagValue:
+      oneOf:
+        - type: boolean
+        - type: string
+        - type: number
+          format: double
+        - type: object
+          additionalProperties: {}
+      description: An explicit boolean, string, numeric, or object value. Disabled boolean flags use false; they are not omitted.
+    PrepareBodyUploadBody:
+      type: object
+      required:
+        - contentType
+        - byteSize
+      properties:
+        contentType:
+          type: string
+          description: MIME type of the image, for example `image/jpeg`.
+          example: image/jpeg
+        byteSize:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 52428800
+          description: Exact size of the image file in bytes. Upload these same bytes without re-encoding them.
+          example: 1024000
+        fileName:
+          type: string
+          description: Image file name, if available.
+      description: Details of the image to upload.
+    PrepareBodyUploadResponse:
+      type: object
+      required:
+        - uploadUrl
+        - method
+        - stagingKey
+        - requiredHeaders
+        - expiresAt
+      properties:
+        uploadUrl:
+          type: string
+          description: Upload the image bytes to this URL using `method` and `requiredHeaders`.
+        method:
+          type: string
+          description: HTTP method for the upload.
+        stagingKey:
+          type: string
+          description: Identifier for this upload. Pass it unchanged to `createBody` after uploading the image.
+        requiredHeaders:
+          type: array
+          items:
+            $ref: '#/components/schemas/UploadHeader'
+          description: Headers to send with the upload. Use the returned names and values exactly.
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the upload URL expires (UTC). Call `prepareBodyUpload` for a new URL after expiry.
+      description: Instructions for uploading an image. Complete the upload before calling `createBody`.
+    ProblemDetails:
+      type: object
+      required:
+        - kind
+        - title
+      properties:
+        kind:
+          type: string
+          description: A URI reference (or token) that identifies the problem kind.
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type.
+        detail:
+          type: string
+          description: A human-readable explanation specific to this occurrence.
+      description: Error body for failed requests (`application/problem+json`).
+    ProductCatalog:
+      type: object
+      required:
+        - products
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductSummary'
+      description: The products of your shop that can be tried on.
+    ProductDetails:
+      type: object
+      required:
+        - productId
+        - variants
+      properties:
+        productId:
+          type: string
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductVariant'
+          description: Every variant that can be tried on.
+        provenance:
+          allOf:
+            - $ref: '#/components/schemas/ListingProvenance'
+          description: Diagnostic metadata for internal tooling.
+          x-internal: true
+      description: 'What the API knows about a product: its variants. Names, prices, photos, labels and ordering stay with your storefront.'
+    ProductSummary:
+      type: object
+      required:
+        - productId
+      properties:
+        productId:
+          type: string
+      description: A product of your shop.
+    ProductVariant:
+      type: object
+      required:
+        - id
+        - foreignVariantIds
+      properties:
+        id:
+          type: string
+        foreignVariantIds:
+          type: object
+          additionalProperties:
+            type: string
+          description: 'This variant''s value on every axis the product is sold by, in your shop''s own ids: for example `{ colorway: "A100-259", size: "XS" }`. Keys are `colorway` and `size`, plus any further axis of the product. Use them to match the variant to your storefront''s selection and to add it to the cart.'
+          example:
+            colorway: A100-259
+            size: XS
+        foreignId:
+          type: string
+          description: Your shop's own id for this combination, such as its variant id or SKU, when the product names one. Use it to add the variant to the cart directly.
+          example: '44718293'
+      description: One sellable combination of a product. Pass its `id` to `createTryOn`.
+    RecommendedSize:
+      type: object
+      required:
+        - recommendations
+      properties:
+        bodyRevisionId:
+          type: string
+          description: The body revision used to compute this recommendation.
+        recommendedForeignIds:
+          type: object
+          additionalProperties:
+            type: string
+          description: Best available size for the shopper, in your shop's own ids. Absent when no size is eligible for try-on; show a no-suitable-size state instead of selecting a size automatically.
+        recommendations:
+          type: array
+          items:
+            $ref: '#/components/schemas/SizeRecommendation'
+          description: The size-chart entries your shop sells, ranked best first. Empty when no size chart is available. For products with multiple variant axes, each entry describes one published combination.
+      description: Size recommendations for a body and product. Includes the best available size and a ranked breakdown of all size-chart entries.
+    ServiceUnavailableProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - service-unavailable
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: The service is temporarily unavailable. Retry later.
+    SessionBadRequestProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - invalid-request
+            - client-api-key-required
+            - client-api-key-header-invalid
+            - client-api-key-malformed
+            - origin-header-invalid
+            - origin-not-a-url
+            - cookie-origin-required
+            - ambiguous-session
+            - invalid-authorization
+            - consent-required
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: A session request has missing, malformed, or conflicting input.
+    SessionForbiddenProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - client-api-key-unknown
+            - origin-not-allowed
+            - session-shop-mismatch
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: The shop key is unknown, the Origin is not allowed, or the session belongs to another shop.
+    SessionInternalServerErrorProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - internal-server-error
+            - client-api-key-validation-failed
+            - session-lookup-failed
+            - session-preparation-failed
+            - session-creation-failed
+            - session-refresh-failed
+            - session-delete-failed
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: The service could not complete the session operation. This does not indicate that cookies are unavailable.
+    SessionUnauthorizedProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - session-token-required
+            - session-token-malformed
+            - session-invalid
+            - session-expired
+            - session-transport-mismatch
+            - unsupported-auth-scheme
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: An active session credential accepted by this endpoint is required. Expired or invalid sessions require a new session and consent.
+    SessionView:
+      type: object
+      required:
+        - expiresAt
+      properties:
+        expiresAt:
+          type: string
+          format: date-time
+          description: Session expiry time in RFC 3339 format (UTC).
+      description: Session metadata for the current Bearer or cookie session.
+    SetBodyHeightBody:
+      type: object
+      required:
+        - heightCm
+      properties:
+        heightCm:
+          type: number
+          format: float
+          description: Height to set, in centimetres.
+          example: 173
+        productId:
+          type: string
+          description: Product for the next try-on. Providing it lets the server start speculative background computation to prepare the body for this product and make the next try-on faster. The height update does not wait for this computation. Omit when no product is selected.
+        returnRevision:
+          type: boolean
+          description: Return the exact immutable revision written by this request as a 200 response.
+      description: Height to apply to the body, with an optional product to prepare for the next try-on.
+    SizeRecommendation:
+      type: object
+      required:
+        - foreignIds
+        - rank
+        - rationale
+        - fit
+        - fitMatch
+        - fitChecks
+      properties:
+        foreignIds:
+          type: object
+          additionalProperties:
+            type: string
+          description: 'This size on every axis it is sold by, in your shop''s own ids (for example `{ size: "M" }`, or `{ size: "32", style: "32" }` for waist × length). Colorway is not part of a size.'
+        rank:
+          type: integer
+          format: int32
+          description: 1-based rank; `1` is the best fit.
+        rationale:
+          type: string
+          description: Human-readable rationale, e.g. `"Chest fits with +32 cm ease — oversized as intended"`.
+        fit:
+          type: string
+          description: 'Fit category for this size: `too_small` | `runs_tight` | `ideal` | `runs_loose` | `too_loose`.'
+        fitMatch:
+          type: integer
+          format: int32
+          description: Fit-match score from 0 to 100. Higher values indicate a closer match to the product's intended fit.
+        fitChecks:
+          type: array
+          items:
+            $ref: '#/components/schemas/FitCheck'
+          description: Fit assessments for the available circumference measurements, in size-chart order.
+        gate:
+          type: string
+          enum:
+            - too_small
+            - too_large
+          description: Present when a try-on in this size would be rejected as `too_small` or `too_large`. Use this to mark unavailable try-on sizes before submitting a request.
+      description: One ranked size suggestion from the brand size chart, best first.
+    SizeRecommendationUnavailableProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - recommendation-unavailable
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: A size recommendation could not be calculated for this product and body.
+    TryOnBadRequestProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - invalid-request
+            - client-api-key-required
+            - client-api-key-header-invalid
+            - client-api-key-malformed
+            - origin-header-invalid
+            - origin-not-a-url
+            - cookie-origin-required
+            - ambiguous-session
+            - invalid-body-id
+            - invalid-product-id
+            - invalid-try-on-id
+            - invalid-variant-id
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: Some request fields are missing, invalid, or conflicting.
+    TryOnGarmentTooLarge:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          enum:
+            - garment_too_large
+          description: The garment is too large. Use this code to choose a localized message.
+      allOf:
+        - $ref: '#/components/schemas/TryOnSizeRejectionProblem'
+      description: The selected size is too large for this body. Choose another size.
+    TryOnGarmentTooSmall:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          enum:
+            - garment_too_small
+          description: The garment is too small. Use this code to choose a localized message.
+      allOf:
+        - $ref: '#/components/schemas/TryOnSizeRejectionProblem'
+      description: The selected size is too small for this body. Choose another size.
+    TryOnNotFoundProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - body-not-found
+            - product-not-found
+            - variant-not-found
+            - try-on-not-found
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: The body, product, variant, or try-on is not available in the current session or shop. Resources outside that scope are also reported as not found.
+    TryOnProvenance:
+      type: object
+      required:
+        - bodyId
+        - productId
+        - pieceId
+        - sizeSlug
+        - createdAt
+      properties:
+        bodyId:
+          type: string
+          description: The body the garment was draped on.
+        productId:
+          type: string
+        pieceId:
+          type: string
+          description: The catalog piece (one size of one style) that was rendered.
+        sizeSlug:
+          type: string
+          description: Storefront size slug of that piece (`27-l30`, `s`).
+        manifestHash:
+          type: string
+          description: blake3 (hex) of the publication manifest the piece pointed at when the try-on ran. Absent for pieces without a native publication.
+        realizationId:
+          type: string
+          description: The publication's size (realization) id the piece selects, decimal.
+        bakeHash:
+          type: string
+          description: blake3 (hex) of the stored drape (the publication's executable drape object) the render used.
+        environment:
+          type: string
+          description: Deployment environment that served the try-on (`int`, `prod`, `dev`).
+        apiBuild:
+          type: string
+          description: API server build (image tag, a commit) that ran the try-on.
+        inferenceBuild:
+          type: string
+          description: Inference build (image tag, a commit) that rendered the image, when the renderer reported it.
+        createdAt:
+          type: string
+          description: RFC 3339.
+        resolvedAt:
+          type: string
+          description: RFC 3339.
+      description: Where a try-on came from, so a reviewer can trace the image back to the exact bake and builds that produced it. Hashes and ids only, never who did anything. Not the C2PA manifest (that is in the image).
+      x-internal: true
+    TryOnScene:
+      type: object
+      required:
+        - overlayColor
+      properties:
+        overlayColor:
+          type: string
+          description: Lowercase `#RRGGBB` hex.
+      description: Presentation settings for the try-on image.
+    TryOnSizeRejectionProblem:
+      type: object
+      required:
+        - kind
+        - tryOnId
+      properties:
+        kind:
+          type: string
+          enum:
+            - try-on-size-rejected
+        tryOnId:
+          type: string
+          description: Identifier of the rejected try-on.
+        variantId:
+          type: string
+          description: The variant that was requested. Absent when that variant has since been retired.
+        recommendedForeignIds:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Alternative size to try, in your shop's own ids: one your shop sells. Colorway is not part of a size. Absent when your shop sells no size in that direction."
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: The requested garment size was rejected for this body. Choose another size using the supplied reason and suggested alternative.
+    TryOnSuccess:
+      type: object
+      required:
+        - tryOnId
+        - status
+        - imageUrl
+        - scene
+      properties:
+        bodyRevisionId:
+          type: string
+          description: The body revision rendered by this request, returned when creating a try-on.
+        tryOnId:
+          type: string
+        status:
+          type: string
+          enum:
+            - completed
+        variantId:
+          type: string
+          description: The variant that was tried on. Absent when that variant has since been retired.
+        imageUrl:
+          type: string
+        scene:
+          $ref: '#/components/schemas/TryOnScene'
+        fitAnchors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FitAnchor'
+          description: Optional positions for fit annotations in the try-on image. Omitted when no annotations are available.
+        provenance:
+          allOf:
+            - $ref: '#/components/schemas/TryOnProvenance'
+          description: Diagnostic metadata for internal tooling.
+          x-internal: true
+    UploadHeader:
+      type: object
+      required:
+        - name
+        - value
+      properties:
+        name:
+          type: string
+          description: Header name.
+        value:
+          type: string
+          description: Header value.
+      description: An HTTP header required for the image upload.
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: Bearer
+    SessionCookieAuth:
+      type: apiKey
+      in: cookie
+      name: __Host-vaai_session_{shopId}
+      description: The server chooses the shop-scoped cookie name from X-Client-Api-Key.
+    OfrepApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Identifies the shop with its public client API key (`sv_client_…`) in X-API-Key. No shopper session is required.
+servers:
+  - url: https://api.studio-vaai.com
+    description: Live
+    variables: {}

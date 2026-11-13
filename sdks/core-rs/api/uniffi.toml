@@ -1,0 +1,9 @@
+# The bindings of the API client's own UniFFI namespace, which the `uniffi` feature exports and
+# `studio-vaai-core` links into its library.
+
+[bindings.swift]
+module_name = "StudioVaaiApi"
+
+[bindings.kotlin]
+package_name = "com.studiovaai.core.api"
+cdylib_name = "studio_vaai_core"
