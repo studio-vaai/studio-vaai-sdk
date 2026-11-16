@@ -448,7 +448,7 @@ export interface components {
          * @description Reasons an image cannot be used to create a body.
          * @enum {string}
          */
-        BodyValidationCode: "no_human_detected" | "human_occluded" | "human_not_standing" | "human_too_small" | "inappropriate_clothing";
+        BodyValidationCode: "no_human_detected" | "human_occluded" | "human_not_standing" | "human_too_small" | "inappropriate_clothing" | "multiple_people";
         /** @description The image was rejected and no body was created. Use `title` or `detail` as a fallback explanation if no localized message is available. */
         BodyValidationFailed: {
             /** @enum {string} */

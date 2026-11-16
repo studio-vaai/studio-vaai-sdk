@@ -39,6 +39,7 @@ const photoReason = {
   [PhotoRejection.HumanNotStanding]: "human-not-standing",
   [PhotoRejection.HumanTooSmall]: "human-too-small",
   [PhotoRejection.InappropriateClothing]: "inappropriate-clothing",
+  [PhotoRejection.MultiplePeople]: "multiple-people",
 } as const;
 const refusalReason = {
   [RefusalReason.GarmentTooSmall]: "garment-too-small",

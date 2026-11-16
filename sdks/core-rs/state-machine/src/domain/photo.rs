@@ -45,6 +45,8 @@ pub enum PhotoRejection {
     HumanTooSmall,
     /// The person's clothing is inappropriate.
     InappropriateClothing,
+    /// More than one person is in the foreground.
+    MultiplePeople,
 }
 
 /// What a client asks of the photos.

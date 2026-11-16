@@ -170,6 +170,7 @@
   "bodyFailure.humanNotStanding": "It looks like you aren't standing upright in this photo. Please use a photo where you're standing straight.",
   "bodyFailure.humanTooSmall": "You're a bit too far away in this photo. Please use a photo where you're closer to the camera.",
   "bodyFailure.inappropriateClothing": "This photo can't be used. Please use a photo where you're wearing everyday clothes or sportswear.",
+  "bodyFailure.multiplePeople": "It looks like there's more than one person in this photo. Please use a photo that shows only you.",
   "surface.backSr": "Back",
   "surface.closeSr": "Close",
   "_localeData.cardinal": ".input {$n :number}\n.match $n\none {{}}\n* {{}}",

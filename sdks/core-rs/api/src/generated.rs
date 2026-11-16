@@ -960,6 +960,8 @@ pub enum BodyValidationCode {
     HumanTooSmall,
     /// `inappropriate_clothing`
     InappropriateClothing,
+    /// `multiple_people`
+    MultiplePeople,
     /// A value this client does not know yet.
     Unknown { value: String },
 }
@@ -973,11 +975,12 @@ impl BodyValidationCode {
             Self::HumanNotStanding => "human_not_standing",
             Self::HumanTooSmall => "human_too_small",
             Self::InappropriateClothing => "inappropriate_clothing",
+            Self::MultiplePeople => "multiple_people",
             Self::Unknown { value } => value,
         }
     }
 
-    pub(crate) const KNOWN: &'static [&'static str] = &["no_human_detected", "human_occluded", "human_not_standing", "human_too_small", "inappropriate_clothing"];
+    pub(crate) const KNOWN: &'static [&'static str] = &["no_human_detected", "human_occluded", "human_not_standing", "human_too_small", "inappropriate_clothing", "multiple_people"];
 
     pub fn from_wire(value: &str) -> Self {
         match value {
@@ -986,6 +989,7 @@ impl BodyValidationCode {
             "human_not_standing" => Self::HumanNotStanding,
             "human_too_small" => Self::HumanTooSmall,
             "inappropriate_clothing" => Self::InappropriateClothing,
+            "multiple_people" => Self::MultiplePeople,
             other => Self::Unknown { value: other.to_owned() },
         }
     }

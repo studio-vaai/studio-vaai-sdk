@@ -462,6 +462,7 @@ export interface StudioVaaiUiMessagesSource {
     humanNotStanding: string;
     humanTooSmall: string;
     inappropriateClothing: string;
+    multiplePeople: string;
   };
   /** Screen-reader labels of the back and close buttons in every sheet's and modal's header. */
   surface: {
@@ -726,6 +727,7 @@ export interface StudioVaaiUiMessages {
     humanNotStanding: ReactNode;
     humanTooSmall: ReactNode;
     inappropriateClothing: ReactNode;
+    multiplePeople: ReactNode;
   };
   surface: {
     backSr: string;
@@ -1250,6 +1252,7 @@ export function compileStudioVaaiUiMessages(
       humanNotStanding: formatRich(locale, source.bodyFailure.humanNotStanding),
       humanTooSmall: formatRich(locale, source.bodyFailure.humanTooSmall),
       inappropriateClothing: formatRich(locale, source.bodyFailure.inappropriateClothing),
+      multiplePeople: formatRich(locale, source.bodyFailure.multiplePeople),
     },
     surface: {
       backSr: formatStatic(locale, source.surface.backSr),
@@ -1285,6 +1288,9 @@ export function bodyFailureMessage(
     }
     case "inappropriate_clothing": {
       return messages.bodyFailure.inappropriateClothing;
+    }
+    case "multiple_people": {
+      return messages.bodyFailure.multiplePeople;
     }
     default: {
       return messages.bodyFailure.noHumanDetected;
@@ -1545,6 +1551,8 @@ yes {{{$colorLabel} in {$sizeLabel} anprobieren}}
       "Auf diesem Foto bist du zu weit weg. Bitte nimm eins, auf dem du näher an der Kamera stehst.",
     inappropriateClothing:
       "Dieses Foto können wir leider nicht verwenden. Bitte nimm eins, auf dem du Alltags- oder Sportkleidung trägst.",
+    multiplePeople:
+      "Auf diesem Foto sind mehrere Personen zu sehen. Bitte nimm eins, auf dem nur du zu sehen bist.",
   },
   surface: {
     backSr: "Zurück",
@@ -1806,6 +1814,8 @@ yes {{Try on {$sizeLabel} in {$colorLabel}}}
       "You're a bit too far away in this photo. Please use a photo where you're closer to the camera.",
     inappropriateClothing:
       "This photo can't be used. Please use a photo where you're wearing everyday clothes or sportswear.",
+    multiplePeople:
+      "It looks like there's more than one person in this photo. Please use a photo that shows only you.",
   },
   surface: {
     backSr: "Back",

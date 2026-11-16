@@ -96,6 +96,7 @@ export const BODY_VALIDATION_CODES: readonly BodyValidationCode[] = [
   asBodyValidationCode("human_not_standing"),
   asBodyValidationCode("human_too_small"),
   asBodyValidationCode("inappropriate_clothing"),
+  asBodyValidationCode("multiple_people"),
 ];
 
 /** All standard error kinds in display order. */

@@ -98,7 +98,7 @@ export type BodyUnusableProblem = ProblemDetails & {
 /**
  * Reasons an image cannot be used to create a body.
  */
-export type BodyValidationCode = 'no_human_detected' | 'human_occluded' | 'human_not_standing' | 'human_too_small' | 'inappropriate_clothing';
+export type BodyValidationCode = 'no_human_detected' | 'human_occluded' | 'human_not_standing' | 'human_too_small' | 'inappropriate_clothing' | 'multiple_people';
 
 /**
  * The image was rejected and no body was created. Use `title` or `detail` as a fallback explanation if no localized message is available.

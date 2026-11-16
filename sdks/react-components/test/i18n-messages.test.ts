@@ -61,6 +61,7 @@ describe("bodyFailureMessage", () => {
     "human_not_standing",
     "human_too_small",
     "inappropriate_clothing",
+    "multiple_people",
   ] as const;
 
   for (const locale of ["de", "en"] as const) {

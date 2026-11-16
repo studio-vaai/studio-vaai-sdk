@@ -89,6 +89,7 @@ fn classify_problem(problem: ApiProblem) -> Option<Outcome> {
                 BodyValidationCode::HumanNotStanding => PhotoRejection::HumanNotStanding,
                 BodyValidationCode::HumanTooSmall => PhotoRejection::HumanTooSmall,
                 BodyValidationCode::InappropriateClothing => PhotoRejection::InappropriateClothing,
+                BodyValidationCode::MultiplePeople => PhotoRejection::MultiplePeople,
                 BodyValidationCode::Unknown { .. } => return Some(failed(BackendError::Unusable)),
             };
             PhotoOutcome::Rejected { reason }.into()

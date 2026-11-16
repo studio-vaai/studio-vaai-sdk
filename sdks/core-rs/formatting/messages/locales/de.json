@@ -170,6 +170,7 @@
   "bodyFailure.humanNotStanding": "Auf diesem Foto stehst du nicht ganz aufrecht. Bitte nimm eins, auf dem du gerade stehst.",
   "bodyFailure.humanTooSmall": "Auf diesem Foto bist du zu weit weg. Bitte nimm eins, auf dem du näher an der Kamera stehst.",
   "bodyFailure.inappropriateClothing": "Dieses Foto können wir leider nicht verwenden. Bitte nimm eins, auf dem du Alltags- oder Sportkleidung trägst.",
+  "bodyFailure.multiplePeople": "Auf diesem Foto sind mehrere Personen zu sehen. Bitte nimm eins, auf dem nur du zu sehen bist.",
   "surface.backSr": "Zurück",
   "surface.closeSr": "Schließen",
   "_localeData.cardinal": ".input {$n :number}\n.match $n\none {{}}\n* {{}}",
