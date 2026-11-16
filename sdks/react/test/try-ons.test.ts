@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { MessageOverrides, TryOn, TryOnExperienceEvent } from "@studio-vaai/core";
+import type { TryOnAnalytics } from "@studio-vaai/core/analytics";
 import type {
   SvTryOnExperience,
   TryOnExperience,
@@ -8,13 +9,13 @@ import type {
 } from "@studio-vaai/web-components/experience";
 
 import { createUiContext } from "@studio-vaai/web-components";
-import { act, createElement } from "react";
+import { act, createElement, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { StudioVaaiTryOnProps } from "../src/index.js";
 
-import { StudioVaaiTryOn, useTryOns } from "../src/index.js";
+import { createTryOnAnalytics, StudioVaaiTryOn, useTryOns } from "../src/index.js";
 
 const createExperience = vi.hoisted(() => vi.fn<typeof createApiTryOnExperience>());
 vi.mock(import("@studio-vaai/web-components/experience"), () => ({
@@ -25,6 +26,22 @@ vi.mock(import("@studio-vaai/web-components/experience"), () => ({
       customElements.define("sv-try-on-experience", class extends HTMLElement {});
     }
   },
+}));
+
+const sentAnalytics = vi.hoisted(() => ({ events: [] as string[], disposed: false }));
+vi.mock(import("@studio-vaai/core/analytics"), () => ({
+  createTryOnAnalytics: () =>
+    ({
+      observe: (subscribe: (listener: (event: TryOnExperienceEvent) => void) => () => void) =>
+        subscribe((event) => {
+          if (!sentAnalytics.disposed) {
+            sentAnalytics.events.push(event.type);
+          }
+        }),
+      dispose() {
+        sentAnalytics.disposed = true;
+      },
+    }) as unknown as TryOnAnalytics,
 }));
 
 vi.mock(import("@studio-vaai/web-components"), async (importOriginal) => {
@@ -185,5 +202,87 @@ describe("useTryOns", () => {
     expect(listeners.size).toBe(0);
     expect(eventListeners.size).toBe(0);
     expect(owner.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("delivers the final events to host analytics disposed in an effect cleanup", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    // Vite defines the package version at build time.
+    vi.stubGlobal("STUDIO_VAAI_REACT_VERSION", "0.0.0-test");
+    const eventListeners = new Set<(event: TryOnExperienceEvent) => void | Promise<void>>();
+    const closed = {
+      type: "sv-try-on-closed",
+      detail: { productId: "shirt", variantId: "M", step: "try-on" },
+    } as unknown as TryOnExperienceEvent;
+    const owner = {
+      view: { domain: { tryOns: [] } },
+      subscribe: () => () => globalThis.undefined,
+      subscribeEvents(listener: (event: TryOnExperienceEvent) => void | Promise<void>) {
+        eventListeners.add(listener);
+        return () => {
+          eventListeners.delete(listener);
+        };
+      },
+      setProductActive: () => globalThis.undefined,
+      setSelection: () => globalThis.undefined,
+      updateCommerce: () => globalThis.undefined,
+      readyInstallation: (_id: string, token: string | undefined) => token,
+      // Disposing a live experience reports its closing events, as the controller does.
+      dispose: vi.fn<() => void>(() => {
+        for (const listener of eventListeners) {
+          void listener(closed);
+        }
+      }),
+    };
+    createExperience.mockResolvedValue(owner as unknown as TryOnExperience);
+    const onEvent = vi.fn<NonNullable<StudioVaaiTryOnProps["onEvent"]>>();
+
+    // The documented analytics pattern: the host owns the publisher and disposes it on unmount.
+    function Storefront() {
+      const [analytics, setAnalytics] = useState<TryOnAnalytics>();
+      useEffect(() => {
+        const publisher = createTryOnAnalytics({
+          clientApiKey: "fixture",
+          enabled: () => true,
+        });
+        setAnalytics(publisher);
+        return () => {
+          publisher.dispose();
+        };
+      }, []);
+      return createElement(StudioVaaiTryOn, {
+        api: { baseUrl: "https://api.example.test", clientApiKey: "fixture" },
+        productId: "shirt",
+        productName: "Shirt",
+        presentProduct: () => ({ axes: [], chosenAxes: [], labelFormats: [], variantId: "M" }),
+        onEvent,
+        ...(analytics && { analytics }),
+      });
+    }
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => {
+        root.render(createElement(Storefront));
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          // Flush the browser controller setup and the analytics subscription.
+        });
+        expect(eventListeners.size).toBe(3);
+      });
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+      vi.unstubAllGlobals();
+    }
+    expect(owner.dispose).toHaveBeenCalledOnce();
+    expect(sentAnalytics.events).toEqual(["sv-try-on-closed"]);
+    expect(sentAnalytics.disposed).toBe(true);
+    expect(onEvent).toHaveBeenCalledExactlyOnceWith(closed, owner);
+    expect(eventListeners.size).toBe(0);
   });
 });
