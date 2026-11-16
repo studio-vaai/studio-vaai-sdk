@@ -47,6 +47,8 @@ pub enum PhotoRejection {
     InappropriateClothing,
     /// More than one person is in the foreground.
     MultiplePeople,
+    /// The photo does not show the person down to the feet.
+    FeetNotVisible,
 }
 
 /// What a client asks of the photos.

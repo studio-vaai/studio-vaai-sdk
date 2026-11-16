@@ -82,6 +82,7 @@ const PHOTO_REJECTION_MESSAGES = {
   [PhotoRejection.HumanTooSmall]: "bodyFailure.humanTooSmall",
   [PhotoRejection.InappropriateClothing]: "bodyFailure.inappropriateClothing",
   [PhotoRejection.MultiplePeople]: "bodyFailure.multiplePeople",
+  [PhotoRejection.FeetNotVisible]: "bodyFailure.feetNotVisible",
 } as const;
 
 export interface SvTryOnExperienceProps {

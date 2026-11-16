@@ -45,6 +45,7 @@ export type BodyValidationCode = (
   | "human_too_small"
   | "inappropriate_clothing"
   | "multiple_people"
+  | "feet_not_visible"
 ) & { readonly [bodyValidationCodeBrand]: true };
 
 type RawBodyValidationCode =
@@ -53,7 +54,8 @@ type RawBodyValidationCode =
   | "human_not_standing"
   | "human_too_small"
   | "inappropriate_clothing"
-  | "multiple_people";
+  | "multiple_people"
+  | "feet_not_visible";
 
 /** Widen a known literal into the branded {@link BodyValidationCode} type. */
 export function asBodyValidationCode(code: RawBodyValidationCode): BodyValidationCode {

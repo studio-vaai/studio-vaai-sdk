@@ -463,6 +463,7 @@ export interface StudioVaaiUiMessagesSource {
     humanTooSmall: string;
     inappropriateClothing: string;
     multiplePeople: string;
+    feetNotVisible: string;
   };
   /** Screen-reader labels of the back and close buttons in every sheet's and modal's header. */
   surface: {
@@ -728,6 +729,7 @@ export interface StudioVaaiUiMessages {
     humanTooSmall: ReactNode;
     inappropriateClothing: ReactNode;
     multiplePeople: ReactNode;
+    feetNotVisible: ReactNode;
   };
   surface: {
     backSr: string;
@@ -1253,6 +1255,7 @@ export function compileStudioVaaiUiMessages(
       humanTooSmall: formatRich(locale, source.bodyFailure.humanTooSmall),
       inappropriateClothing: formatRich(locale, source.bodyFailure.inappropriateClothing),
       multiplePeople: formatRich(locale, source.bodyFailure.multiplePeople),
+      feetNotVisible: formatRich(locale, source.bodyFailure.feetNotVisible),
     },
     surface: {
       backSr: formatStatic(locale, source.surface.backSr),
@@ -1291,6 +1294,9 @@ export function bodyFailureMessage(
     }
     case "multiple_people": {
       return messages.bodyFailure.multiplePeople;
+    }
+    case "feet_not_visible": {
+      return messages.bodyFailure.feetNotVisible;
     }
     default: {
       return messages.bodyFailure.noHumanDetected;
@@ -1553,6 +1559,8 @@ yes {{{$colorLabel} in {$sizeLabel} anprobieren}}
       "Dieses Foto können wir leider nicht verwenden. Bitte nimm eins, auf dem du Alltags- oder Sportkleidung trägst.",
     multiplePeople:
       "Auf diesem Foto sind mehrere Personen zu sehen. Bitte nimm eins, auf dem nur du zu sehen bist.",
+    feetNotVisible:
+      "Auf diesem Foto bist du nicht bis zu den Füßen zu sehen. Bitte nimm eins, auf dem du von Kopf bis Fuß zu sehen bist.",
   },
   surface: {
     backSr: "Zurück",
@@ -1816,6 +1824,8 @@ yes {{Try on {$sizeLabel} in {$colorLabel}}}
       "This photo can't be used. Please use a photo where you're wearing everyday clothes or sportswear.",
     multiplePeople:
       "It looks like there's more than one person in this photo. Please use a photo that shows only you.",
+    feetNotVisible:
+      "This photo doesn't show you all the way down to your feet. Please use a photo that shows you from head to toe.",
   },
   surface: {
     backSr: "Back",

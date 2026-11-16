@@ -69,6 +69,9 @@ function narrowValidationCode(code: string): BodyValidationCode {
     case "multiple_people": {
       return asBodyValidationCode("multiple_people");
     }
+    case "feet_not_visible": {
+      return asBodyValidationCode("feet_not_visible");
+    }
     default: {
       // Server newer than this client returned an unknown code. Default to
       // `no_human_detected` so UI layers always render a sensible fallback —

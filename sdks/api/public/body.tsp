@@ -194,6 +194,7 @@ namespace StudioVaai {
     humanTooSmall: "human_too_small",
     inappropriateClothing: "inappropriate_clothing",
     multiplePeople: "multiple_people",
+    feetNotVisible: "feet_not_visible",
   }
 
   @error

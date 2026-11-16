@@ -33,7 +33,8 @@ type PhotoRejection =
   | "human-not-standing"
   | "human-too-small"
   | "inappropriate-clothing"
-  | "multiple-people";
+  | "multiple-people"
+  | "feet-not-visible";
 type DeviceFailure = "permission-denied" | "unavailable" | "interrupted" | "failed";
 type SizeRefusal = "garment-too-small" | "garment-too-large";
 

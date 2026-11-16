@@ -1898,6 +1898,7 @@ components:
         - human_too_small
         - inappropriate_clothing
         - multiple_people
+        - feet_not_visible
       description: Reasons an image cannot be used to create a body.
     BodyValidationFailed:
       type: object
