@@ -110,7 +110,12 @@ export interface TryOnExperienceAdapters {
     replaceImage: (expected: TryOnAsset, imageUrl: string) => void,
   ): void;
   /** Runs the job using the inputs captured by Rust. */
-  runJob(job: Job, operation: OperationId): Outcome | Promise<Outcome>;
+  runJob(
+    job: Job,
+    operation: OperationId,
+    onDeadline?: (work: "photo" | "try-on") => void,
+    onSlow?: (work: "photo" | "try-on") => void,
+  ): Outcome | Promise<Outcome>;
   applyDomainEffect(effect: Exclude<DomainEffect, InstanceType<typeof DomainEffect.Start>>): void;
   startDeviceEffect(
     effect: Exclude<
@@ -794,7 +799,31 @@ export class TryOnExperience {
       const domain = effect.inner.effect;
       if (DomainEffect.Start.instanceOf(domain)) {
         const { job, operation } = domain.inner;
-        void this.#finish(this.adapters.runJob(job, operation), (outcome) => {
+        const productId =
+          this.#view.productInstallation?.productId ?? this.#productDetails?.productId;
+        const reportTiming = (
+          type: "sv-try-on-operation-deadline" | "sv-try-on-operation-slow",
+          work: "photo" | "try-on",
+        ) => {
+          if (productId === undefined || this.#disposed) {
+            return;
+          }
+          this.#publishEvent({
+            type,
+            detail: { productId, step: work === "photo" ? "photo-upload" : "try-on", work },
+          });
+        };
+        const pending = this.adapters.runJob(
+          job,
+          operation,
+          (work) => {
+            reportTiming("sv-try-on-operation-deadline", work);
+          },
+          (work) => {
+            reportTiming("sv-try-on-operation-slow", work);
+          },
+        );
+        void this.#finish(pending, (outcome) => {
           try {
             this.#commit(() => {
               this.#session.complete({ operation, outcome });

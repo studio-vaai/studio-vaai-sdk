@@ -173,9 +173,9 @@ export function createTryOnAnalytics(options: AnalyticsOptions): TryOnAnalytics 
       const { detail } = event;
       const data = common(detail.productId);
       const eventContext = browserContext();
-      function operationFailed(
+      function operationStatus(
         work: string,
-        outcome: "failed" | "uncertain" | "detached",
+        outcome: "failed" | "uncertain" | "detached" | "in_progress",
         reason?: string,
       ) {
         send(
@@ -310,39 +310,47 @@ export function createTryOnAnalytics(options: AnalyticsOptions): TryOnAnalytics 
           break;
         }
         case "sv-try-on-session-failed": {
-          operationFailed("session", "failed", event.detail.reason);
+          operationStatus("session", "failed", event.detail.reason);
           break;
         }
         case "sv-try-on-height-failed": {
-          operationFailed("height", "failed", event.detail.reason);
+          operationStatus("height", "failed", event.detail.reason);
+          break;
+        }
+        case "sv-try-on-operation-slow": {
+          operationStatus(event.detail.work, "in_progress", "slow");
+          break;
+        }
+        case "sv-try-on-operation-deadline": {
+          operationStatus(event.detail.work, "failed", "deadline");
           break;
         }
         case "sv-try-on-operation-uncertain": {
-          operationFailed(event.detail.work, "uncertain");
+          operationStatus(event.detail.work, "uncertain");
           break;
         }
         case "sv-try-on-camera-failed": {
-          operationFailed("camera", "failed", event.detail.reason);
+          operationStatus("camera", "failed", event.detail.reason);
           break;
         }
         case "sv-try-on-capture-failed": {
-          operationFailed("capture", "failed", event.detail.reason);
+          operationStatus("capture", "failed", event.detail.reason);
           break;
         }
         case "sv-try-on-picker-failed": {
-          operationFailed("picker", "failed", event.detail.reason);
+          operationStatus("picker", "failed", event.detail.reason);
           break;
         }
         case "sv-try-on-photo-failed": {
-          operationFailed("photo", "failed", event.detail.reason);
+          operationStatus("photo", "failed", event.detail.reason);
           break;
         }
         case "sv-try-on-failed": {
-          operationFailed("try-on", "failed", event.detail.reason);
+          operationStatus("try-on", "failed", event.detail.reason);
           break;
         }
         case "sv-try-on-detached": {
-          operationFailed("try-on", "detached", event.detail.stage);
+          operationStatus("try-on", "detached", event.detail.stage);
           break;
         }
         case "sv-try-on-add-to-cart-requested":

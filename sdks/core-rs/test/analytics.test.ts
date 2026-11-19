@@ -1,13 +1,16 @@
+import { initializeCore } from "@studio-vaai/core";
+import { createTryOnAnalytics } from "@studio-vaai/core/analytics";
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import manifest from "../package.json";
-import { createTryOnAnalytics } from "../src/analytics/index.js";
-import { initializeCore } from "../src/runtime.js";
 
 describe("collector analytics", () => {
   beforeAll(async () => {
-    await initializeCore(await readFile(new URL("../dist/studio_vaai_core.wasm", import.meta.url)));
+    await initializeCore(
+      new Uint8Array(await readFile(resolve(import.meta.dirname, "../dist/studio_vaai_core.wasm"))),
+    );
   });
 
   it("sends the generated catalogue body to the collector without shopper credentials", async () => {
@@ -87,6 +90,14 @@ describe("collector analytics", () => {
         detail: { productId: "shirt", step: "height", reason: "unavailable" },
       });
       listener({
+        type: "sv-try-on-operation-deadline",
+        detail: { productId: "shirt", step: "try-on", work: "try-on" },
+      });
+      listener({
+        type: "sv-try-on-operation-slow",
+        detail: { productId: "shirt", step: "try-on", work: "try-on" },
+      });
+      listener({
         type: "sv-try-on-operation-uncertain",
         detail: { productId: "shirt", step: "try-on", work: "try-on" },
       });
@@ -103,13 +114,33 @@ describe("collector analytics", () => {
       };
     });
     await vi.waitFor(() => {
-      expect(requests).toHaveLength(6);
+      expect(requests).toHaveLength(8);
     });
     const failures = await Promise.all(
       requests.slice(2).map(async (request): Promise<unknown> => await request.json()),
     );
     expect(failures).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            name: "experience-operation-failed",
+            data: expect.objectContaining({
+              work: "try-on",
+              outcome: "failed",
+              reason: "deadline",
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            name: "experience-operation-failed",
+            data: expect.objectContaining({
+              work: "try-on",
+              outcome: "in_progress",
+              reason: "slow",
+            }),
+          }),
+        }),
         expect.objectContaining({
           payload: expect.objectContaining({
             name: "experience-operation-failed",

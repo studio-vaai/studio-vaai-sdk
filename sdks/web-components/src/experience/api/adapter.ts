@@ -211,16 +211,40 @@ export function apiAdapters(
     bindSession(runtime, replaceImage) {
       resultState = { runtime, replaceImage };
     },
-    async runJob(job, operation) {
+    async runJob(job, operation, onDeadline, onSlow) {
       const abort = new AbortController();
       operations.set(operation, abort);
+      const deadline = AbortSignal.timeout(experienceJobTimeoutMs(job));
+      const signal = AbortSignal.any([abort.signal, deadline]);
+      let work: "photo" | "try-on" | undefined;
+      if (Job.Photo.instanceOf(job)) {
+        work = "photo";
+      } else if (Job.TryOn.instanceOf(job)) {
+        work = "try-on";
+      }
+      const observedWork = work;
+      const reportDeadline = () => {
+        if (observedWork !== undefined && deadline.aborted && signal.reason === deadline.reason) {
+          onDeadline?.(observedWork);
+        }
+      };
+      const slowTimer =
+        observedWork !== undefined && onSlow !== undefined
+          ? setTimeout(
+              () => {
+                if (!signal.aborted) {
+                  onSlow(observedWork);
+                }
+              },
+              observedWork === "photo" ? 10_000 : 30_000,
+            )
+          : undefined;
+      signal.addEventListener("abort", reportDeadline, { once: true });
       try {
-        const signal = AbortSignal.any([
-          abort.signal,
-          AbortSignal.timeout(experienceJobTimeoutMs(job)),
-        ]);
         return await execute(job, operation, signal);
       } finally {
+        clearTimeout(slowTimer);
+        signal.removeEventListener("abort", reportDeadline);
         operations.delete(operation);
       }
     },

@@ -75,6 +75,8 @@ interface Details {
   "sv-try-on-photo-failed": { readonly source: PhotoSource; readonly reason: BackendFailure };
   "sv-try-on-height-confirmed": unknown;
   "sv-try-on-height-failed": { readonly reason: BackendFailure };
+  "sv-try-on-operation-slow": { readonly work: "photo" | "try-on" };
+  "sv-try-on-operation-deadline": { readonly work: "photo" | "try-on" };
   "sv-try-on-operation-uncertain": { readonly work: "photo" | "height" | "try-on" };
   "sv-try-on-picker-failed": { readonly reason: DeviceFailure };
   "sv-try-on-camera-failed": {
