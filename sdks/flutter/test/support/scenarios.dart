@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:studio_vaai/studio_vaai.dart';
+import 'package:studio_vaai/src/ui/pinch_zoom.dart';
 import 'package:studio_vaai/testing.dart';
 
 import 'harness.dart';
@@ -214,6 +215,21 @@ final Map<String, Scenario> scenarios = {
 };
 
 /// Taps the screen's primary action, whatever its label.
+/// Two fingers spread over the result: lifted, at about 2.2×. Release them
+/// with [TestGesture.up].
+Future<(TestGesture, TestGesture)> pinchResult(WidgetTester tester) async {
+  final center = tester.getCenter(find.byType(PinchZoom));
+  final one = await tester.startGesture(center, pointer: 100);
+  final two = await tester.startGesture(center + const Offset(40, 40), pointer: 101);
+  await one.moveTo(center - const Offset(60, 60));
+  await two.moveTo(center + const Offset(60, 60));
+  await tester.pump();
+  await one.moveTo(center - const Offset(110, 110));
+  await two.moveTo(center + const Offset(110, 110));
+  await tester.pump();
+  return (one, two);
+}
+
 Future<void> tapPrimary(WidgetTester tester) async {
   final finder = find.byKey(const ValueKey('try-on-primary'));
   await tester.ensureVisible(finder);

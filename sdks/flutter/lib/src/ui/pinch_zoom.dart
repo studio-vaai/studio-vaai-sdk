@@ -76,7 +76,9 @@ class _PinchZoomState extends State<PinchZoom> with SingleTickerProviderStateMix
   @override
   void dispose() {
     GestureBinding.instance.pointerRouter.removeGlobalRoute(_route);
-    _clear();
+    // Lifted when the result goes away (the flow moved on mid-pinch): drop
+    // the copy, without rebuilding a state that is being disposed.
+    _clear(rebuild: false);
     _release.dispose();
     _transform.dispose();
     super.dispose();
@@ -198,14 +200,14 @@ class _PinchZoomState extends State<PinchZoom> with SingleTickerProviderStateMix
     _clear();
   }
 
-  void _clear() {
+  void _clear({bool rebuild = true}) {
     _entry?.remove();
     _entry?.dispose();
     final had = _entry != null;
     _entry = null;
     _releaseFrom = null;
     _transform.value = (Offset.zero, 1);
-    if (had && mounted) setState(() {});
+    if (had && rebuild && mounted) setState(() {});
   }
 
   @override

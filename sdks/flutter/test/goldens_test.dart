@@ -85,6 +85,31 @@ void main() {
       });
     }
   }
+  _zoom();
+}
+
+// The pinch on the result: the copy lifted over the page at about 2.2×.
+void _zoom() {
+  testWidgets('result-zoom--en-light', (tester) async {
+    final h = Harness();
+    addTearDown(h.dispose);
+    await start(tester, h, pixelRatio: _shots.isEmpty ? 1 : 2);
+    await scenarios['result']!(tester, h);
+    final (one, two) = await pinchResult(tester);
+    if (_shots.isNotEmpty) {
+      await _write(tester, '$_shots/result-zoom--en-light.png');
+    } else {
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile('goldens/result-zoom--en-light.png'),
+      );
+    }
+    await one.up();
+    await two.up();
+    await tester.pump(const Duration(milliseconds: 500));
+    h.controller.close();
+    await tester.pump(const Duration(seconds: 1));
+  });
 }
 
 Future<void> _write(WidgetTester tester, String path) async {

@@ -406,23 +406,16 @@ void main() {
     ) async {
       await start(tester, h, pixelRatio: 1);
       await scenarios['result']!(tester, h);
-      final image = find.byType(PinchZoom);
-      final center = tester.getCenter(image);
-      // Two fingers spreading lift a copy and scale it.
-      final one = await tester.startGesture(center, pointer: 100);
-      final two = await tester.startGesture(center + const Offset(40, 40), pointer: 101);
+      final image = tester.getRect(find.byType(PinchZoom));
       expect(find.byKey(const ValueKey('try-on-zoom')), findsNothing);
-      await one.moveTo(center - const Offset(60, 60));
-      await two.moveTo(center + const Offset(60, 60));
-      await tester.pump();
-      expect(find.byKey(const ValueKey('try-on-zoom')), findsOneWidget);
-      await one.moveTo(center - const Offset(110, 110));
-      await two.moveTo(center + const Offset(110, 110));
-      await tester.pump();
-      await expectLater(
-        find.byType(MaterialApp),
-        matchesGoldenFile('goldens/result-zoom--en-light.png'),
+      // Two fingers spreading lift a copy over the page and scale it.
+      final (one, two) = await pinchResult(tester);
+      final lifted = find.byKey(const ValueKey('try-on-zoom'));
+      expect(lifted, findsOneWidget);
+      final scaled = tester.getRect(
+        find.descendant(of: lifted, matching: find.byType(Image)).first,
       );
+      expect(scaled.width, greaterThan(image.width * 1.5));
       await one.up();
       await two.up();
       // Springs back in 420 ms.
@@ -431,6 +424,21 @@ void main() {
       await tester.pump();
       expect(find.byKey(const ValueKey('try-on-zoom')), findsNothing);
       await finish(tester);
+    });
+
+    testWidgets('the result going away mid-pinch drops the lifted copy', (tester) async {
+      await start(tester, h, pixelRatio: 1);
+      await scenarios['result']!(tester, h);
+      final (one, two) = await pinchResult(tester);
+      expect(find.byKey(const ValueKey('try-on-zoom')), findsOneWidget);
+      // The app replaces the page while both fingers are down.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const ValueKey('try-on-zoom')), findsNothing);
+      await one.up();
+      await two.up();
+      await tester.pump();
     });
 
     testWidgets('a failed try-on names the variant and retries', (tester) async {
