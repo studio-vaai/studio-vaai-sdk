@@ -1,0 +1,8 @@
+# What pub leaves out of the published package. Pub reads this file in place of
+# .gitignore here, so the generated bindings and hook/prebuilt.json, which git
+# ignores, are published: the release workflow writes both before it packs.
+.dart_tool/
+build/
+pubspec.lock
+# Release tooling: it builds from the SDK repository's sources.
+/tool/

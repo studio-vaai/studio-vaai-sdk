@@ -1,11 +1,20 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # The vendored crates, rustfmt, clippy and tests (the vendored crates' own
-# among them).
-ci: mf2-check
+# among them), and the Flutter package's NOTICES.
+ci: mf2-check flutter-notices-check
     cargo fmt --check
     cargo clippy --locked --workspace --all-targets --features studio-vaai-core/cli -- -D warnings
     cargo nextest run -P default --workspace --locked
+
+# The Flutter package ships the core prebuilt, so its NOTICES carries the
+# licenses of every crate the core links: rewrite it after a dependency change.
+flutter-notices:
+    python3 ../flutter/tool/notices.py
+
+# Fail unless ../flutter/NOTICES matches Cargo.lock.
+flutter-notices-check:
+    python3 ../flutter/tool/notices.py --check
 
 # rust-mf2, vendored in vendor/mf2: its crates.io packages, as pinned by
 # patches/mf2/upstream.toml, changed only by the patches beside it. See
@@ -104,7 +113,8 @@ uniffi-dart:
 # The Flutter SDK's generated Dart, into ../flutter/lib/src/generated: one file
 # per UniFFI namespace (studio_vaai_core, api, state_machine) and the shared
 # runtime, read from the host's build of the library. The Flutter package's
-# build hook compiles the library for each app's target itself.
+# build hook compiles the library for each app's target itself, or, installed
+# from pub.dev, downloads the release's prebuilt one (../flutter/tool).
 dart: uniffi-dart
     #!/usr/bin/env bash
     set -euo pipefail

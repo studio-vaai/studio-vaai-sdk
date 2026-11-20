@@ -1,0 +1,337 @@
+name: Flutter
+
+# Builds the Flutter package (`sdks/flutter`, `studio_vaai` on pub.dev) with its
+# prebuilt core libraries on every change, and releases it for a tag
+# `studio_vaai-v<version>`.
+#
+# Every run, as a dry run:
+#   - `core`: the core for each target Flutter builds (tool/build_core.sh):
+#     Android on Linux with the NDK, Apple on macOS with Xcode; each with an
+#     SBOM bound to the library.
+#   - `bindings`: the Dart bindings (`just dart`).
+#   - `package`: hook/prebuilt.json, the libraries' names, sizes and SHA-256
+#     under this version's release URL; `dart pub publish --dry-run`; the
+#     package archive (`--to-archive`); and the tests of that archive unpacked
+#     outside this checkout, where the build hook has no core sources and so
+#     downloads, verifies and loads the library (from this run's files).
+#
+# On a tag `studio_vaai-v<version>`, which must match pubspec.yaml:
+#   - `release`: the GitHub release of the tag, with the libraries, the
+#     manifest, the SBOMs and the package archive, and build provenance
+#     attestations for the libraries and the archive. The archive's manifest
+#     points at this release, and the release comes first, so a published
+#     version's libraries are always there.
+#   - `publish`: that archive, unchanged, to pub.dev, by pub.dev's automated
+#     publishing (GitHub OIDC; no secret). It runs only when the repository
+#     variable PUB_DEV_AUTOMATED_PUBLISHING is "true": pub.dev enables automated
+#     publishing only for a package that exists, so its first version is
+#     published by hand from the release's archive (sdks/flutter/README.md).
+#
+# A release is never replaced: the job fails if the tag's release exists. To
+# retry a failed publication, re-run the failed jobs of the same run.
+
+on:
+  push:
+    branches: [main]
+    # Tag pushes run whatever the paths.
+    tags: ["studio_vaai-v*"]
+    paths:
+      - "sdks/flutter/**"
+      - "sdks/core-rs/**"
+      - "sdks/build-tools/sbom/**"
+      - ".github/workflows/flutter.yml"
+  pull_request:
+    paths:
+      - "sdks/flutter/**"
+      - "sdks/core-rs/**"
+      - "sdks/build-tools/sbom/**"
+      - ".github/workflows/flutter.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: flutter-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Core for ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { target: aarch64-linux-android, runner: ubuntu-24.04 }
+          - { target: armv7-linux-androideabi, runner: ubuntu-24.04 }
+          - { target: x86_64-linux-android, runner: ubuntu-24.04 }
+          - { target: aarch64-apple-ios, runner: macos-15 }
+          - { target: aarch64-apple-ios-sim, runner: macos-15 }
+          - { target: x86_64-apple-ios, runner: macos-15 }
+          - { target: aarch64-apple-darwin, runner: macos-15 }
+          - { target: x86_64-apple-darwin, runner: macos-15 }
+    steps:
+      - uses: actions/checkout@v6
+
+      # The toolchain and targets pinned in rust-toolchain.toml.
+      - name: Install Rust
+        working-directory: sdks/core-rs
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-cyclonedx@0.5.9
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Build
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          if [[ $TARGET == *-android* ]]; then
+            export ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME
+            echo "NDK: $ANDROID_NDK_HOME"
+          fi
+          library=$(sdks/flutter/tool/build_core.sh "$TARGET" "$RUNNER_TEMP/core" | tail -1)
+          ls -l "$library"
+          python sdks/build-tools/sbom/sbom.py native --target "$TARGET" \
+            --artifact "$TARGET=$library" --output "$RUNNER_TEMP/sbom"
+          cp "$RUNNER_TEMP/sbom/$TARGET/sdk-core.cdx.json" \
+            "$RUNNER_TEMP/core/libstudio_vaai_core-$TARGET.cdx.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core-${{ matrix.target }}
+          path: ${{ runner.temp }}/core/
+          if-no-files-found: error
+
+  bindings:
+    name: Dart bindings
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust
+        working-directory: sdks/core-rs
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - uses: dart-lang/setup-dart@v1
+
+      # The pinned, patched uniffi-dart CLI that `just dart` builds once.
+      - uses: actions/cache@v4
+        with:
+          path: sdks/core-rs/build/uniffi-dart
+          key: uniffi-dart-${{ runner.os }}-${{ hashFiles('sdks/core-rs/Justfile', 'sdks/core-rs/patches/uniffi-dart/**') }}
+
+      - name: Generate
+        working-directory: sdks/core-rs
+        run: just dart
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bindings
+          path: sdks/flutter/lib/src/generated/
+          if-no-files-found: error
+
+  package:
+    name: Package
+    needs: [core, bindings]
+    # Apple silicon: the packed package's tests load the aarch64-apple-darwin library.
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: sdks/flutter
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      # Flutter and its Dart: the example's tests run on the packed package too.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: core-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/core
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bindings
+          path: sdks/flutter/lib/src/generated
+
+      - name: Check the version
+        id: version
+        run: |
+          version=$(sed -n 's/^version: *//p' pubspec.yaml)
+          tag=studio_vaai-v$version
+          if [[ $GITHUB_REF_TYPE == tag && $GITHUB_REF_NAME != "$tag" ]]; then
+            echo "::error::The tag $GITHUB_REF_NAME does not match pubspec.yaml's version $version ($tag)."
+            exit 1
+          fi
+          if ! grep -qx "## $version" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no entry \"## $version\"."
+            exit 1
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+
+      # The manifest names this version's release, whether or not this run
+      # creates it: a dry run packs exactly what a release would.
+      - name: Write hook/prebuilt.json
+        env:
+          BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/
+        run: |
+          dart pub get
+          # Not `dart run`, which would run the build hook (and so cargo) first.
+          dart tool/prebuilt_manifest.dart --artifacts "$RUNNER_TEMP/core" --base-url "$BASE_URL"
+          cat hook/prebuilt.json
+
+      - name: Analyze
+        run: |
+          dart analyze
+          dart format --output=none --set-exit-if-changed hook lib/*.dart lib/src/*.dart test tool
+
+      # Fails on any warning, a modified checked-in file among them.
+      - name: Validate
+        run: dart pub publish --dry-run
+
+      - name: Pack
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          archive=$RUNNER_TEMP/package/studio_vaai-$VERSION.tar.gz
+          mkdir -p "$(dirname "$archive")"
+          dart pub publish --to-archive="$archive"
+          contents=$(tar -tzf "$archive")
+          for file in hook/prebuilt.json lib/src/generated/state_machine.dart NOTICES LICENSE; do
+            grep -qx "$file" <<<"$contents" || { echo "::error::The archive lacks $file."; exit 1; }
+          done
+          cp hook/prebuilt.json "$RUNNER_TEMP/package/"
+
+      # As installed from pub.dev: no core sources beside the package, so the
+      # hook downloads this run's library for the host, checks it against the
+      # manifest, and the tests run on it.
+      - name: Test the packed package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          unpacked=$RUNNER_TEMP/unpacked/studio_vaai
+          mkdir -p "$unpacked"
+          tar -xzf "$RUNNER_TEMP/package/studio_vaai-$VERSION.tar.gz" -C "$unpacked"
+          cd "$unpacked"
+          # Appended under the package's own `hooks.user_defines.studio_vaai`.
+          base_url=file://$RUNNER_TEMP/core/
+          tail -1 pubspec.yaml | grep -q 'cargo_profile:'
+          echo "      prebuilt_base_url: $base_url" >>pubspec.yaml
+          dart pub get
+          dart test
+          find .dart_tool -path '*/prebuilt/*' -name libstudio_vaai_core.dylib | grep -q .
+          # The example app's session in the Flutter test engine, on the same.
+          cd example
+          printf 'hooks:\n  user_defines:\n    studio_vaai:\n      prebuilt_base_url: %s\n' "$base_url" >>pubspec.yaml
+          flutter test
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: ${{ runner.temp }}/package/
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    needs: [package]
+    if: ${{ github.ref_type == 'tag' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: core-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: ${{ runner.temp }}/release
+
+      # The libraries are the bytes the archive's manifest pins.
+      - name: Check the libraries against the manifest
+        working-directory: ${{ runner.temp }}/release
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib
+          manifest = json.loads(pathlib.Path("prebuilt.json").read_text())
+          for target, library in sorted(manifest["libraries"].items()):
+              data = pathlib.Path(library["file"]).read_bytes()
+              assert hashlib.sha256(data).hexdigest() == library["sha256"], target
+              assert len(data) == library["size"], target
+              print(target, library["file"], len(data), "bytes, SHA-256 matches")
+          PY
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/release/libstudio_vaai_core-*
+            ${{ runner.temp }}/release/studio_vaai-*.tar.gz
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "::error::The release $GITHUB_REF_NAME exists. Releases are never replaced: the published manifest pins their files."
+            exit 1
+          fi
+          # The CHANGELOG entry of this version.
+          awk -v heading="## $VERSION" '$0 == heading { found = 1; next } /^## / { found = 0 } found' \
+            sdks/flutter/CHANGELOG.md >"$RUNNER_TEMP/notes.md"
+          prerelease=()
+          if [[ $VERSION == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag "${prerelease[@]}" \
+            --title "studio_vaai $VERSION" --notes-file "$RUNNER_TEMP/notes.md" \
+            "$RUNNER_TEMP"/release/libstudio_vaai_core-* \
+            "$RUNNER_TEMP/release/prebuilt.json" \
+            "$RUNNER_TEMP/release/studio_vaai-$VERSION.tar.gz"
+
+  publish:
+    name: Publish to pub.dev
+    needs: [package, release]
+    if: ${{ github.ref_type == 'tag' && vars.PUB_DEV_AUTOMATED_PUBLISHING == 'true' }}
+    runs-on: ubuntu-24.04
+    # pub.dev's automated publishing requires this environment.
+    environment: pub.dev
+    permissions:
+      contents: read
+      # setup-dart exchanges it for a pub.dev token.
+      id-token: write
+    steps:
+      - uses: dart-lang/setup-dart@v1
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: ${{ runner.temp }}/package
+
+      # The archive the package job validated, packed and tested, byte for
+      # byte. Publishing from an archive reads only the archive.
+      - name: Publish
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+        run: dart pub publish --from-archive="$RUNNER_TEMP/package/studio_vaai-$VERSION.tar.gz" --force

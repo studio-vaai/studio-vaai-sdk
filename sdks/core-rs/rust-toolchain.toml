@@ -9,5 +9,7 @@ targets = [
   "aarch64-apple-ios-sim",
   "x86_64-apple-ios",
   "aarch64-linux-android",
+  "armv7-linux-androideabi",
+  "x86_64-linux-android",
   "wasm32-unknown-unknown",
 ]

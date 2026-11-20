@@ -11,6 +11,7 @@ follow.
 | [`sdks/web-components`](sdks/web-components) | `@studio-vaai/web-components` | Try-on screens and browser experience                                 |
 | [`sdks/react`](sdks/react)                   | `@studio-vaai/react`          | React integration                                                     |
 | [`sdks/vue`](sdks/vue)                       | `@studio-vaai/vue`            | Vue 3 integration                                                     |
+| [`sdks/flutter`](sdks/flutter)               | `studio_vaai` (pub.dev)       | Flutter and Dart: the core through Dart bindings, prebuilt per target |
 
 The legacy packages remain available during the transition. See the [legacy migration guide](sdks/MIGRATION.md).
 
@@ -34,6 +35,10 @@ Rust toolchain and `just`; see [`sdks/core-rs/README.md`](sdks/core-rs/README.md
 
 The `Publish` workflow publishes Core, Web Components, React, and Vue to npm with provenance.
 Each package's version comes from its `package.json`.
+
+The `Flutter` workflow builds the Flutter package and its prebuilt core libraries on every change.
+A tag `studio_vaai-v<version>` releases them: a GitHub release with the libraries, then pub.dev.
+See [`sdks/flutter/README.md`](sdks/flutter/README.md#releases).
 
 ## License
 

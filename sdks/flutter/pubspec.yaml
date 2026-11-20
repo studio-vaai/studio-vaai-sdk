@@ -2,15 +2,30 @@ name: studio_vaai
 description: >-
   studio vaai virtual try-on for Flutter and Dart: the shared Rust SDK core
   (state machine and API client) through UniFFI-generated Dart bindings.
+# Released by the SDK repository's Flutter workflow on a `studio_vaai-v<version>`
+# tag; see README.md, "Releases".
 version: 0.1.0-dev.1
 homepage: https://studio-vaai.com
-publish_to: none
+repository: https://github.com/studio-vaai/studio-vaai-sdk/tree/main/sdks/flutter
+issue_tracker: https://github.com/studio-vaai/studio-vaai-sdk/issues
+topics:
+  - virtual-try-on
+  - fashion
+  - ecommerce
+  - ffi
+
+# The prebuilt core covers these; the build hook downloads it per target.
+platforms:
+  android:
+  ios:
+  macos:
 
 environment:
   sdk: ^3.10.0
 
 dependencies:
   code_assets: ^2.0.0
+  crypto: ^3.0.0
   ffi: ^2.1.0
   hooks: ^2.0.0
 
@@ -18,7 +33,8 @@ dev_dependencies:
   lints: ^6.0.0
   test: ^1.25.0
 
-# `dart test` builds the core in debug: faster to compile, same behavior.
+# `dart test` here builds the core in debug: faster to compile, same behavior.
+# (Only this package's own tests: an app's pubspec sets its own user-defines.)
 hooks:
   user_defines:
     studio_vaai:
