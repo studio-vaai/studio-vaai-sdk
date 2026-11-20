@@ -3,3 +3,8 @@
 # while staging; the Justfile runs ubrn's generate step directly instead.
 [target.wasm32-unknown-unknown]
 rustflags = ["-C", "link-arg=--export-table", "-C", "link-arg=--growable-table"]
+
+# Room in the Mach-O headers for install-name rewrites: the Flutter (Dart
+# native assets) and Xcode bundlers rename the library when they embed it.
+[target.'cfg(target_vendor = "apple")']
+rustflags = ["-C", "link-arg=-Wl,-headerpad_max_install_names"]

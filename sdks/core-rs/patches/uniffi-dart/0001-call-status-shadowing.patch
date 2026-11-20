@@ -1,0 +1,250 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: studio-vaai <info@studio-vaai.com>
+Date: Wed, 18 Nov 2026 11:04:57 +0100
+Subject: [PATCH 1/2] Name the call-status closure parameter so no argument
+ shadows it
+
+A function or method with an argument named `status` generated
+`rustCallWithLifter((status) => f(lower(status), status), ...)`: the
+closure's parameter shadowed the argument, so the call passed the
+RustCallStatus pointer as the argument and failed to compile. The closure's
+parameter is now `_uniffiStatus`, which no lowerCamelCase Rust name becomes.
+(Upstream PR #178 fixes the same as part of a broader change.)
+---
+ src/gen/functions.rs |  8 +++---
+ src/gen/objects.rs   | 64 ++++++++++++++++++++++----------------------
+ 2 files changed, 36 insertions(+), 36 deletions(-)
+
+diff --git a/src/gen/functions.rs b/src/gen/functions.rs
+index 56a0c52..eec5b92 100644
+--- a/src/gen/functions.rs
++++ b/src/gen/functions.rs
+@@ -72,15 +72,15 @@ pub fn generate_function(func: &Function, type_helper: &dyn TypeHelperRenderer)
+         )
+     } else {
+         let call = if ret == quote!(void) {
+-            quote!(rustCall((status) {
++            quote!(rustCall((_uniffiStatus) {
+                 $(func.ffi_func().name())(
+-                    $(for arg in &func.arguments() => $(DartCodeOracle::lower_arg_with_callback_handling(arg)),) status
++                    $(for arg in &func.arguments() => $(DartCodeOracle::lower_arg_with_callback_handling(arg)),) _uniffiStatus
+                 );
+             }, $error_handler))
+         } else {
+             quote!(rustCallWithLifter(
+-                (status) => $(func.ffi_func().name())(
+-                    $(for arg in &func.arguments() => $(DartCodeOracle::lower_arg_with_callback_handling(arg)),) status
++                (_uniffiStatus) => $(func.ffi_func().name())(
++                    $(for arg in &func.arguments() => $(DartCodeOracle::lower_arg_with_callback_handling(arg)),) _uniffiStatus
+                 ),
+                 $lifter,
+                 $error_handler
+diff --git a/src/gen/objects.rs b/src/gen/objects.rs
+index 1ef49d6..5a5721e 100644
+--- a/src/gen/objects.rs
++++ b/src/gen/objects.rs
+@@ -192,9 +192,9 @@ pub fn generate_object(obj: &Object, type_helper: &dyn TypeHelperRenderer) -> da
+             constructor_definitions.push(quote! {
+                 // Public constructor
+                 $dart_constructor_decl($dart_params) : _ptr = $(DartCodeOracle::wrap_ffi_call_expr(has_borrowed, quote!(
+-                    rustCall((status) =>
++                    rustCall((_uniffiStatus) =>
+                         $ffi_func_name(
+-                            $ffi_call_args status
++                            $ffi_call_args _uniffiStatus
+                         ),
+                         $error_handler
+                     )
+@@ -277,7 +277,7 @@ pub fn generate_object(obj: &Object, type_helper: &dyn TypeHelperRenderer) -> da
+         $interface_definition
+ 
+         final _$finalizer_cls_name = Finalizer<Pointer<Void>>((ptr) {
+-          rustCall((status) => $ffi_object_free_name(ptr, status));
++          rustCall((_uniffiStatus) => $ffi_object_free_name(ptr, _uniffiStatus));
+         });
+ 
+         class $cls_name $implements_clause {
+@@ -302,7 +302,7 @@ pub fn generate_object(obj: &Object, type_helper: &dyn TypeHelperRenderer) -> da
+                 if (_uniffiDisposed) {
+                     throw StateError($(quoted(format!("Cannot use a disposed {cls_name}"))));
+                 }
+-                return rustCall((status) => $ffi_object_clone_name(_ptr, status));
++                return rustCall((_uniffiStatus) => $ffi_object_clone_name(_ptr, _uniffiStatus));
+             }
+ 
+             void dispose() {
+@@ -311,15 +311,15 @@ pub fn generate_object(obj: &Object, type_helper: &dyn TypeHelperRenderer) -> da
+                 }
+                 // Reserve call-status storage before committing the closed
+                 // state, so an allocation failure leaves disposal retryable.
+-                final status = calloc<RustCallStatus>();
++                final _uniffiStatus = calloc<RustCallStatus>();
+                 // Mark closed before calling Rust, including reentrant disposal.
+                 _uniffiDisposed = true;
+                 _$finalizer_cls_name.detach(this);
+                 try {
+-                    $ffi_object_free_name(_ptr, status);
+-                    checkCallStatus(NullRustCallStatusErrorHandler(), status);
++                    $ffi_object_free_name(_ptr, _uniffiStatus);
++                    checkCallStatus(NullRustCallStatusErrorHandler(), _uniffiStatus);
+                 } finally {
+-                    calloc.free(status);
++                    calloc.free(_uniffiStatus);
+                 }
+             }
+ 
+@@ -384,7 +384,7 @@ fn generate_callback_trait_rust_impl(
+ 
+             static final Finalizer<Pointer<Void>> $(&finalizer_field) =
+                 Finalizer<Pointer<Void>>((ptr) {
+-                    rustCall((status) => $ffi_object_free_name(ptr, status));
++                    rustCall((_uniffiStatus) => $ffi_object_free_name(ptr, _uniffiStatus));
+                 });
+ 
+             final Pointer<Void> _ptr;
+@@ -394,7 +394,7 @@ fn generate_callback_trait_rust_impl(
+                 if (_uniffiDisposed) {
+                     throw StateError($(quoted(format!("Cannot use a disposed {cls_name}"))));
+                 }
+-                return rustCall((status) => $ffi_object_clone_name(_ptr, status));
++                return rustCall((_uniffiStatus) => $ffi_object_clone_name(_ptr, _uniffiStatus));
+             }
+ 
+             void dispose() {
+@@ -403,15 +403,15 @@ fn generate_callback_trait_rust_impl(
+                 }
+                 // Reserve call-status storage before committing the closed
+                 // state, so an allocation failure leaves disposal retryable.
+-                final status = calloc<RustCallStatus>();
++                final _uniffiStatus = calloc<RustCallStatus>();
+                 // Mark closed before calling Rust, including reentrant disposal.
+                 _uniffiDisposed = true;
+                 $(&finalizer_field).detach(this);
+                 try {
+-                    $ffi_object_free_name(_ptr, status);
+-                    checkCallStatus(NullRustCallStatusErrorHandler(), status);
++                    $ffi_object_free_name(_ptr, _uniffiStatus);
++                    checkCallStatus(NullRustCallStatusErrorHandler(), _uniffiStatus);
+                 } finally {
+-                    calloc.free(status);
++                    calloc.free(_uniffiStatus);
+                 }
+             }
+ 
+@@ -486,11 +486,11 @@ fn generate_callback_trait_rust_method(
+             @override
+             $ret $method_name($(for a in &dart_args => $a,)) {
+                 $(DartCodeOracle::wrap_ffi_call_stmt(has_borrowed, false, quote!(
+-                    rustCall((status) {
++                    rustCall((_uniffiStatus) {
+                         $(method.ffi_func().name())(
+                             uniffiClonePointer(),
+                             $(for arg in &method.arguments() => $(DartCodeOracle::lower_arg_with_callback_handling(arg)),)
+-                            status
++                            _uniffiStatus
+                         );
+                     }, $error_handler)
+                 )))
+@@ -502,10 +502,10 @@ fn generate_callback_trait_rust_method(
+             $ret $method_name($(for a in &dart_args => $a,)) {
+                 $(DartCodeOracle::wrap_ffi_call_stmt(has_borrowed, false, quote!(
+                     rustCallWithLifter(
+-                        (status) => $(method.ffi_func().name())(
++                        (_uniffiStatus) => $(method.ffi_func().name())(
+                             uniffiClonePointer(),
+                             $(for arg in &method.arguments() => $(DartCodeOracle::lower_arg_with_callback_handling(arg)),)
+-                            status
++                            _uniffiStatus
+                         ),
+                         $lifter,
+                         $error_handler
+@@ -583,10 +583,10 @@ pub fn generate_method(func: &Method, type_helper: &dyn TypeHelperRenderer) -> d
+         quote!(
+             $ret $(DartCodeOracle::fn_name(func.name()))($args) {
+                 $(DartCodeOracle::wrap_ffi_call_stmt(has_borrowed, false, quote!(
+-                    rustCall((status) {
++                    rustCall((_uniffiStatus) {
+                         $(func.ffi_func().name())(
+                             uniffiClonePointer(),
+-                            $(for arg in &func.arguments() => $(DartCodeOracle::lower_arg_with_callback_handling(arg)),) status
++                            $(for arg in &func.arguments() => $(DartCodeOracle::lower_arg_with_callback_handling(arg)),) _uniffiStatus
+                         );
+                     }, $error_handler)
+                 )))
+@@ -597,9 +597,9 @@ pub fn generate_method(func: &Method, type_helper: &dyn TypeHelperRenderer) -> d
+             $ret $(DartCodeOracle::fn_name(func.name()))($args) {
+                 $(DartCodeOracle::wrap_ffi_call_stmt(has_borrowed, false, quote!(
+                     rustCallWithLifter(
+-                        (status) => $(func.ffi_func().name())(
++                        (_uniffiStatus) => $(func.ffi_func().name())(
+                             uniffiClonePointer(),
+-                            $(for arg in &func.arguments() => $(DartCodeOracle::lower_arg_with_callback_handling(arg)),) status
++                            $(for arg in &func.arguments() => $(DartCodeOracle::lower_arg_with_callback_handling(arg)),) _uniffiStatus
+                         ),
+                         $lifter,
+                         $error_handler
+@@ -726,10 +726,10 @@ fn trait_method_call(
+         let lifter = quote!($(ret.as_codetype().lift()));
+         quote!(
+             rustCallWithLifter(
+-                (status) => $ffi_name(
++                (_uniffiStatus) => $ffi_name(
+                     uniffiClonePointer(),
+                     $(for arg in lowered_args => $arg,)
+-                    status
++                    _uniffiStatus
+                 ),
+                 $lifter,
+                 $error_handler
+@@ -737,11 +737,11 @@ fn trait_method_call(
+         )
+     } else {
+         quote!(
+-            rustCall((status) {
++            rustCall((_uniffiStatus) {
+                 $ffi_name(
+                     uniffiClonePointer(),
+                     $(for arg in lowered_args => $arg,)
+-                    status
++                    _uniffiStatus
+                 );
+             }, $error_handler)
+         )
+@@ -825,7 +825,7 @@ fn generate_trait_object(obj: &Object, type_helper: &dyn TypeHelperRenderer) ->
+ 
+             static final Finalizer<Pointer<Void>> $(&finalizer_field) =
+                 Finalizer<Pointer<Void>>((ptr) {
+-                    rustCall((status) => $ffi_object_free_name(ptr, status));
++                    rustCall((_uniffiStatus) => $ffi_object_free_name(ptr, _uniffiStatus));
+                 });
+ 
+             final Pointer<Void> _ptr;
+@@ -837,7 +837,7 @@ fn generate_trait_object(obj: &Object, type_helper: &dyn TypeHelperRenderer) ->
+                 if (_uniffiDisposed) {
+                     throw StateError($(quoted(format!("Cannot use a disposed {cls_name}"))));
+                 }
+-                return rustCall((status) => $ffi_object_clone_name(_ptr, status));
++                return rustCall((_uniffiStatus) => $ffi_object_clone_name(_ptr, _uniffiStatus));
+             }
+ 
+             @override
+@@ -847,15 +847,15 @@ fn generate_trait_object(obj: &Object, type_helper: &dyn TypeHelperRenderer) ->
+                 }
+                 // Reserve call-status storage before committing the closed
+                 // state, so an allocation failure leaves disposal retryable.
+-                final status = calloc<RustCallStatus>();
++                final _uniffiStatus = calloc<RustCallStatus>();
+                 // Mark closed before calling Rust, including reentrant disposal.
+                 _uniffiDisposed = true;
+                 $(&finalizer_field).detach(this);
+                 try {
+-                    $ffi_object_free_name(_ptr, status);
+-                    checkCallStatus(NullRustCallStatusErrorHandler(), status);
++                    $ffi_object_free_name(_ptr, _uniffiStatus);
++                    checkCallStatus(NullRustCallStatusErrorHandler(), _uniffiStatus);
+                 } finally {
+-                    calloc.free(status);
++                    calloc.free(_uniffiStatus);
+                 }
+             }
+ 

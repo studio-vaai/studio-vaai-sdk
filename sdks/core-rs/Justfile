@@ -74,3 +74,44 @@ wasm: ubrn
 # Inventory the exact WASM artifact produced above. Requires cargo-cyclonedx 0.5.9.
 wasm-sbom: wasm
     python3 ../build-tools/sbom/sbom.py native --target wasm32-unknown-unknown --artifact wasm32-unknown-unknown=build/wasm2/studio_vaai_core.wasm --output build/sbom
+
+# uniffi-dart generates the Flutter SDK's Dart from the same annotations as the
+# Swift, Kotlin and web bindings. Pinned to the head of Uniffi-Dart/uniffi-dart#149,
+# the unmerged UniFFI 0.32 port (the released generator pins UniFFI 0.31), with
+# the fixes in patches/uniffi-dart applied and its dependencies locked by the
+# Cargo.lock there. See patches/uniffi-dart/README.md.
+uniffi_dart_repo := "https://github.com/Uniffi-Dart/uniffi-dart"
+uniffi_dart_rev := "a9029a4d2f2f90a86813ec005a36b744078604c0"
+uniffi_dart := "build/uniffi-dart/bin/uniffi_bindgen_dart"
+
+# The pinned, patched uniffi-dart CLI, into build/uniffi-dart, once per pin and
+# set of patches.
+uniffi-dart:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    stamp=build/uniffi-dart/stamp
+    want="{{ uniffi_dart_rev }} $(cat patches/uniffi-dart/*.patch patches/uniffi-dart/Cargo.lock | shasum -a 256 | cut -d' ' -f1)"
+    [[ -x {{ uniffi_dart }} && "$(cat $stamp 2>/dev/null)" == "$want" ]] && exit 0
+    rm -rf build/uniffi-dart
+    git init -q build/uniffi-dart/src
+    git -C build/uniffi-dart/src fetch -q --depth 1 {{ uniffi_dart_repo }} {{ uniffi_dart_rev }}
+    git -C build/uniffi-dart/src checkout -q FETCH_HEAD
+    git -C build/uniffi-dart/src -c user.name=patches -c user.email=patches@localhost am -q "$PWD"/patches/uniffi-dart/*.patch
+    cp patches/uniffi-dart/Cargo.lock build/uniffi-dart/src/Cargo.lock
+    cargo install -q --locked --path build/uniffi-dart/src --features binary --root build/uniffi-dart
+    echo "$want" > $stamp
+
+# The Flutter SDK's generated Dart, into ../flutter/lib/src/generated: one file
+# per UniFFI namespace (studio_vaai_core, api, state_machine) and the shared
+# runtime, read from the host's build of the library. The Flutter package's
+# build hook compiles the library for each app's target itself.
+dart: uniffi-dart
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target_dir=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')
+    cargo build -q --lib -p studio-vaai-core
+    library=$target_dir/debug/libstudio_vaai_core.dylib
+    [[ -e $library ]] || library=$target_dir/debug/libstudio_vaai_core.so
+    rm -rf ../flutter/lib/src/generated
+    {{ uniffi_dart }} --library "$library" --out-dir ../flutter/lib/src/generated --no-format
+    dart format -o write ../flutter/lib/src/generated >/dev/null

@@ -1,6 +1,6 @@
 # studio vaai SDK core
 
-The part of the studio vaai SDKs that is written once, in Rust, and compiled into every SDK: the iOS and Android SDKs call it through Swift and Kotlin bindings, and the web SDK through WebAssembly, and all three bindings are generated from the same annotations. Each platform runs the same code, so they behave the same.
+The part of the studio vaai SDKs that is written once, in Rust, and compiled into every SDK: the iOS and Android SDKs call it through Swift and Kotlin bindings, the Flutter SDK through Dart bindings, and the web SDK through WebAssembly, and all of these bindings are generated from the same annotations. Each platform runs the same code, so they behave the same.
 
 ## Layout
 
@@ -60,7 +60,13 @@ let product = try await client.getProductDetails(productId: id)
 - **Swift and Kotlin:** build `sdk-core` as a library for the target platform, then generate the bindings from it with the bundled generator: `cargo run -p studio-vaai-core --features cli --bin uniffi-bindgen -- generate --library <library> --language swift|kotlin --out-dir <dir>`.
 - **Web:** `just wasm` builds `sdk-core` for `wasm32-unknown-unknown` and generates its TypeScript with [uniffi-bindgen-react-native](https://github.com/jhugman/uniffi-bindgen-react-native)'s `wasm2` flavour, into `build/wasm2`. The bindings run the module through the generic `@ubjs/wasm` player, so there is no hand-written glue: the TypeScript comes from the same annotations as the Swift and Kotlin. Call `uniffiInitAsync` with the `.wasm` once before the first call.
 
+- **Dart (Flutter):** `just dart` generates the Dart of every namespace into `../flutter/lib/src/generated` with [uniffi-dart](https://github.com/Uniffi-Dart/uniffi-dart), read from the host's build of the library. The Flutter package's build hook compiles the library for each app's target and bundles it as the bindings' native asset (`[bindings.dart]` in each `uniffi.toml` names it).
+
 `just ci` checks the vendored crates against their patches, then runs rustfmt, clippy and the tests.
+
+### The pinned uniffi-dart
+
+Released uniffi-dart pins UniFFI 0.31. So the Justfile pins the head of [its UniFFI 0.32 port](https://github.com/Uniffi-Dart/uniffi-dart/pull/149), which is not merged yet, and `just uniffi-dart` builds the CLI from that commit with the fixes in [`patches/uniffi-dart`](patches/uniffi-dart/README.md) and the dependencies locked there. Move to a release once one supports 0.32 and includes the fixes.
 
 ### The pinned uniffi-bindgen-react-native
 
@@ -73,6 +79,7 @@ The crates here depend on each other, on published crates, and on one vendored l
 - **[rust-mf2](https://github.com/EvanCarroll/rust-mf2)**, Evan Carroll's implementation of Unicode MessageFormat 2, MIT. Its crates live in [`vendor/mf2`](vendor/mf2/): the crates.io packages with the changes recorded in [`patches/mf2`](patches/mf2/), whose README also says how to rebuild them, record a change, or move to a new version.
 - **Unicode CLDR** data, © Unicode, Inc., under the Unicode License v3: the message catalogs carry CLDR-derived plural rules and number symbols, and ICU4X's `icu_list` carries CLDR's list patterns.
 - uniffi-bindgen-react-native's runtimes and `uniffi-runtime-wasm`, which the web build links, are MPL-2.0.
+- uniffi-dart, which generates the Dart bindings (it is not linked), is MIT.
 
 Everything else here is MIT.
 

@@ -1,0 +1,25 @@
+name: studio_vaai
+description: >-
+  studio vaai virtual try-on for Flutter and Dart: the shared Rust SDK core
+  (state machine and API client) through UniFFI-generated Dart bindings.
+version: 0.1.0-dev.1
+homepage: https://studio-vaai.com
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  code_assets: ^2.0.0
+  ffi: ^2.1.0
+  hooks: ^2.0.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0
+
+# `dart test` builds the core in debug: faster to compile, same behavior.
+hooks:
+  user_defines:
+    studio_vaai:
+      cargo_profile: debug

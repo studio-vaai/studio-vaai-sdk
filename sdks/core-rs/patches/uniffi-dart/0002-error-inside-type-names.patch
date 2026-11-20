@@ -1,0 +1,163 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: studio-vaai <info@studio-vaai.com>
+Date: Wed, 18 Nov 2026 11:05:20 +0100
+Subject: [PATCH 2/2] Name types with Error inside their name by their declared
+ Dart name
+
+Only a trailing `Error` is renamed to `Exception` where a type is declared
+(`DartCodeOracle::class_name`), but an enum variant's field type and
+converter, and the `Optional` and `Sequence` helpers, renamed every `Error`
+again. A record such as `InternalServerErrorProblem` was then referenced as an
+undeclared `InternalServerExceptionProblem`, and a type registered under both
+spellings emitted its `Optional` helper twice. These now use the inner code
+type's names unchanged, and the blanket `exception_safe_name` rename is
+removed.
+
+Upstream: Uniffi-Dart/uniffi-dart#196 (commit c356e4f), its source change
+without the `enum_field_type_names` fixture.
+---
+ src/gen/compounds.rs | 48 ++++++++++++++------------------------------
+ src/gen/enums.rs     |  6 ++++--
+ src/gen/oracle.rs    |  5 -----
+ src/gen/types.rs     |  5 -----
+ 4 files changed, 19 insertions(+), 45 deletions(-)
+
+diff --git a/src/gen/compounds.rs b/src/gen/compounds.rs
+index 7d1fe00..110b779 100644
+--- a/src/gen/compounds.rs
++++ b/src/gen/compounds.rs
+@@ -47,32 +47,22 @@ macro_rules! impl_renderable_for_compound {
+                     let inner_codetype = DartCodeOracle::find(self.inner());
+ 
+                     let original_canonical = inner_codetype.canonical_name();
+-                    let canonical_with_exception =
+-                        DartCodeOracle::exception_safe_name(&original_canonical);
+                     let inner_already_registered =
+-                        type_helper.include_once_check(&original_canonical, &self.inner())
+-                            || (canonical_with_exception != original_canonical
+-                                && type_helper.include_once_check(
+-                                    &canonical_with_exception,
+-                                    &self.inner(),
+-                                ));
+-
+-                    let raw_type_label = inner_codetype.type_label();
+-                    let inner_type_label =
+-                        DartCodeOracle::exception_safe_name(&raw_type_label);
+-
+-                    let cl_name_buf =
+-                        format!($canonical_name_pattern, canonical_with_exception.as_str());
++                        type_helper.include_once_check(&original_canonical, &self.inner());
++
++                    // The inner code type already names the inner type the way its
++                    // declaration does (only a trailing `Error` becomes `Exception`).
++                    let inner_type_label = inner_codetype.type_label();
++
++                    let cl_name_buf = format!($canonical_name_pattern, original_canonical.as_str());
+                     let cl_name = &cl_name_buf;
+                     let type_label_buf =
+                         format!($type_label_pattern, inner_type_label.as_str());
+                     let type_label = &type_label_buf;
+ 
+-                    let raw_converter_name = inner_codetype.ffi_converter_name();
+-                    let inner_cl_converter_name_buf =
+-                        DartCodeOracle::exception_safe_name(&raw_converter_name);
++                    let inner_cl_converter_name_buf = inner_codetype.ffi_converter_name();
+                     let inner_cl_converter_name = &inner_cl_converter_name_buf;
+-                    let inner_data_type_buf = canonical_with_exception
++                    let inner_data_type_buf = original_canonical
+                         .as_str()
+                         .replace("UInt", "Uint")
+                         .replace("Double", "Float");
+@@ -160,28 +150,20 @@ macro_rules! impl_renderable_for_compound {
+                     let inner_codetype = self.inner().as_codetype();
+ 
+                     let original_canonical = inner_codetype.canonical_name();
+-                    let canonical_with_exception =
+-                        DartCodeOracle::exception_safe_name(&original_canonical);
+                     type_helper.include_once_check(&original_canonical, &self.inner());
+-                    if canonical_with_exception != original_canonical {
+-                        type_helper.include_once_check(&canonical_with_exception, &self.inner());
+-                    }
+ 
+-                    let raw_type_label = inner_codetype.type_label();
+-                    let inner_type_label =
+-                        DartCodeOracle::exception_safe_name(&raw_type_label);
++                    // The inner code type already names the inner type the way its
++                    // declaration does (only a trailing `Error` becomes `Exception`).
++                    let inner_type_label = inner_codetype.type_label();
+ 
+-                    let cl_name_buf =
+-                        format!($canonical_name_pattern, canonical_with_exception.as_str());
++                    let cl_name_buf = format!($canonical_name_pattern, original_canonical.as_str());
+                     let cl_name = &cl_name_buf;
+                     let type_label_buf = format!("List<{}>", inner_type_label.as_str());
+                     let type_label = &type_label_buf;
+ 
+-                    let raw_converter_name = inner_codetype.ffi_converter_name();
+-                    let inner_cl_converter_name_buf =
+-                        DartCodeOracle::exception_safe_name(&raw_converter_name);
++                    let inner_cl_converter_name_buf = inner_codetype.ffi_converter_name();
+                     let inner_cl_converter_name = &inner_cl_converter_name_buf;
+-                    let inner_data_type = canonical_with_exception
++                    let inner_data_type = original_canonical
+                         .as_str()
+                         .replace("UInt", "Uint")
+                         .replace("Double", "Float");
+diff --git a/src/gen/enums.rs b/src/gen/enums.rs
+index cc96acd..86c2825 100644
+--- a/src/gen/enums.rs
++++ b/src/gen/enums.rs
+@@ -134,6 +134,9 @@ pub fn generate_enum(obj: &Enum, type_helper: &dyn TypeHelperRenderer) -> dart::
+                 DartCodeOracle::var_name(field.name())
+             }
+         }
++        // The field's code type already names its type the way that type's
++        // declaration does (`DartCodeOracle::class_name` renames a trailing `Error`
++        // only), so it is used unchanged.
+         fn field_type(field: &Field, type_helper: &dyn TypeHelperRenderer) -> String {
+             field
+                 .as_type()
+@@ -141,10 +144,9 @@ pub fn generate_enum(obj: &Enum, type_helper: &dyn TypeHelperRenderer) -> dart::
+                 .render_type(&field.as_type(), type_helper)
+                 .to_string()
+                 .expect("Could not stringify type")
+-                .replace("Error", "Exception")
+         }
+         fn field_ffi_converter_name(field: &Field) -> String {
+-            field.as_type().as_codetype().ffi_converter_name().replace("Error", "Exception")
++            field.as_type().as_codetype().ffi_converter_name()
+         }
+         // A data-carrying variant's Dart class is named `{Variant}{Enum}`, which
+         // can collide with a real top-level type of the same name (e.g. enum
+diff --git a/src/gen/oracle.rs b/src/gen/oracle.rs
+index 8e95c7e..54b63ee 100644
+--- a/src/gen/oracle.rs
++++ b/src/gen/oracle.rs
+@@ -46,11 +46,6 @@ impl DartCodeOracle {
+         }
+     }
+ 
+-    /// Replace any occurrence of `Error` with `Exception` to avoid Dart naming conflicts.
+-    pub fn exception_safe_name(name: &str) -> String {
+-        name.replace("Error", "Exception")
+-    }
+-
+     /// Get the idiomatic Dart rendering of a function name.
+     pub fn fn_name(nm: &str) -> String {
+         Self::sanitize_identifier(&nm.to_lower_camel_case())
+diff --git a/src/gen/types.rs b/src/gen/types.rs
+index b1e567b..73d99a0 100644
+--- a/src/gen/types.rs
++++ b/src/gen/types.rs
+@@ -41,11 +41,6 @@ impl<'a> TypeHelpersRenderer<'a> {
+     fn register_type_helper(&self, ty: &Type) {
+         let canonical_name = ty.as_codetype().canonical_name();
+         self.include_once_check(&canonical_name, ty);
+-
+-        let exception_safe_name = DartCodeOracle::exception_safe_name(&canonical_name);
+-        if exception_safe_name != canonical_name {
+-            self.include_once_check(&exception_safe_name, ty);
+-        }
+     }
+ 
+     fn register_type_helpers(&self, ty: &Type) {

@@ -9,3 +9,9 @@ module_name = "StudioVaaiStateMachine"
 [bindings.kotlin]
 package_name = "com.studiovaai.core.statemachine"
 cdylib_name = "studio_vaai_core"
+
+[bindings.dart]
+# The Flutter package (sdks/flutter) bundles the library as its native asset
+# `uniffi:studio_vaai_core`.
+package_name = "studio_vaai"
+cdylib_name = "studio_vaai_core"
