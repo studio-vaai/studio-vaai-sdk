@@ -9,9 +9,10 @@ name: Flutter
 #     Android on Linux with the NDK, Apple on macOS with Xcode; each with an
 #     SBOM bound to the library.
 #   - `bindings`: the Dart bindings (`just dart`).
-#   - `package`: hook/prebuilt.json, the libraries' names, sizes and SHA-256
-#     under this version's release URL; `flutter pub publish --dry-run`; the
-#     package archive (`--to-archive`); and the tests of that archive unpacked
+#   - `package`: lib/src/native/prebuilt.json, the libraries' names, sizes and
+#     SHA-256 under this version's release URL; `flutter pub publish --dry-run`;
+#     the package archive (`--to-archive`), whose hook/ must hold only the hook
+#     entry points pub.dev accepts; and the tests of that archive unpacked
 #     outside this checkout, where the build hook has no core sources and so
 #     downloads, verifies and loads the library (from this run's files).
 #
@@ -204,20 +205,20 @@ jobs:
 
       # The manifest names this version's release, whether or not this run
       # creates it: a dry run packs exactly what a release would.
-      - name: Write hook/prebuilt.json
+      - name: Write lib/src/native/prebuilt.json
         env:
           BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/
         run: |
           flutter pub get
           # Not `dart run`, which would run the build hook (and so cargo) first.
           dart tool/prebuilt_manifest.dart --artifacts "$RUNNER_TEMP/core" --base-url "$BASE_URL"
-          cat hook/prebuilt.json
+          cat lib/src/native/prebuilt.json
 
       - name: Analyze
         run: |
           flutter analyze
           dart format --output=none --set-exit-if-changed hook lib/*.dart lib/src/*.dart \
-            lib/src/experience lib/src/ui test tool
+            lib/src/analytics lib/src/experience lib/src/native lib/src/ui test tool
 
       # Fails on any warning, a modified checked-in file among them.
       - name: Validate
@@ -231,17 +232,27 @@ jobs:
           mkdir -p "$(dirname "$archive")"
           flutter pub publish --to-archive="$archive"
           contents=$(tar -tzf "$archive")
-          for file in hook/prebuilt.json lib/src/generated/state_machine.dart NOTICES LICENSE \
+          for file in hook/build.dart lib/src/native/prebuilt.json lib/src/native/prebuilt.dart \
+            lib/src/generated/state_machine.dart NOTICES LICENSE \
             assets/guide-people-light.webp assets/guide-people-dark.webp \
             assets/fonts/Inter-Regular.ttf assets/fonts/OFL.txt; do
             grep -qx "$file" <<<"$contents" || { echo "::error::The archive lacks $file."; exit 1; }
           done
+          # pub.dev refuses any other Dart file under hook/ ("Hook files are
+          # experimental and `hook/...` is not allowed yet": checkHooks in
+          # pub-dev's pkg/pub_package_reader). Stricter here: nothing else at all.
+          extra=$(grep '^hook/' <<<"$contents" | grep -vx -e 'hook/' -e 'hook/build.dart' -e 'hook/link.dart' || true)
+          if [[ -n $extra ]]; then
+            echo "::error::pub.dev accepts only hook/build.dart and hook/link.dart under hook/; the archive also has: $(tr '\n' ' ' <<<"$extra")"
+            exit 1
+          fi
           # The goldens and test fixtures stay in this repository.
           if grep -q -e '^test/goldens' -e '^test/fixtures' <<<"$contents"; then
             echo "::error::The archive ships the widget goldens or test fixtures."
             exit 1
           fi
-          cp hook/prebuilt.json "$RUNNER_TEMP/package/"
+          # The release's manifest is the archive's own.
+          tar -xzOf "$archive" lib/src/native/prebuilt.json >"$RUNNER_TEMP/package/prebuilt.json"
 
       # As installed from pub.dev: no core sources beside the package, so the
       # hook downloads this run's library for the host, checks it against the
@@ -361,9 +372,19 @@ jobs:
           name: package
           path: ${{ runner.temp }}/package
 
+      # `flutter pub` runs only in a folder with a pubspec.yaml, even with
+      # --from-archive: the archive's own, unpacked.
+      - name: Unpack
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/studio_vaai"
+          tar -xzf "$RUNNER_TEMP/package/studio_vaai-$VERSION.tar.gz" -C "$RUNNER_TEMP/studio_vaai"
+
       # The archive the package job validated, packed and tested, byte for
       # byte. Publishing from an archive reads only the archive.
       - name: Publish
+        working-directory: ${{ runner.temp }}/studio_vaai
         env:
           VERSION: ${{ needs.package.outputs.version }}
         run: flutter pub publish --from-archive="$RUNNER_TEMP/package/studio_vaai-$VERSION.tar.gz" --force

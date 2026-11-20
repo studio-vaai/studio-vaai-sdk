@@ -4,7 +4,7 @@ description: >-
   (state machine and API client) through UniFFI-generated Dart bindings.
 # Released by the SDK repository's Flutter workflow on a `studio_vaai-v<version>`
 # tag; see README.md, "Releases".
-version: 0.1.0
+version: 0.1.1
 homepage: https://studio-vaai.com
 repository: https://github.com/studio-vaai/studio-vaai-sdk/tree/main/sdks/flutter
 issue_tracker: https://github.com/studio-vaai/studio-vaai-sdk/issues

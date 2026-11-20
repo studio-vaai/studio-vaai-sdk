@@ -1,17 +1,26 @@
-// The prebuilt studio vaai core: the release's manifest (`hook/prebuilt.json`)
-// and the download the build hook makes when the core's sources are not
-// beside the package, as in an install from pub.dev.
+// The prebuilt studio vaai core: the release's manifest
+// (`lib/src/native/prebuilt.json`) and the download the build hook makes when
+// the core's sources are not beside the package, as in an install from pub.dev.
 //
 // Each release publishes one shared library per Rust target. The manifest
 // committed into the published package pins their file names, sizes and
 // SHA-256, so a build only ever bundles the exact bytes that release built.
 // Downloads are cached per checksum, so a target downloads once and later
 // builds, also offline, reuse it.
+//
+// Only the build hook (`hook/build.dart`), the release tooling and the tests
+// import this library: no public library of the package does, so apps never
+// compile it. It lives here, not beside the hook, because pub.dev accepts no
+// Dart file under `hook/` but the hook entry points themselves.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+
+/// Where the manifest is in the package, relative to its root: the release
+/// workflow writes it there before it packs the package.
+const prebuiltManifestPath = 'lib/src/native/prebuilt.json';
 
 /// The prebuilt libraries of one release, by Rust target.
 final class PrebuiltManifest {
@@ -135,8 +144,10 @@ Future<File> fetchPrebuilt({
   }
 
   final url = directoryUri(baseUrl ?? manifest.baseUrl).resolve(library.file);
+  final created = !directory.existsSync();
   directory.createSync(recursive: true);
   final partial = File('${file.path}.$pid.part');
+  var done = false;
   try {
     await _download(url, partial, retryDelay: retryDelay, cache: cache);
     final size = partial.lengthSync();
@@ -152,9 +163,19 @@ Future<File> fetchPrebuilt({
       );
     }
     partial.renameSync(file.path);
+    done = true;
     return file;
   } finally {
     if (partial.existsSync()) partial.deleteSync();
+    // A failed download leaves no empty checksum folder behind. Not recursive:
+    // a folder another build has meanwhile put its download in stays.
+    if (!done && created) {
+      try {
+        directory.deleteSync();
+      } on FileSystemException {
+        // Not empty, or gone.
+      }
+    }
   }
 }
 

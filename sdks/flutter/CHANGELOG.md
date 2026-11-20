@@ -1,3 +1,16 @@
+## 0.1.1
+
+The first version on pub.dev: pub.dev refused 0.1.0, so 0.1.0 was never published there (its
+GitHub release exists). The same package as 0.1.0, laid out the way pub.dev accepts.
+
+- Fix: `hook/` holds only the build hook's entry point (`hook/build.dart`), the one Dart file
+  pub.dev allows there besides `hook/link.dart`. The prebuilt core's download moved to
+  `lib/src/native/`, its manifest to `lib/src/native/prebuilt.json`; no public library imports
+  them, so apps never compile them. The core still comes from `core_library`, the sources in
+  `../core-rs` or the release's prebuilt library, with the same user-defines, checks and cache.
+- A failed download no longer leaves an empty folder in the cache, and its error no longer ends
+  in the build hook's stack trace.
+
 ## 0.1.0
 
 First release, in lockstep with the web SDK's 0.1.0 packages. 0.x: the API can change between

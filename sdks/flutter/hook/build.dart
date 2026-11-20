@@ -7,7 +7,11 @@
 //    package (`../core-rs`, in a checkout of the SDK repository);
 // 3. otherwise, as when installed from pub.dev, the release's prebuilt library
 //    for the target: downloaded once, checked against the SHA-256 that
-//    `hook/prebuilt.json` pins, and cached (see `hook/src/prebuilt.dart`).
+//    `lib/src/native/prebuilt.json` pins, and cached (see
+//    `lib/src/native/prebuilt.dart`).
+//
+// pub.dev accepts only the hook entry points under `hook/` (this file, and a
+// `link.dart`), so everything else the hook uses lives in `lib/src/native/`.
 //
 // User-defines, in the app's pubspec.yaml:
 //
@@ -21,14 +25,13 @@
 //
 // `prebuilt_base_url` replaces the release's download URL, for a mirror or a
 // test: an http(s) or file URL, or a folder relative to that pubspec. The
-// checksums still come from `hook/prebuilt.json`. (Hooks see only a few
+// checksums still come from `lib/src/native/prebuilt.json`. (Hooks see only a few
 // environment variables, so this is a user-define, not one.)
 import 'dart:io';
 
 import 'package:code_assets/code_assets.dart';
 import 'package:hooks/hooks.dart';
-
-import 'src/prebuilt.dart';
+import 'package:studio_vaai/src/native/prebuilt.dart';
 
 const _assetName = 'uniffi:studio_vaai_core';
 const _crate = 'studio-vaai-core';
@@ -72,14 +75,14 @@ Uri? _coreSources(BuildInput input) {
 }
 
 Future<Uri> _download(BuildInput input, CodeConfig code, BuildOutputBuilder output) async {
-  final manifestFile = File.fromUri(input.packageRoot.resolve('hook/prebuilt.json'));
+  final manifestFile = File.fromUri(input.packageRoot.resolve(prebuiltManifestPath));
   if (!manifestFile.existsSync()) {
     throw BuildError(
       message:
           'This copy of studio_vaai has neither the core\'s sources (../core-rs) nor a prebuilt '
-          'manifest (hook/prebuilt.json), which only released packages carry. Install studio_vaai '
-          'from pub.dev, build it in a checkout of the SDK repository, or set the studio_vaai '
-          'user-define `core_library` to a core you built.',
+          'manifest ($prebuiltManifestPath), which only released packages carry. Install '
+          'studio_vaai from pub.dev, build it in a checkout of the SDK repository, or set the '
+          'studio_vaai user-define `core_library` to a core you built.',
     );
   }
   output.dependencies.add(manifestFile.uri);
@@ -102,8 +105,13 @@ Future<Uri> _download(BuildInput input, CodeConfig code, BuildOutputBuilder outp
     );
     return file.uri;
   } on PrebuiltException catch (e) {
-    // A network failure is the infrastructure's, not the build's.
-    throw e.network ? InfraError(message: e.message) : BuildError(message: e.message);
+    // A network failure is the infrastructure's, not the build's. The message
+    // says what happened and what to do; the hook's stack trace, which the
+    // hooks runner prints after it, would only bury that.
+    Error.throwWithStackTrace(
+      e.network ? InfraError(message: e.message) : BuildError(message: e.message),
+      StackTrace.empty,
+    );
   }
 }
 

@@ -6,7 +6,7 @@ the same Rust code the iOS, Android and web SDKs run, called through Dart bindin
 [uniffi-dart](https://github.com/Uniffi-Dart/uniffi-dart) generates from the same UniFFI
 annotations as the Swift, Kotlin and TypeScript bindings.
 
-Status: `0.1.0`, in lockstep with the web SDK's packages. Ready-made widgets present the default
+Status: `0.1.1`, in lockstep with the web SDK's 0.1 packages. Ready-made widgets present the default
 try-on experience, and a headless journey drives it from your own UI. 0.x: the API can change
 between minor versions, like the web SDK.
 
@@ -219,8 +219,8 @@ target Flutter builds:
 | macOS    | arm64, x86_64 (macOS 10.15+; Flutter joins them into one universal framework) |
 
 The hook downloads the library for the app's target from the package's GitHub release, the first
-time an app builds for that target, and checks it against the SHA-256 that `hook/prebuilt.json`
-in the published package pins: it never bundles other bytes. It keeps the download in the app's
+time an app builds for that target, and checks it against the SHA-256 that
+`lib/src/native/prebuilt.json` in the published package pins: it never bundles other bytes. It keeps the download in the app's
 `.dart_tool/`, so later builds, also offline, reuse it. It reads proxies from `HTTPS_PROXY`,
 `HTTP_PROXY` and `NO_PROXY`.
 
@@ -233,7 +233,7 @@ hooks:
       # A mirror of the release's files (an http(s) or file URL, or a folder
       # relative to this pubspec), e.g. where builds have no internet access.
       # The checksums still apply.
-      prebuilt_base_url: https://artifacts.example.com/studio_vaai/0.1.0/
+      prebuilt_base_url: https://artifacts.example.com/studio_vaai/0.1.1/
       # Or a core you built yourself, for this build's target.
       core_library: path/to/libstudio_vaai_core.dylib
 ```
@@ -276,9 +276,13 @@ every change and, for a tag `studio_vaai-v<version>`, releases it:
 
 1. `tool/build_core.sh` builds the core for each target: Android on Linux with the NDK, Apple on
    macOS with Xcode.
-2. `just dart` generates the bindings; `tool/prebuilt_manifest.dart` writes `hook/prebuilt.json`
-   (file names, sizes and SHA-256 of exactly these libraries, and the tag's download URL).
-3. `flutter pub publish --dry-run` validates the package, and `--to-archive` packs it. The packed
+2. `just dart` generates the bindings; `tool/prebuilt_manifest.dart` writes
+   `lib/src/native/prebuilt.json` (file names, sizes and SHA-256 of exactly these libraries, and
+   the tag's download URL). pub.dev accepts no file under `hook/` but its entry points
+   (`build.dart`, `link.dart`), so the hook's own code and the manifest live in
+   `lib/src/native/`, which no public library imports.
+3. `flutter pub publish --dry-run` validates the package, and `--to-archive` packs it (the
+   workflow checks that `hook/` in the archive holds only those entry points). The packed
    package runs its tests on macOS with no core sources, so its hook downloads the library, from
    the workflow's files.
 4. On the tag only: a GitHub release with the libraries, the manifest, their SBOMs and the
@@ -287,8 +291,10 @@ every change and, for a tag `studio_vaai-v<version>`, releases it:
 Bump `version` in `pubspec.yaml` and add its `CHANGELOG.md` entry first.
 
 pub.dev publishes from GitHub Actions only for a package that exists, so the first version goes
-up by hand, from the tag's release: `flutter pub publish --from-archive studio_vaai-<version>.tar.gz`
-(the archive the workflow tested; `--from-archive` publishes it unchanged). Then, in the
+up by hand, from the tag's release: unpack its `studio_vaai-<version>.tar.gz` into an empty
+folder and, in that folder (pub needs a `pubspec.yaml` where it runs),
+`flutter pub publish --from-archive=path/to/studio_vaai-<version>.tar.gz` (the archive the
+workflow tested; `--from-archive` publishes it unchanged). Then, in the
 package's admin page on pub.dev, move it to the `studio-vaai.com` verified publisher and enable
 automated publishing from this repository with the tag pattern `studio_vaai-v{{version}}` and the
 environment `pub.dev`; set the repository variable `PUB_DEV_AUTOMATED_PUBLISHING` to `true`, and

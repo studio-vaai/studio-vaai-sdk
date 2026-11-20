@@ -1,12 +1,11 @@
-// The build hook's download of the prebuilt core (hook/src/prebuilt.dart),
-// against a local HTTP server.
+// The build hook's download of the prebuilt core (lib/src/native/prebuilt.dart),
+// against a local HTTP server, and the package layout pub.dev accepts for it.
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import '../hook/src/prebuilt.dart';
+import 'package:studio_vaai/src/native/prebuilt.dart';
 
 void main() {
   late Directory temp;
@@ -108,7 +107,7 @@ void main() {
             ),
       ),
     );
-    expect(cache.listSync(recursive: true).whereType<File>(), isEmpty);
+    expect(cache.listSync(recursive: true), isEmpty, reason: 'no empty checksum folder is left');
   });
 
   test('says which targets a release has', () async {
@@ -143,6 +142,7 @@ void main() {
             ),
       ),
     );
+    expect(cache.listSync(recursive: true), isEmpty, reason: 'no empty checksum folder is left');
   });
 
   test('does not retry a missing file', () async {
@@ -209,6 +209,40 @@ void main() {
         }),
         throwsA(isA<PrebuiltException>()),
       );
+    });
+  });
+
+  // pub.dev refuses a package with any other Dart file under hook/ ("Hook files
+  // are experimental and ... is not allowed yet"), so whatever the hook uses
+  // lives in lib/src/native/, which only the hook imports: apps never compile
+  // the download code.
+  group('layout', () {
+    String slashes(String path) => path.replaceAll(Platform.pathSeparator, '/');
+
+    test('hook/ holds only the hook entry points', () {
+      final files = [
+        for (final file in Directory('hook').listSync(recursive: true).whereType<File>())
+          slashes(file.path),
+      ];
+      expect(files, contains('hook/build.dart'));
+      expect(files.where((f) => f != 'hook/build.dart' && f != 'hook/link.dart'), isEmpty);
+    });
+
+    test('no library of the package imports the hook\'s code', () {
+      final import = RegExp(r'''['"/]native/prebuilt\.dart['"]''');
+      final importers = [
+        for (final file in Directory('lib').listSync(recursive: true).whereType<File>())
+          if (file.path.endsWith('.dart') &&
+              !slashes(file.path).startsWith('lib/src/native/') &&
+              import.hasMatch(file.readAsStringSync()))
+            file.path,
+      ];
+      expect(importers, isEmpty);
+    });
+
+    test('the hook reads the manifest from lib/', () {
+      expect(prebuiltManifestPath, startsWith('lib/src/native/'));
+      expect(File('hook/build.dart').readAsStringSync(), contains('prebuiltManifestPath'));
     });
   });
 }

@@ -3,7 +3,7 @@
 /lib/src/generated/
 # The prebuilt libraries' checksums, written by tool/prebuilt_manifest.dart
 # when the release workflow packs the package.
-/hook/prebuilt.json
+/lib/src/native/prebuilt.json
 .dart_tool/
 build/
 pubspec.lock

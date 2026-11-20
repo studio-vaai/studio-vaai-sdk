@@ -1,10 +1,10 @@
-// Writes hook/prebuilt.json, the manifest the build hook downloads the core
+// Writes lib/src/native/prebuilt.json, the manifest the build hook downloads the core
 // by: each release library's file name, size and SHA-256, and the release's
 // download URL. The release workflow runs it on the libraries it built, before
 // it packs the package, so the published package pins exactly those bytes.
 //
 //     dart tool/prebuilt_manifest.dart --artifacts DIR --base-url URL \
-//         [--version VERSION] [--output hook/prebuilt.json] [--partial]
+//         [--version VERSION] [--output lib/src/native/prebuilt.json] [--partial]
 //
 // DIR holds libstudio_vaai_core-TARGET.{so,dylib}, as tool/build_core.sh
 // names them. Every target Flutter builds for must be there, unless --partial.
@@ -13,8 +13,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-
-import '../hook/src/prebuilt.dart';
+import 'package:studio_vaai/src/native/prebuilt.dart';
 
 /// What Flutter builds for on Android, iOS and macOS.
 const targets = [
@@ -46,7 +45,7 @@ Future<void> main(List<String> arguments) async {
   final artifacts = Directory(options['artifacts'] ?? _fail('--artifacts DIR is required.'));
   final baseUrl = Uri.parse(options['base-url'] ?? _fail('--base-url URL is required.'));
   final version = options['version'] ?? _pubspecVersion();
-  final output = File(options['output'] ?? 'hook/prebuilt.json');
+  final output = File(options['output'] ?? prebuiltManifestPath);
 
   final libraries = <String, PrebuiltLibrary>{};
   for (final file in artifacts.listSync().whereType<File>()) {

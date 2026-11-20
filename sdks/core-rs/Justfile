@@ -1,8 +1,8 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # The vendored crates, rustfmt, clippy and tests (the vendored crates' own
-# among them), and the Flutter package's NOTICES.
-ci: mf2-check flutter-notices-check
+# among them), and the Flutter package's NOTICES and hook layout.
+ci: mf2-check flutter-notices-check flutter-hooks-check
     cargo fmt --check
     cargo clippy --locked --workspace --all-targets --features studio-vaai-core/cli -- -D warnings
     cargo nextest run -P default --workspace --locked
@@ -15,6 +15,19 @@ flutter-notices:
 # Fail unless ../flutter/NOTICES matches Cargo.lock.
 flutter-notices-check:
     python3 ../flutter/tool/notices.py --check
+
+# Fail unless ../flutter/hook holds only the hook entry points: pub.dev refuses
+# a package with any other file there ("Hook files are experimental"), so the
+# hook's own code lives in ../flutter/lib/src/native.
+flutter-hooks-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    extra=$(find ../flutter/hook -type f ! -path ../flutter/hook/build.dart ! -path ../flutter/hook/link.dart)
+    if [[ -n $extra ]]; then
+        echo "pub.dev accepts only hook/build.dart and hook/link.dart under hook/, not:" >&2
+        echo "$extra" >&2
+        exit 1
+    fi
 
 # rust-mf2, vendored in vendor/mf2: its crates.io packages, as pinned by
 # patches/mf2/upstream.toml, changed only by the patches beside it. See
