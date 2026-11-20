@@ -11,7 +11,7 @@ import { ActionsSection } from "../ui/actions-section.js";
 import { Button, flowPrimaryCtaClassName, flowSecondaryCtaClassName } from "../ui/button.js";
 import { cn } from "../ui/cn.js";
 import { IconAlertCircle, IconCamera, IconInfo, IconSwitchCamera } from "../ui/icons.js";
-import { ResponsiveSplit } from "../ui/responsive-split.js";
+import { flowMediaColumnClassName, ResponsiveSplit } from "../ui/responsive-split.js";
 import { SheetShell } from "../ui/sheet.js";
 import { Spinner } from "../ui/spinner.js";
 import {
@@ -80,28 +80,22 @@ interface PhotoCaptureScreenProps {
    * Aspect ratio of the live preview's composition frame, as `width / height`.
    * Drives the bbox the user composes within during `idle` / `live` / errors
    * (the frame is fixed-shape across those states so layout doesn't reflow).
-   * For `uploading` the captured still is rendered at the natural aspect of
-   * `capturedFrameLock` (which the host computes at shutter time from this
-   * value) — there's no fixed aspect on captured imagery.
    *
-   * Default depends on the {@link useStudioVaaiUi} `responsive.layout`:
-   * - `bottomSheet`: `3 / 4` — portrait baseline (H:W ≥ 4:3); the sheet is tall,
-   *   so the photo viewport is portrait-shaped.
-   * - `modal`: `4 / 3` — landscape baseline (W:H ≥ 4:3); the modal is wide.
+   * Defaults to `3 / 4` — portrait, the shape of a standing person — on both the
+   * bottom sheet and the modal.
    */
   previewAspectRatio?: number;
   /**
    * Fired whenever the live preview frame's aspect changes (mount,
-   * responsive-layout flip, override). Hosts cache this value and stamp it
-   * onto the captured Blob's {@link FrameLock} at shutter time so downstream
-   * displays can re-create the same crop.
+   * responsive-layout flip, override). Hosts cache this value and cut the
+   * captured frame to it at shutter time, so the photo is exactly what the
+   * preview showed.
    */
   onFrameLockChange?: (previewAspectRatio: number) => void;
   /**
-   * Sub-rect of `previewSrc` to display during `uploading`. The host computes
-   * it at shutter time from the cached preview aspect and the encoded Blob's
-   * natural dimensions (see {@link frameLockFromCenterCrop}). When omitted the
-   * captured still displays at its full natural aspect.
+   * Sub-rect of `previewSrc` to display during `uploading`, for a host that keeps
+   * the whole camera frame instead of cutting it. When omitted the captured still
+   * displays whole, at its natural aspect.
    */
   capturedFrameLock?: FrameLock;
   /**
@@ -151,8 +145,12 @@ function PhotoCaptureUploadingPreview({
   capturedFrameLock?: FrameLock | undefined;
   busyLabel: string;
 }) {
+  // Modal: sized like the photo on the height step that follows, so the still stays where the
+  // live frame was and where the next step draws it.
+  const isModal = useStudioVaaiUi().responsive.layout === "modal";
   const previewFrame = useNaturalAspectPreviewFrame(previewSrc, capturedFrameLock, {
-    scrollAware: false,
+    scrollAware: isModal,
+    minShrinkScale: 0,
   });
 
   return (
@@ -207,15 +205,18 @@ export function PhotoCaptureScreen({
   const internalVideoRef = useRef<HTMLVideoElement | null>(null);
   const videoRef = externalVideoRef ?? internalVideoRef;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Modal: the frame also fits the body's height, like the photo on the steps that follow. At
+  // the column's full width a portrait frame is taller than a short dialog's body, and this
+  // shell does not scroll.
   const {
     aspectRatio: liveFrameAspect,
+    frameRef: previewFrameRef,
     frameFitClass: previewFrameFitClass,
     frameStyle: previewFrameStyle,
-  } = usePreviewBaselineAspect(previewAspectRatio);
+  } = usePreviewBaselineAspect(previewAspectRatio, { scrollAware: isModal, minShrinkScale: 0 });
 
-  // Surface the live frame's aspect to the host so it can stamp the captured
-  // `FrameLock` at shutter time. The captured Blob is the full sensor frame;
-  // this aspect tells the host what center-crop the user composed within.
+  // Surface the live frame's aspect to the host: at shutter time it cuts the camera frame to
+  // this shape, so the photo is the part of the frame the preview showed.
   useEffect(() => {
     onFrameLockChange?.(liveFrameAspect);
   }, [liveFrameAspect, onFrameLockChange]);
@@ -379,12 +380,9 @@ export function PhotoCaptureScreen({
     errorBody = m.unavailableBody;
   }
 
-  // Live / idle / error keep the surface's baseline aspect — the user is
-  // actively composing within that bbox. The uploading state renders the
-  // captured still at the natural aspect of its FrameLock-cropped rect (by
-  // construction that equals the live frame, but the source of truth has
-  // shifted from a hardcoded baseline to the sidecar the host stamped at
-  // shutter time, so non-camera Blobs would shrink-wrap to their own aspect).
+  // Live / idle / error keep the surface's baseline aspect — the user is actively composing
+  // within that bbox. The uploading state renders the captured still at its own natural aspect,
+  // which is that same shape because the host cut the photo to it.
 
   let body: ReactNode;
   if (status === "uploading" && previewSrc !== undefined) {
@@ -433,9 +431,10 @@ export function PhotoCaptureScreen({
     body = (
       <div
         className={cn(
-          "sv:relative sv:flex sv:items-center sv:justify-center sv:overflow-hidden sv:rounded-xl sv:bg-black",
+          "sv:relative sv:box-border sv:flex sv:items-center sv:justify-center sv:overflow-hidden sv:rounded-xl sv:bg-black",
           previewFrameFitClass,
         )}
+        ref={previewFrameRef}
         style={previewFrameStyle}
       >
         {previewLayer}
@@ -477,9 +476,11 @@ export function PhotoCaptureScreen({
     body = (
       <div
         className={cn(
-          "sv:flex sv:flex-col sv:items-center sv:justify-center sv:gap-3 sv:overflow-hidden sv:rounded-xl sv:bg-[var(--sv-color-muted)] sv:px-6 sv:py-10",
+          // `box-border`: the frame is sized to the preview's shape, and this one carries padding.
+          "sv:box-border sv:flex sv:flex-col sv:items-center sv:justify-center sv:gap-3 sv:overflow-hidden sv:rounded-xl sv:bg-[var(--sv-color-muted)] sv:px-6 sv:py-10",
           previewFrameFitClass,
         )}
+        ref={previewFrameRef}
         style={previewFrameStyle}
       >
         <span
@@ -529,14 +530,11 @@ export function PhotoCaptureScreen({
         <ResponsiveSplit
           start={body}
           end={
-            // A 2-row grid, not a flex column, so the guidance can centre against the PREVIEW
-            // rather than against what is left over above the CTA. The preview is centred in its
-            // own full-height column; centring the guidance in (column − CTA) put its middle
-            // ~60px higher, which is what read as misaligned. Here the guidance spans BOTH rows
-            // and self-centres, so it centres over the column's full height — the same box the
-            // preview centres in — while the CTA still occupies the bottom row, flush to the
-            // foot. They cannot collide in practice: the modal carries a min-height and the
-            // guidance is a single short card.
+            // A 2-row grid, not a flex column, so the guidance centres over the column's full
+            // height rather than over what is left above the CTA, which put its middle ~60px
+            // higher and read as misaligned. The guidance spans BOTH rows and self-centres, while
+            // the CTA occupies the bottom row, flush to the foot. They cannot collide in
+            // practice: the modal carries a min-height and the guidance is a single short card.
             <div className="sv:grid sv:h-full sv:min-h-0 sv:min-w-0 sv:grid-rows-[1fr_auto] sv:gap-4">
               <div className="sv:col-start-1 sv:row-start-1 sv:row-end-3 sv:self-center">
                 {status === "live" ? infoCard : null}
@@ -550,6 +548,9 @@ export function PhotoCaptureScreen({
               )}
             </div>
           }
+          // The frame sits where the photo sits on the height step that follows, so the picture
+          // does not move when the capture lands.
+          startClassName={flowMediaColumnClassName}
           endClassName="sv:min-h-0"
         />
       ) : (

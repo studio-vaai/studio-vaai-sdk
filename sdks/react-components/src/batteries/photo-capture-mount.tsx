@@ -1,11 +1,11 @@
 "use client";
 
-import type { CameraFailureKind, FrameLock, PhotoCaptureSnapshot } from "@studio-vaai/js-machine";
+import type { CameraFailureKind, PhotoCaptureSnapshot } from "@studio-vaai/js-machine";
 import type { AnyActorRef } from "xstate";
 
-import { frameLockFromCenterCrop } from "@studio-vaai/js-machine";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { previewCropRect } from "./capture-crop.js";
 import { PhotoCaptureScreen, type PhotoCaptureScreenStatus } from "./photo-capture-screen.js";
 
 /**
@@ -109,6 +109,12 @@ function statusFromSnapshot(snap: PhotoCaptureSnapshot | null): PhotoCaptureScre
   return "idle";
 }
 
+// Asked for, not required. The photo keeps only the preview's portrait cut of a laptop camera's
+// landscape frame — about 40% of its width — so the frame itself has to be large enough for
+// that cut to still carry a whole person.
+const CAMERA_IDEAL_WIDTH = 1920;
+const CAMERA_IDEAL_HEIGHT = 1080;
+
 /**
  * Capture a JPEG frame from the live video element by drawing it to a
  * detached canvas. Throws on encoder failure; the host machine drops back to
@@ -120,38 +126,47 @@ function statusFromSnapshot(snap: PhotoCaptureSnapshot | null): PhotoCaptureScre
  * `drawImage` reads raw pixels — without baking the flip here the captured
  * still would be horizontally reversed compared to the live preview.
  */
-interface CaptureFrameResult {
-  blob: Blob;
-  /** Sensor dimensions, needed to derive the {@link FrameLock} for the live preview's bbox. */
-  width: number;
-  height: number;
-}
-
 async function captureFrameAsJpeg(
   video: HTMLVideoElement,
   mirrored: boolean,
-): Promise<CaptureFrameResult> {
+  previewAspectRatio: number | null,
+): Promise<Blob> {
   const w = video.videoWidth;
   const h = video.videoHeight;
   if (w === 0 || h === 0) {
     throw new Error("photoCaptureMount: video has no dimensions yet");
   }
+  // Only what the live preview showed. The preview cover-fits the camera frame into its own
+  // shape, so on a laptop it shows a portrait cut of a landscape frame; encoding the whole
+  // frame uploaded a wider photo than the shopper composed, with whatever stood beside them.
+  const crop = previewCropRect({ width: w, height: h }, previewAspectRatio);
   const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = crop.width;
+  canvas.height = crop.height;
   const ctx = canvas.getContext("2d");
   if (ctx === null) {
     throw new Error("photoCaptureMount: 2d context unavailable");
   }
   if (mirrored) {
     // Flip the X axis and draw at a negative x-offset so the destination rect
-    // covers (0..w) in canvas coords with the source pixels reversed.
-    // Equivalent to the canonical `translate(w, 0); scale(-1, 1)` pair but
-    // avoids any browser-specific weirdness with the transform stack.
+    // covers (0..width) in canvas coords with the source pixels reversed.
+    // Equivalent to the canonical `translate(width, 0); scale(-1, 1)` pair but
+    // avoids any browser-specific weirdness with the transform stack. The crop is centred, so
+    // the same source rect is the mirrored one.
     ctx.scale(-1, 1);
-    ctx.drawImage(video, -w, 0, w, h);
+    ctx.drawImage(
+      video,
+      crop.x,
+      crop.y,
+      crop.width,
+      crop.height,
+      -crop.width,
+      0,
+      crop.width,
+      crop.height,
+    );
   } else {
-    ctx.drawImage(video, 0, 0, w, h);
+    ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
   }
   // oxlint-disable-next-line eslint-plugin-promise/avoid-new -- `canvas.toBlob` is a callback API; promisifying here is the only way to await it.
   const blob = await new Promise<Blob | null>((resolve) => {
@@ -166,7 +181,7 @@ async function captureFrameAsJpeg(
   if (blob === null) {
     throw new Error("photoCaptureMount: toBlob returned null");
   }
-  return { blob, width: w, height: h };
+  return blob;
 }
 
 interface PhotoCaptureMountProps {
@@ -212,8 +227,7 @@ export function PhotoCaptureMount({
   const activeStreamRef = useRef<MediaStream | null>(null);
   // Cached aspect (width / height) of the live preview's composition bbox.
   // The screen pushes this in via `onFrameLockChange` whenever the responsive
-  // layout flips; we read it at shutter time and combine with the encoded
-  // frame's sensor dimensions to stamp a FrameLock onto the captured Blob.
+  // layout flips; we read it at shutter time and cut the captured frame to it.
   const liveFrameAspectRef = useRef<number | null>(null);
   const permissionState = useCameraPermissionState();
   // Bumped whenever the host needs a fresh getUserMedia call from outside the
@@ -340,8 +354,8 @@ export function PhotoCaptureMount({
         // want a sane default and to honour the last-chosen facing on retry.
         const videoConstraints: MediaTrackConstraints = {
           facingMode: { ideal: facingMode },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: CAMERA_IDEAL_WIDTH },
+          height: { ideal: CAMERA_IDEAL_HEIGHT },
         };
         const s = await navigator.mediaDevices.getUserMedia({
           video: videoConstraints,
@@ -480,20 +494,10 @@ export function PhotoCaptureMount({
     captureInFlightRef.current = true;
     const run = async (): Promise<void> => {
       try {
-        const { blob, width, height } = await captureFrameAsJpeg(video, effectiveMirrored);
-        const aspect = liveFrameAspectRef.current;
-        let frameLock: FrameLock | undefined;
-        if (aspect !== null && Number.isFinite(aspect) && aspect > 0) {
-          frameLock = frameLockFromCenterCrop({ width, height }, aspect);
-        }
-        camera.send({
-          type: "FRAME_CAPTURED",
-          image: {
-            type: "blob",
-            blob,
-            ...(frameLock === undefined ? {} : { frameLock }),
-          },
-        });
+        const blob = await captureFrameAsJpeg(video, effectiveMirrored, liveFrameAspectRef.current);
+        // No `frameLock`: the photo is already cut to the frame the shopper composed in, so
+        // every later step shows the whole of it.
+        camera.send({ type: "FRAME_CAPTURED", image: { type: "blob", blob } });
       } catch {
         camera.send({ type: "CAPTURE_FAILED" });
       } finally {
@@ -602,8 +606,8 @@ export function PhotoCaptureMount({
         const s = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { exact: nextMode },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: CAMERA_IDEAL_WIDTH },
+            height: { ideal: CAMERA_IDEAL_HEIGHT },
           },
           audio: false,
         });

@@ -9,13 +9,12 @@ import type { SurfaceLandmarks } from "../ui/surface-landmarks.js";
 import { useStudioVaaiUi } from "../studio-vaai-ui-provider.js";
 import { useSurfaceLandmarks } from "../surface-landmarks-context.js";
 
-// Width / height baseline per surface. The preview frame is locked to this
-// shape so the live capture, the uploading still, and the rejected preview all
-// show the same cutout.
-// - bottomSheet: portrait (W:H = 3:4).
-// - modal: landscape (W:H = 4:3).
+// Width / height baseline of the preview frame: portrait (W:H = 3:4) on both surfaces, because
+// the photo is of a standing person. The modal used to frame the camera in landscape, which
+// showed and kept a wide cut with the person small in the middle, and left the following steps
+// drawing a landscape photo in a column made for a portrait one.
 export const BASELINE_PREVIEW_ASPECT_RATIO_BOTTOM_SHEET = 3 / 4;
-export const BASELINE_PREVIEW_ASPECT_RATIO_MODAL = 4 / 3;
+export const BASELINE_PREVIEW_ASPECT_RATIO_MODAL = 3 / 4;
 // Matches ResponsiveSplit's `gap-4` between the frame and the content below it
 // (see responsive-split.tsx).
 const RESPONSIVE_SPLIT_GAP_PX = 16;
