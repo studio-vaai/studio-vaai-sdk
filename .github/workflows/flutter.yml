@@ -97,6 +97,9 @@ jobs:
           fi
           library=$(sdks/flutter/tool/build_core.sh "$TARGET" "$RUNNER_TEMP/core" | tail -1)
           ls -l "$library"
+          # The inventory reads cargo metadata offline over the whole lockfile, test-only
+          # crates included, which the target build alone does not download (as in ci.yml).
+          (cd sdks/core-rs && cargo fetch --locked)
           python sdks/build-tools/sbom/sbom.py native --target "$TARGET" \
             --artifact "$TARGET=$library" --output "$RUNNER_TEMP/sbom"
           cp "$RUNNER_TEMP/sbom/$TARGET/sdk-core.cdx.json" \
