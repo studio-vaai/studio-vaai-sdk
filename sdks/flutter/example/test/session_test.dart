@@ -1,12 +1,12 @@
-// Runs the example's session in the Flutter test engine on the host, on the
+// Runs the example's headless session in the Flutter test engine on the host, on the
 // real core, against the scripted API: `flutter test`.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:studio_vaai_example/main.dart';
+import 'package:studio_vaai_example/headless.dart';
 
 void main() {
   testWidgets('one session ends with a try-on', (tester) async {
-    await tester.pumpWidget(const ExampleApp());
+    await tester.pumpWidget(const HeadlessApp());
     await tester.tap(find.byKey(const Key('run')));
     for (var i = 0; i < 100 && find.textContaining('Image: ').evaluate().isEmpty; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));

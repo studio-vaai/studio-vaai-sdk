@@ -53,7 +53,9 @@ pub enum ExperienceSessionRestore {
     Ended { outcome: Outcome },
 }
 
-/// Verify the cookie before looking up any saved body.
+/// Verify the stored session before looking up any saved body: the browser's
+/// cookie, or a native app's bearer credential that it stored and installed
+/// again. Either way the session's own expiry from the API applies.
 #[uniffi::export]
 pub async fn restore_experience_session(
     credentials: Arc<ExperienceCredentials>,
@@ -64,7 +66,7 @@ pub async fn restore_experience_session(
     let expired = || Ended {
         outcome: Outcome::SessionExpired,
     };
-    if !request.is_cookie() || !credentials.is_current(&request) {
+    if !credentials.is_current(&request) {
         return expired();
     }
     let response = request.client().get_session().await;
@@ -72,8 +74,11 @@ pub async fn restore_experience_session(
         return expired();
     }
     match response {
-        Ok(session) => credentials
+        Ok(session) if request.is_cookie() => credentials
             .restore_cookie(&request, session.expires_at)
+            .map_or_else(expired, |generation| Verified { generation }),
+        Ok(session) => credentials
+            .restore_bearer(&request, session.expires_at)
             .map_or_else(expired, |generation| Verified { generation }),
         Err(error) => Ended {
             outcome: request.classify(error, false),
@@ -99,7 +104,7 @@ pub async fn restore_experience_body(
     let expired = || Ended {
         outcome: Outcome::SessionExpired,
     };
-    if !request.is_cookie() || !credentials.is_current(&request) {
+    if !credentials.is_current(&request) {
         return expired();
     }
     // Persisted host data can outlive a version of the SDK or be malformed.

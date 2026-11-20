@@ -6,3 +6,9 @@ build/
 pubspec.lock
 # Release tooling: it builds from the SDK repository's sources.
 /tool/
+# The widget goldens: the package's own visual regression tests, rendered on
+# macOS; the other tests ship and run on the published package.
+/test/goldens/
+/test/goldens_test.dart
+# Test data (the HEIC fixture): its tests skip without it.
+/test/fixtures/

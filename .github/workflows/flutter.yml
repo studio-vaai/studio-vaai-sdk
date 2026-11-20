@@ -10,7 +10,7 @@ name: Flutter
 #     SBOM bound to the library.
 #   - `bindings`: the Dart bindings (`just dart`).
 #   - `package`: hook/prebuilt.json, the libraries' names, sizes and SHA-256
-#     under this version's release URL; `dart pub publish --dry-run`; the
+#     under this version's release URL; `flutter pub publish --dry-run`; the
 #     package archive (`--to-archive`); and the tests of that archive unpacked
 #     outside this checkout, where the build hook has no core sources and so
 #     downloads, verifies and loads the library (from this run's files).
@@ -125,13 +125,24 @@ jobs:
         with:
           tool: just
 
-      - uses: dart-lang/setup-dart@v1
+      # Flutter and its Dart: the package depends on Flutter, so resolving it
+      # (for `dart format` to read analysis_options.yaml) needs `flutter pub`.
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.47.7
 
       # The pinned, patched uniffi-dart CLI that `just dart` builds once.
       - uses: actions/cache@v4
         with:
           path: sdks/core-rs/build/uniffi-dart
           key: uniffi-dart-${{ runner.os }}-${{ hashFiles('sdks/core-rs/Justfile', 'sdks/core-rs/patches/uniffi-dart/**') }}
+
+      # Resolved first, so `dart format` in `just dart` finds package:lints from
+      # analysis_options.yaml and formats the bindings at the package's width.
+      - name: Resolve the package
+        working-directory: sdks/flutter
+        run: flutter pub get
 
       - name: Generate
         working-directory: sdks/core-rs
@@ -156,10 +167,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # Flutter and its Dart: the example's tests run on the packed package too.
+      # Flutter and its Dart: the package is a Flutter package (its widgets),
+      # and its tests and the example's run on the packed package. Pinned, so
+      # analysis and tests see the same framework on every run.
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
+          flutter-version: 3.47.7
 
       - uses: actions/download-artifact@v4
         with:
@@ -194,19 +208,20 @@ jobs:
         env:
           BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/
         run: |
-          dart pub get
+          flutter pub get
           # Not `dart run`, which would run the build hook (and so cargo) first.
           dart tool/prebuilt_manifest.dart --artifacts "$RUNNER_TEMP/core" --base-url "$BASE_URL"
           cat hook/prebuilt.json
 
       - name: Analyze
         run: |
-          dart analyze
-          dart format --output=none --set-exit-if-changed hook lib/*.dart lib/src/*.dart test tool
+          flutter analyze
+          dart format --output=none --set-exit-if-changed hook lib/*.dart lib/src/*.dart \
+            lib/src/experience lib/src/ui test tool
 
       # Fails on any warning, a modified checked-in file among them.
       - name: Validate
-        run: dart pub publish --dry-run
+        run: flutter pub publish --dry-run
 
       - name: Pack
         env:
@@ -214,11 +229,18 @@ jobs:
         run: |
           archive=$RUNNER_TEMP/package/studio_vaai-$VERSION.tar.gz
           mkdir -p "$(dirname "$archive")"
-          dart pub publish --to-archive="$archive"
+          flutter pub publish --to-archive="$archive"
           contents=$(tar -tzf "$archive")
-          for file in hook/prebuilt.json lib/src/generated/state_machine.dart NOTICES LICENSE; do
+          for file in hook/prebuilt.json lib/src/generated/state_machine.dart NOTICES LICENSE \
+            assets/guide-people-light.webp assets/guide-people-dark.webp \
+            assets/fonts/Inter-Regular.ttf assets/fonts/OFL.txt; do
             grep -qx "$file" <<<"$contents" || { echo "::error::The archive lacks $file."; exit 1; }
           done
+          # The goldens and test fixtures stay in this repository.
+          if grep -q -e '^test/goldens' -e '^test/fixtures' <<<"$contents"; then
+            echo "::error::The archive ships the widget goldens or test fixtures."
+            exit 1
+          fi
           cp hook/prebuilt.json "$RUNNER_TEMP/package/"
 
       # As installed from pub.dev: no core sources beside the package, so the
@@ -236,10 +258,10 @@ jobs:
           base_url=file://$RUNNER_TEMP/core/
           tail -1 pubspec.yaml | grep -q 'cargo_profile:'
           echo "      prebuilt_base_url: $base_url" >>pubspec.yaml
-          dart pub get
-          dart test
+          flutter pub get
+          flutter test
           find .dart_tool -path '*/prebuilt/*' -name libstudio_vaai_core.dylib | grep -q .
-          # The example app's session in the Flutter test engine, on the same.
+          # The example app's try-on and session in the Flutter test engine, on the same.
           cd example
           printf 'hooks:\n  user_defines:\n    studio_vaai:\n      prebuilt_base_url: %s\n' "$base_url" >>pubspec.yaml
           flutter test
@@ -325,7 +347,14 @@ jobs:
       # setup-dart exchanges it for a pub.dev token.
       id-token: write
     steps:
+      # setup-dart exchanges the OIDC token for a pub.dev credential, which
+      # `flutter pub` (the same pub) uses: the package depends on Flutter.
       - uses: dart-lang/setup-dart@v1
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.47.7
 
       - uses: actions/download-artifact@v4
         with:
@@ -337,4 +366,4 @@ jobs:
       - name: Publish
         env:
           VERSION: ${{ needs.package.outputs.version }}
-        run: dart pub publish --from-archive="$RUNNER_TEMP/package/studio_vaai-$VERSION.tar.gz" --force
+        run: flutter pub publish --from-archive="$RUNNER_TEMP/package/studio_vaai-$VERSION.tar.gz" --force

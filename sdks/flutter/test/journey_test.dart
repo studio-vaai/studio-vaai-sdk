@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:studio_vaai/studio_vaai.dart';
 import 'package:studio_vaai/testing.dart';
-import 'package:test/test.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   late ScriptedApi api;

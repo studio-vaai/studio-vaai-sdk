@@ -1,10 +1,10 @@
-// Runs the example's session against the real API on a device, when it is
+// Runs the example's headless session against the real API on a device, when it is
 // given a client API key (see the README's --dart-define values); skipped
 // otherwise. A photo without a person ends with the photo rejected.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:studio_vaai_example/main.dart';
+import 'package:studio_vaai_example/headless.dart';
 
 const _clientApiKey = String.fromEnvironment('STUDIO_VAAI_CLIENT_API_KEY');
 
@@ -12,7 +12,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('one session against the API', skip: _clientApiKey.isEmpty, (tester) async {
-    await tester.pumpWidget(const ExampleApp());
+    await tester.pumpWidget(const HeadlessApp());
     await tester.tap(find.byKey(const Key('run')));
     List<String?> log() => [for (final e in find.byType(Text).evaluate()) (e.widget as Text).data];
     bool done() =>

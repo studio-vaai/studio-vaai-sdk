@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Take a full-body photo for the virtual try-on.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose a full-body photo for the virtual try-on.</string>
 </dict>
 </plist>

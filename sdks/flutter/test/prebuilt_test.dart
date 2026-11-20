@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:test/test.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import '../hook/src/prebuilt.dart';
 
@@ -19,7 +19,7 @@ void main() {
   const target = 'aarch64-linux-android';
 
   PrebuiltManifest manifest({List<int>? bytes, String? sha256Hex}) => PrebuiltManifest(
-    version: '0.1.0-dev.1',
+    version: '0.1.0',
     baseUrl: Uri.parse('http://localhost:$port/release'),
     libraries: {
       target: PrebuiltLibrary(
@@ -155,7 +155,7 @@ void main() {
 
   test('retries server errors', () async {
     final flaky = PrebuiltManifest(
-      version: '0.1.0-dev.1',
+      version: '0.1.0',
       baseUrl: Uri.parse('http://localhost:${server.port}/'),
       libraries: {
         target: PrebuiltLibrary(

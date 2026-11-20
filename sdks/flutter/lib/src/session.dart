@@ -6,7 +6,10 @@ import 'generated/api.dart';
 import 'generated/api.dart' as api_fns show apiVersion;
 import 'generated/state_machine.dart';
 import 'generated/studio_vaai_core.dart' as core;
+import 'experience/session_store.dart';
 import 'transport.dart';
+
+part 'jobs.dart';
 
 /// The studio vaai API for one shop: its public client key and where the API is.
 ///
@@ -24,9 +27,14 @@ final class StudioVaai {
          config: ClientConfig(baseUrl: baseUrl, clientApiKey: clientApiKey, clientName: clientName),
        );
 
-  StudioVaai._(this.transport, {required bool ownsTransport, required ClientConfig config})
-    : _ownsTransport = ownsTransport,
+  StudioVaai._(this.transport, {required this._ownsTransport, required ClientConfig config})
+    : _config = config,
       api = ApiClient(config: config, transport: transport);
+
+  final ClientConfig _config;
+
+  /// The key this shop's stored try-on session lives under.
+  String get sessionKey => tryOnSessionKey(_config.baseUrl, _config.clientApiKey);
 
   static const defaultBaseUrl = 'https://api.studio-vaai.com';
 
@@ -124,13 +132,25 @@ final class TryOnJourney {
   TryOnJourney._(this._sdk)
     : _session = TryOnSession(config: SessionConfig(runtimeId: _uuid(), maxTryOnRequests: 64)) {
     _driver = _session.claimEffectDriver();
-    _credentials = core.ExperienceCredentials(client: _sdk.api, host: _CredentialHost(this));
+    _jobs = ExperienceJobRunner(
+      _sdk,
+      session: _session,
+      credentialRefreshed: (revision) {
+        if (!_disposed) {
+          _command(SessionDomainCommand(CredentialRefreshedSessionCommand(revision)));
+        }
+      },
+      photo: (media) async {
+        final image = _photos[media];
+        return image == null ? null : originalPhoto(image.bytes, image.mimeType);
+      },
+    );
   }
 
   final StudioVaai _sdk;
   final TryOnSession _session;
   late final EffectDriver _driver;
-  late final core.ExperienceCredentials _credentials;
+  late final ExperienceJobRunner _jobs;
 
   final _changes = StreamController<DomainSnapshot>.broadcast();
   final _events = StreamController<DomainEvent>.broadcast();
@@ -270,7 +290,7 @@ final class TryOnJourney {
     _photos.clear();
     _changes.close();
     _events.close();
-    _credentials.dispose();
+    _jobs.dispose();
     _driver.dispose();
     _session.dispose();
   }
@@ -337,7 +357,7 @@ final class TryOnJourney {
         _photos.remove(media);
       case DomainEffectEffect(effect: SessionDomainEffect(:final effect))
           when effect != SessionEffect.persist:
-        _credentials.clear();
+        _jobs.clear();
       case DomainEventEffect(:final event):
         _events.add(event);
       default:
@@ -349,12 +369,7 @@ final class TryOnJourney {
   }
 
   Future<void> _perform(OperationId operation, Job job) async {
-    Outcome outcome;
-    try {
-      outcome = await _execute(job);
-    } catch (_) {
-      outcome = FailedOutcome(BackendException.internal);
-    }
+    final outcome = await _jobs.run(job);
     if (_disposed) return;
     final waiting = _outcomes.remove(operation);
     try {
@@ -373,84 +388,6 @@ final class TryOnJourney {
       }
     }
   }
-
-  Future<Outcome> _execute(Job job) async {
-    switch (job) {
-      case SessionJobVariant(job: RestoreSessionJob()):
-        return SessionOutcomeVariant(AbsentSessionOutcome());
-      case SessionJobVariant(job: CreateSessionJob()):
-        return _establish(_sdk._transportFor(job));
-      default:
-        final transport = _sdk._transportFor(job);
-        final refresh = await _credentials.refreshIfNeeded(transport: transport, nowMs: _nowMs());
-        if (refresh != null) return refresh;
-        final request = _credentials.beginRequest(transport: transport);
-        if (request == null) return SessionExpiredOutcome();
-        try {
-          if (job case PhotoJobVariant(job: ProcessPhotoJob(:final photo))) {
-            return await _upload(request, photo, transport);
-          }
-          final result = await core.runExperienceJob(
-            credentials: _credentials,
-            request: request,
-            job: job,
-            session: _session,
-          );
-          return result.outcome;
-        } finally {
-          request.dispose();
-        }
-    }
-  }
-
-  /// A native app keeps no cookie jar, so it always takes a bearer session.
-  Future<Outcome> _establish(HttpTransport transport) async {
-    final epoch = _credentials.beginEstablishment();
-    final client = _sdk.api.withTransport(transport: transport);
-    try {
-      final created = await client.createBearerSession(
-        body: CreateBearerSessionBody(dataProcessingConsent: true),
-      );
-      if (created.token.isEmpty) return UnknownOutcome();
-      final installed = _credentials.install(
-        epoch: epoch,
-        credential: core.BearerExperienceCredential(
-          expiresAt: created.expiresAt,
-          token: created.token,
-        ),
-        cookieGeneration: _CredentialHost.noCookies,
-      );
-      return installed ? SessionOutcomeVariant(ReadySessionOutcome()) : UnknownOutcome();
-    } on ApiException catch (error) {
-      return core.classifyExperienceApiError(error: error, writes: true);
-    } finally {
-      client.dispose();
-    }
-  }
-
-  Future<Outcome> _upload(
-    core.ExperienceRequestCredential request,
-    Photo photo,
-    HttpTransport transport,
-  ) async {
-    final image = _photos[photo.media];
-    if (image == null) return FailedOutcome(BackendException.invalidRequest);
-    final original = core.readImageMetadata(image: image.bytes);
-    final client = request.client();
-    try {
-      return await core.uploadExperiencePhoto(
-        client: client,
-        host: _UploadHost(_credentials, request, image.bytes, transport),
-        mimeType: image.mimeType,
-        byteSize: image.bytes.length,
-        imageMetadata: original == null
-            ? null
-            : core.PhotoUploadMetadata(original: original, uploaded: null),
-      );
-    } finally {
-      client.dispose();
-    }
-  }
 }
 
 final class _Waiter {
@@ -460,69 +397,6 @@ final class _Waiter {
   final bool Function(DomainSnapshot) settle;
   final void Function(Object) fail;
 }
-
-final class _CredentialHost implements core.ExperienceCredentialHost {
-  _CredentialHost(this._journey);
-  final TryOnJourney _journey;
-
-  /// Bearer sessions only: the cookie generation never changes.
-  static const noCookies = 'native';
-
-  @override
-  String cookieGeneration() => noCookies;
-
-  @override
-  double parseExpiryMs(String value) =>
-      DateTime.tryParse(value)?.millisecondsSinceEpoch.toDouble() ?? 0;
-
-  @override
-  double nowMs() => _nowMs();
-
-  @override
-  void credentialRefreshed(int revision) {
-    // Called from inside the core: tell the state machine after it returns.
-    scheduleMicrotask(() {
-      if (!_journey._disposed) {
-        _journey._command(SessionDomainCommand(CredentialRefreshedSessionCommand(revision)));
-      }
-    });
-  }
-}
-
-/// Moves the photo's bytes to the signed upload URL through the transport.
-final class _UploadHost implements core.PhotoUploadHost {
-  _UploadHost(this._credentials, this._request, this._bytes, this._transport);
-  final core.ExperienceCredentials _credentials;
-  final core.ExperienceRequestCredential _request;
-  final Uint8List _bytes;
-  final HttpTransport _transport;
-
-  @override
-  int? credentialRevision() =>
-      _credentials.requestIsCurrent(request: _request) ? _request.revision() : null;
-
-  @override
-  Future<bool> transfer(PrepareBodyUploadResponse upload) async {
-    try {
-      final response = await _transport.send(
-        HttpRequest(
-          method: upload.method,
-          url: upload.uploadUrl,
-          headers: [
-            for (final h in upload.requiredHeaders) HttpHeader(name: h.name, value: h.value),
-          ],
-          body: _bytes,
-          withCredentials: false,
-        ),
-      );
-      return response.status >= 200 && response.status < 300;
-    } catch (_) {
-      return false;
-    }
-  }
-}
-
-double _nowMs() => DateTime.now().millisecondsSinceEpoch.toDouble();
 
 final _random = Random.secure();
 

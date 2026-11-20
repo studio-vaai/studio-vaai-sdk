@@ -31,6 +31,11 @@ uniffi = "0.32.2"
 async-trait = "0.1"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 
+# Decodes the API's JPEG XL source photos where the platform cannot (Android);
+# the browser decodes them itself, so the WebAssembly build leaves it out.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+jxl-oxide = { version = "0.12.6", default-features = false }
+
 # What uniffi-bindgen-react-native's wasm2 player needs from the module.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 uniffi-runtime-wasm = "0.31.0-6"

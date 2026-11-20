@@ -28,4 +28,5 @@ pub use api;
 pub mod experience_api;
 pub mod formatting;
 pub mod image_metadata;
+pub mod jpeg_xl;
 pub use state_machine;

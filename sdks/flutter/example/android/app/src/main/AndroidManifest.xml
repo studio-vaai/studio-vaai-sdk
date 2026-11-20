@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- The SDK calls the studio vaai API. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- The try-on's self-timer photo. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
     <application
         android:label="studio_vaai_example"
         android:name="${applicationName}"

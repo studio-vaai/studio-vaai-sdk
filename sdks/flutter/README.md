@@ -6,20 +6,134 @@ the same Rust code the iOS, Android and web SDKs run, called through Dart bindin
 [uniffi-dart](https://github.com/Uniffi-Dart/uniffi-dart) generates from the same UniFFI
 annotations as the Swift, Kotlin and TypeScript bindings.
 
-Status: **preview** (`0.1.0-dev.1`). It runs one try-on journey (session, photo, height, try-on)
-with no UI; widgets and persisted sessions come later, and the API may change between previews.
+Status: `0.1.0`, in lockstep with the web SDK's packages. Ready-made widgets present the default
+try-on experience, and a headless journey drives it from your own UI. 0.x: the API can change
+between minor versions, like the web SDK.
 
 ## Install
 
 ```sh
-flutter pub add studio_vaai:^0.1.0-dev.1
+flutter pub add studio_vaai:^0.1.0
 ```
 
 Android, iOS and macOS apps build with it as they are: no Rust toolchain is needed (see
-[Native library](#native-library)). It needs Flutter 3.38 or later (Dart 3.10, which runs
-packages' build hooks).
+[Native library](#native-library)). It needs Flutter 3.44 or later (Dart 3.12, which runs
+packages' build hooks and which the `camera` plugin requires).
 
-## Use
+## Ready-made widgets
+
+`StudioVaaiTryOn` is the Flutter counterpart of the web and React SDKs' `StudioVaaiTryOn`: the
+whole default experience (consent, photo from the library or the camera's self-timer, height,
+variant selection, try-ons with their fit score, add to bag), with the web's screens, copy and
+rules. The shared Rust core's default flow decides every screen and step; the widgets render its
+view and send the shopper's actions back, so Flutter and the web behave the same.
+
+```dart
+import 'package:studio_vaai/studio_vaai.dart';
+import 'package:studio_vaai/widgets.dart';
+
+final sdk = StudioVaai(clientApiKey: 'sv_client_...'); // one per shop
+final tryOn = StudioVaaiTryOnController();
+
+StudioVaaiTryOn(
+  sdk: sdk,
+  productId: productId, // or foreignId: your own product ID
+  productName: 'Oxford shirt',
+  // Your catalogue's axes, labels and selected variant for the API's variants.
+  presentProduct: (details) => ProductPresentation(
+    axes: [
+      VariantAxis(
+        role: AxisRole.size,
+        key: 'size',
+        label: 'Size',
+        items: [for (final s in ['S', 'M', 'L']) AxisItem(key: s, display: TextItemDisplay(s))],
+      ),
+    ],
+    variantId: details.variants.first.id,
+    commerce: {details.variants.first.id: const VariantCommerce(price: '€89')},
+  ),
+  controller: tryOn,
+  locale: 'de', // default: the app's locale
+  messages: {'sessionIntro.sheetTitle': 'Probier es an'}, // MF2 overrides, optional
+  appearance: TryOnAppearance.dark,
+  onAddToCart: (request) async => cart.add(request.variantId),
+  onDownload: (bytes, mimeType) async => share(bytes), // optional; adds a download button
+  onEvent: (event) => analytics.log(event), // the same facts as the web's sv-try-on-* events
+  onError: (error) => log(error),
+  onLink: (uri) => launchUrl(uri), // terms and privacy links
+  child: ListenableBuilder(
+    listenable: tryOn,
+    builder: (context, _) => FilledButton(
+      onPressed: tryOn.ready ? tryOn.open : null,
+      child: const Text('Try it on'),
+    ),
+  ),
+);
+```
+
+- Keep it mounted while the shopper browses: the session, photo, height and try-ons stay, and a
+  new `productId` installs that product in the same session.
+- The session, and the body made from the shopper's photo, outlast the app: the next launch
+  restores them through the core's restore, as the web restores its session cookie and body
+  selection, until the API expires the session (see [Kept sessions](#kept-sessions)).
+- `simpleProductPresentation(details, roles: {'size': AxisRole.size})` builds a presentation from
+  the API's variant IDs alone, for a start.
+- It opens as a full-height modal sheet on phones and a centered dialog on wide windows, as the
+  web SDK's dialog does (`presentation: TryOnPresentation.fullScreen` for a page). The system
+  back gesture is the flow's Back, and Close at the start. To place the screens yourself, use
+  `TryOnExperienceView` with a `TryOnExperience`.
+- Text comes from the core's MessageFormat 2 catalog, the same keys and translations as the web
+  (`TryOnMessages.locales`); `messages` overrides any key for the locale.
+- Colors and sizes are the web components' design tokens (`TryOnTokens.light` and `.dark`):
+  the same seeds, mix steps and derived colors. Brand them with
+  `tokens: TryOnTokens.light.copyWith(primary: ...)`. Text is set in Inter, as on the web; the
+  package bundles it (SIL Open Font License, in `NOTICES`).
+- Results carry the "AI generated" label beside the variant, as on the web (EU AI Act
+  transparency).
+- Screens set semantics labels, headers and live announcements for progress (the web's status
+  region), keep 48 px tap targets, and scroll when text is scaled up.
+
+### Kept sessions
+
+A native app has no cookie jar, so the widgets keep the bearer credential, its session's expiry
+and the committed body (ID and photo source, no photo) in the platform's secure storage
+([`flutter_secure_storage`](https://pub.dev/packages/flutter_secure_storage)): the Keychain on
+iOS and macOS, Keystore-encrypted storage on Android, never plain preferences. Each shop (API URL
+and client key) has its own entry. On the next launch the core verifies the credential with the
+API and reads the body back, the same restore the web runs for its cookie.
+
+The entry is replaced when a refresh rotates the token, and deleted when the session expires, the
+API no longer accepts it, the shopper declines consent while it is created, or the flow resets the
+session. `keepSession: false` keeps nothing on the device; `sessionStore:` takes your own
+`TryOnSessionStore` (`MemoryTryOnSessionStore` for tests). On macOS the Keychain needs the
+Keychain Sharing capability (`keychain-access-groups`); without it nothing is kept and each launch
+starts a new session. On Android the storage plugin needs `minSdk` 24 or later.
+
+### Devices
+
+`PlatformTryOnDevices` (the default) uses [`image_picker`](https://pub.dev/packages/image_picker)
+for the library and [`camera`](https://pub.dev/packages/camera) for the self-timer. Add their
+platform setup to your app:
+
+- iOS `Info.plist`: `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`.
+- Android: `<uses-permission android:name="android.permission.CAMERA"/>`.
+- macOS: the camera entitlement and `NSCameraUsageDescription`; the camera plugin has no macOS
+  implementation, so the camera screen offers the library there.
+
+Implement `TryOnDevices` to use other plugins. Before upload, a photo is prepared as on the web:
+the core's input limits, its camera metadata read from the original, and a downscale and JPEG
+re-encode when the core's encoding plan asks for one (`preparePhotoForUpload`). HEIC goes up as
+JPEG, decoded by the platform (iOS, macOS, Android 9+); where it cannot be decoded the photo is
+refused (`UnsupportedPhotoException`) rather than uploaded as HEIC, which the API does not take.
+
+### Testing your integration
+
+`package:studio_vaai/testing.dart` has `ScriptedApi` (pass it as the `StudioVaai` transport) and
+`ScriptedDevices` (pass it as `devices`): the widgets then run the real core with no network,
+camera or photo library, as this package's own widget tests do. Pass `imageProvider` to show
+result images without the network.
+
+## Headless
 
 ```dart
 import 'package:studio_vaai/studio_vaai.dart';
@@ -82,7 +196,7 @@ hooks:
       # A mirror of the release's files (an http(s) or file URL, or a folder
       # relative to this pubspec), e.g. where builds have no internet access.
       # The checksums still apply.
-      prebuilt_base_url: https://artifacts.example.com/studio_vaai/0.1.0-dev.1/
+      prebuilt_base_url: https://artifacts.example.com/studio_vaai/0.1.0/
       # Or a core you built yourself, for this build's target.
       core_library: path/to/libstudio_vaai_core.dylib
 ```
@@ -101,10 +215,18 @@ The generated bindings are not committed. Generate them, then test:
 
 ```sh
 (cd ../core-rs && just dart)   # into lib/src/generated
-dart pub get
-dart test                      # the real core against ScriptedApi
-(cd example && flutter test)   # the example's session in the Flutter test engine
+flutter pub get
+flutter test                   # the real core against ScriptedApi: journey, widgets, goldens
+(cd example && flutter test)   # the example's try-on and headless session
 ```
+
+`test/widgets_test.dart` taps through every screen state; `test/goldens_test.dart` compares every
+state in English/light and German/dark, and the main screens in the other two, with
+`test/goldens/` (regenerate with
+`flutter test --update-goldens test/goldens_test.dart`; the goldens are rendered on macOS).
+`test/live_test.dart` runs the widgets against a real API when given a client key and a photo
+(see its header). The example's `integration_test/try_on_test.dart` runs the whole try-on on a
+device.
 
 `just dart` builds the pinned generator first (see `../core-rs/patches/uniffi-dart`). After a
 change to the core's dependencies, `tool/notices.py` rewrites [NOTICES](NOTICES) (`just ci` in
@@ -119,7 +241,7 @@ every change and, for a tag `studio_vaai-v<version>`, releases it:
    macOS with Xcode.
 2. `just dart` generates the bindings; `tool/prebuilt_manifest.dart` writes `hook/prebuilt.json`
    (file names, sizes and SHA-256 of exactly these libraries, and the tag's download URL).
-3. `dart pub publish --dry-run` validates the package, and `--to-archive` packs it. The packed
+3. `flutter pub publish --dry-run` validates the package, and `--to-archive` packs it. The packed
    package runs its tests on macOS with no core sources, so its hook downloads the library, from
    the workflow's files.
 4. On the tag only: a GitHub release with the libraries, the manifest, their SBOMs and the
@@ -128,7 +250,7 @@ every change and, for a tag `studio_vaai-v<version>`, releases it:
 Bump `version` in `pubspec.yaml` and add its `CHANGELOG.md` entry first.
 
 pub.dev publishes from GitHub Actions only for a package that exists, so the first version goes
-up by hand, from the tag's release: `dart pub publish --from-archive studio_vaai-<version>.tar.gz`
+up by hand, from the tag's release: `flutter pub publish --from-archive studio_vaai-<version>.tar.gz`
 (the archive the workflow tested; `--from-archive` publishes it unchanged). Then, in the
 package's admin page on pub.dev, move it to the `studio-vaai.com` verified publisher and enable
 automated publishing from this repository with the tag pattern `studio_vaai-v{{version}}` and the

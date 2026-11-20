@@ -1,15 +1,15 @@
-// Runs the example's session in the app, on the real core, against the
+// Runs the example's headless session in the app, on the real core, against the
 // scripted API: `flutter test integration_test -d macos`.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:studio_vaai_example/main.dart';
+import 'package:studio_vaai_example/headless.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('one session ends with a try-on', (tester) async {
-    await tester.pumpWidget(const ExampleApp());
+    await tester.pumpWidget(const HeadlessApp());
     await tester.tap(find.byKey(const Key('run')));
     for (var i = 0; i < 100 && find.textContaining('Image: ').evaluate().isEmpty; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));

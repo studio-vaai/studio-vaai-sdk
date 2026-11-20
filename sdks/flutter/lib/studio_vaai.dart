@@ -23,5 +23,5 @@ export 'src/generated/api.dart'
         TransportException;
 export 'src/generated/state_machine.dart';
 export 'src/generated/studio_vaai_core.dart' show ImageMetadata, readImageMetadata;
-export 'src/session.dart';
+export 'src/session.dart' hide ExperienceJobRunner, PreparedPhoto, originalPhoto;
 export 'src/transport.dart';

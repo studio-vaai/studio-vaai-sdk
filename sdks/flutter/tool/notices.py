@@ -10,7 +10,8 @@ The crates are those the core links on Android, iOS and macOS: its normal
 dependencies, without build scripts and procedural macros, which run only at
 build time. Each section is the crate's own license file (for a choice of
 licenses, MIT where offered). The Rust standard library and the Unicode CLDR
-data the core's formatting carries have sections of their own.
+data the core's formatting carries have sections of their own, and so does the
+Inter font the widgets bundle (assets/fonts, with its OFL beside it).
 
 Usage: notices.py [--check]
   --check  fail when NOTICES differs from what Cargo.lock implies
@@ -48,6 +49,9 @@ file_patterns = {
     "Unicode-3.0": [r"LICEN[CS]E[-_.]?UNICODE.*"],
 }
 generic = r"LICEN[CS]E(\.md|\.txt)?"
+# Crates published without their repository's license file: the crate whose
+# package carries that same file (same repository, same license).
+license_from = {"alloc-stdlib": "alloc-no-stdlib"}
 
 rust_std = """MIT License
 
@@ -142,6 +146,8 @@ def render():
 
     add("studio_vaai", (flutter / "LICENSE").read_text().strip() + "\n")
     add("Rust standard library", rust_std)
+    # The widgets' font: Inter, a subset of the official release, under its OFL.
+    add("Inter font", (flutter / "assets" / "fonts" / "OFL.txt").read_text().strip() + "\n")
     missing = []
     for package in sorted(packages, key=lambda p: p["name"]):
         name, version = package["name"], package["version"]
@@ -150,6 +156,10 @@ def render():
             if own and spdx == "MIT":
                 continue  # studio vaai's own crates: this package's LICENSE
             text = license_text(package, spdx)
+            if text is None and package["name"] in license_from:
+                sibling = next(p for p in packages if p["name"] == license_from[package["name"]])
+                if sibling.get("repository") == package.get("repository"):
+                    text = license_text(sibling, spdx)
             if spdx == "MPL-2.0":
                 # UniFFI's crates ship no license file: MPL's Exhibit A notice.
                 text = mpl + (text or mpl_notice)

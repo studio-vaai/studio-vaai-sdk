@@ -63,6 +63,14 @@ struct Credentials {
     refresh: Option<Refresh>,
 }
 
+/// A bearer credential as a native host stores it: the token and when its
+/// session expires, in milliseconds since the epoch.
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct StoredBearerCredential {
+    pub token: String,
+    pub expires_at_ms: f64,
+}
+
 /// Owns credential state for one experience and coalesces concurrent refreshes.
 #[derive(uniffi::Object)]
 pub struct ExperienceCredentials {
@@ -121,6 +129,17 @@ impl ExperienceCredentials {
         state.bearer = bearer;
         state.expires_at_ms = expiry;
         true
+    }
+
+    /// The bearer credential, for a native host to keep between launches
+    /// (in the platform's secure storage): after it is installed, and after
+    /// every refresh, which rotates the token. `None` for a cookie session.
+    pub fn bearer_credential(&self) -> Option<StoredBearerCredential> {
+        let state = self.state.lock().unwrap();
+        state.bearer.clone().map(|token| StoredBearerCredential {
+            token,
+            expires_at_ms: state.expires_at_ms,
+        })
     }
 
     pub fn cookie_generation(&self) -> Option<String> {
@@ -235,6 +254,27 @@ impl ExperienceCredentials {
 
     pub(super) fn now_ms(&self) -> f64 {
         self.host.now_ms()
+    }
+
+    /// A stored bearer credential the API verified: its session's expiry.
+    pub(super) fn restore_bearer(
+        &self,
+        request: &ExperienceRequestCredential,
+        expires_at: String,
+    ) -> Option<String> {
+        if request.is_cookie() {
+            return None;
+        }
+        let expiry = self.parse_expiry_ms(expires_at);
+        let mut state = self.state.lock().unwrap();
+        if !Arc::ptr_eq(&request.owner, &self.owner)
+            || state.epoch != request.epoch
+            || state.bearer.is_none()
+        {
+            return None;
+        }
+        state.expires_at_ms = expiry;
+        Some(state.cookie_generation.clone())
     }
 
     pub(super) fn restore_cookie(
