@@ -12,6 +12,7 @@ import 'devices.dart';
 import 'photo_preparation.dart';
 import 'product.dart';
 import 'session_store.dart';
+import 'try_on_event.dart';
 
 /// What the renderer does for the flow: the work that needs the widget tree.
 abstract interface class TryOnRendererHost {
@@ -131,10 +132,12 @@ final class TryOnExperience extends ChangeNotifier {
   ({Map<String, VariantCommerce>? initial, Map<String, String> prices})? _prices;
 
   final _events = StreamController<ExperienceEvent>.broadcast(sync: true);
+  final _tryOnEvents = StreamController<TryOnExperienceEvent>.broadcast(sync: true);
   final _photos = <MediaId, TryOnPhoto>{};
   final _cameras = <LeaseId, TryOnCamera>{};
   final _pending = <InteractionToken, void Function()>{};
   final _mediaWork = <InteractionToken, _Cancel>{};
+  final _jobTimers = <Timer>{};
   final _assets = <String, ({InteractionToken id, String src})>{};
   TryOnRendererHost? _renderer;
   InteractionToken? _rendererToken;
@@ -158,6 +161,16 @@ final class TryOnExperience extends ChangeNotifier {
   /// The shopper's journey, as the web's `sv-try-on-*` events: the same
   /// facts, from the same core projection.
   Stream<ExperienceEvent> get events => _events.stream;
+
+  /// The same journey as the web's `sv-try-on-*` DOM events ([TryOnExperienceEvent]),
+  /// with the web's operation timing: what analytics maps.
+  Stream<TryOnExperienceEvent> get tryOnEvents => _tryOnEvents.stream;
+
+  void _publish(ExperienceEvent event) {
+    _events.add(event);
+    final projected = tryOnExperienceEventOf(event);
+    if (projected != null) _tryOnEvents.add(projected);
+  }
 
   /// Formatted prices of the installed product, by variant ID.
   Map<String, String> get prices => _prices?.prices ?? const {};
@@ -513,7 +526,7 @@ final class TryOnExperience extends ChangeNotifier {
           changed = true;
         }
         for (final event in batch.experienceEvents) {
-          _events.add(event);
+          _publish(event);
         }
       }
     } catch (error, stack) {
@@ -573,7 +586,51 @@ final class TryOnExperience extends ChangeNotifier {
   }
 
   Future<void> _runJob(OperationId operation, Job job) async {
-    final outcome = await _jobs.run(job);
+    // As the web: a photo slower than 10 s or a try-on slower than 30 s is
+    // reported, and one still running at the core's budget missed its deadline.
+    final work = switch (job) {
+      PhotoJobVariant() => 'photo',
+      TryOnJobVariant() => 'try-on',
+      _ => null,
+    };
+    final timers = <Timer>{};
+    void report(String type) {
+      final productId = _view.productInstallation?.productId ?? _productDetails?.productId;
+      if (_disposed || productId == null || work == null) return;
+      _tryOnEvents.add(
+        TryOnExperienceEvent(type, {
+          'productId': productId,
+          'step': work == 'photo' ? 'photo-upload' : 'try-on',
+          'work': work,
+        }),
+      );
+    }
+
+    if (work != null) {
+      timers
+        ..add(
+          Timer(
+            Duration(seconds: work == 'photo' ? 10 : 30),
+            () => report('sv-try-on-operation-slow'),
+          ),
+        )
+        ..add(
+          Timer(
+            Duration(milliseconds: core.experienceJobTimeoutMs(job: job)),
+            () => report('sv-try-on-operation-deadline'),
+          ),
+        );
+    }
+    _jobTimers.addAll(timers);
+    final Outcome outcome;
+    try {
+      outcome = await _jobs.run(job);
+    } finally {
+      for (final timer in timers) {
+        timer.cancel();
+      }
+      _jobTimers.removeAll(timers);
+    }
     if (_disposed) return;
     try {
       _commit(
@@ -927,7 +984,7 @@ final class TryOnExperience extends ChangeNotifier {
     final closedInFlow = before.presence.open && !_view.presence.open;
     if (!closedInFlow) {
       final fact = experienceCloseAfterHostFailure(before: before);
-      if (fact != null) _events.add(fact);
+      if (fact != null) _publish(fact);
     }
     _release();
     FlutterError.reportError(
@@ -945,6 +1002,10 @@ final class TryOnExperience extends ChangeNotifier {
     for (final work in _mediaWork.values) {
       work.cancel();
     }
+    for (final timer in _jobTimers) {
+      timer.cancel();
+    }
+    _jobTimers.clear();
     for (final camera in _cameras.values) {
       unawaited(camera.close());
     }
@@ -956,6 +1017,7 @@ final class TryOnExperience extends ChangeNotifier {
     _flow.dispose();
     _session.dispose();
     unawaited(_events.close());
+    unawaited(_tryOnEvents.close());
   }
 
   @override

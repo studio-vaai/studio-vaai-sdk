@@ -5,6 +5,7 @@
 /// view and send the shopper's actions back, as the web SDK's components do.
 library;
 
+export 'analytics.dart';
 export 'src/experience/devices.dart'
     show DeviceFailure, DevicePhoto, PlatformTryOnDevices, TryOnCamera, TryOnDevices;
 export 'src/experience/experience.dart'

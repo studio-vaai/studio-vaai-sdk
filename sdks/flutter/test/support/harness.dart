@@ -59,6 +59,9 @@ final class Harness {
   /// The kept session, in memory: shared by every app this harness pumps.
   final sessionStore = MemoryTryOnSessionStore();
 
+  /// Analytics the app passes to the try-on, if a test sets it before [start].
+  TryOnAnalytics? analytics;
+
   /// The transport: [api], with routes a test can hold.
   late final GatedApi gate;
   final ScriptedDevices devices;
@@ -113,6 +116,7 @@ final class Harness {
           onAddToCart: (request) async => carts.add(request),
           onDownload: (bytes, type) async {},
           onEvent: events.add,
+          analytics: analytics,
           onError: errors.add,
           child: const Center(child: Text('Product page')),
         ),

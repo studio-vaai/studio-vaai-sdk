@@ -1,0 +1,1007 @@
+{
+  "comment": "The analytics parity check's inputs: the web's createTryOnAnalytics (sdks/core-rs/test/analytics-parity.test.ts) and the Flutter one (sdks/flutter/test/analytics_parity_test.dart) must both send expected.json's requests for them.",
+  "visitorId": "parity-visitor",
+  "sdkVersion": "parity-sdk@1",
+  "clientApiKey": "public-parity-key",
+  "baseUrl": "https://collector.example.test",
+  "operations": [
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-opened",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "entry": "pdp-button",
+          "subentry": "hero"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-opened",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "entry": "pdp-badge"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-opened",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "previousStep": "camera"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "camera"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "camera",
+          "previousStep": "camera"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-upload"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-upload",
+          "previousStep": "camera"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-rejected"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-rejected",
+          "previousStep": "camera"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "height"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "height",
+          "previousStep": "camera"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "variant-selection"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "variant-selection",
+          "previousStep": "camera"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-step-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "previousStep": "camera"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-consent-granted",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "camera",
+          "originStep": "intro"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "camera",
+          "originStep": "camera"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "camera",
+          "originStep": "photo-upload"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "camera",
+          "originStep": "photo-rejected"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "camera",
+          "originStep": "height"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "camera",
+          "originStep": "variant-selection"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "camera",
+          "originStep": "try-on"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-cancelled",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "camera",
+          "source": "camera",
+          "originStep": "intro"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-cancelled",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "height",
+          "source": "camera",
+          "originStep": "height"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-processing",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-upload",
+          "source": "camera"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-accepted",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-upload",
+          "source": "camera"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-rejected",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-rejected",
+          "source": "camera",
+          "reason": "feet-not-visible"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-failed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-upload",
+          "source": "camera",
+          "reason": "unavailable"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "library",
+          "originStep": "intro"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "library",
+          "originStep": "camera"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "library",
+          "originStep": "photo-upload"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "library",
+          "originStep": "photo-rejected"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "library",
+          "originStep": "height"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "library",
+          "originStep": "variant-selection"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-started",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "source": "library",
+          "originStep": "try-on"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-cancelled",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "camera",
+          "source": "library",
+          "originStep": "intro"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-source-cancelled",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "height",
+          "source": "library",
+          "originStep": "height"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-processing",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-upload",
+          "source": "library"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-accepted",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-upload",
+          "source": "library"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-rejected",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-rejected",
+          "source": "library",
+          "reason": "feet-not-visible"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-photo-failed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-upload",
+          "source": "library",
+          "reason": "unavailable"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-session-failed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "reason": "internal"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-height-confirmed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "height"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-height-failed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "height",
+          "reason": "invalid-request"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-operation-slow",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-upload",
+          "work": "photo"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-operation-deadline",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-upload",
+          "work": "photo"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-operation-slow",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "work": "try-on"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-operation-deadline",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "work": "try-on"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-operation-uncertain",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "work": "photo"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-operation-uncertain",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "work": "height"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-operation-uncertain",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "work": "try-on"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-picker-failed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro",
+          "reason": "permission-denied"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-camera-failed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "camera",
+          "phase": "acquire",
+          "reason": "unavailable"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-camera-failed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "camera",
+          "phase": "stream",
+          "reason": "interrupted"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-capture-failed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "camera",
+          "reason": "failed"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-variant-changed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "variant-selection",
+          "variantId": "v-1",
+          "foreignIds": {
+            "size": "M",
+            "colorway": "blue",
+            "inseam": "32"
+          }
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-requested",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "variant-selection",
+          "requestId": "r-1",
+          "variantId": "v-1",
+          "foreignIds": {
+            "size": "M",
+            "colorway": "blue",
+            "inseam": "32"
+          },
+          "origin": "shopper"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-requested",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "requestId": "r-2",
+          "variantId": "v-2",
+          "foreignIds": {
+            "size": "L"
+          },
+          "origin": "automatic"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-requested",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "requestId": "r-3",
+          "variantId": "v-3",
+          "foreignIds": {
+            "waist": "30",
+            "length": "34"
+          },
+          "origin": "shopper"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-request-resolved",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "requestId": "r-1",
+          "variantId": "v-1",
+          "tryOnId": "t-1"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-rendered",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "variantId": "v-1",
+          "tryOnId": "t-1"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-presented",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "variantId": "v-1",
+          "tryOnId": "t-1"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-refused",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "requestId": "r-2",
+          "variantId": "v-2",
+          "reason": "garment-too-small"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-failed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "requestId": "r-3",
+          "variantId": "v-3",
+          "reason": "inadmissible"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-failed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "requestId": "r-3",
+          "variantId": "v-3",
+          "reason": "unavailable"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-detached",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "requestId": "r-1",
+          "variantId": "v-1",
+          "stage": "waiting"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-detached",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "requestId": "r-1",
+          "variantId": "v-1",
+          "stage": "rendering"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-detached",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "requestId": "r-1",
+          "variantId": "v-1",
+          "stage": "uncertain"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-add-to-cart-requested",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "variantId": "v-1",
+          "foreignIds": {
+            "size": "M",
+            "colorway": "blue",
+            "inseam": "32"
+          }
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-closed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-closed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "camera"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-closed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-upload"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-closed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "photo-rejected"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-closed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "height"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-closed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "variant-selection"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-closed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on"
+        }
+      }
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-closed",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "try-on",
+          "displayed": {
+            "tryOnId": "t-1",
+            "variantId": "v-1"
+          }
+        }
+      }
+    },
+    {
+      "op": "entrypointImpression",
+      "productId": "shirt-1",
+      "entry": "pdp-button"
+    },
+    {
+      "op": "cartItemAdded",
+      "productId": "shirt-1",
+      "foreignIds": {
+        "size": "M",
+        "colorway": "blue",
+        "inseam": "32"
+      }
+    },
+    {
+      "op": "cartItemAdded",
+      "productId": "shirt-1",
+      "foreignIds": {}
+    },
+    {
+      "op": "orderPlaced",
+      "productId": "shirt-1",
+      "foreignIds": {
+        "colorway": "red",
+        "fit": "slim"
+      }
+    },
+    {
+      "op": "experimentAssigned",
+      "enabled": true
+    },
+    {
+      "op": "experimentAssigned",
+      "enabled": false
+    },
+    {
+      "op": "enabled",
+      "value": false
+    },
+    {
+      "op": "event",
+      "event": {
+        "type": "sv-try-on-consent-granted",
+        "detail": {
+          "productId": "shirt-1",
+          "step": "intro"
+        }
+      }
+    },
+    {
+      "op": "entrypointImpression",
+      "productId": "shirt-1",
+      "entry": "not-sent"
+    },
+    {
+      "op": "enabled",
+      "value": true
+    },
+    {
+      "op": "entrypointImpression",
+      "productId": "shirt-1",
+      "entry": "sent-again"
+    }
+  ]
+}

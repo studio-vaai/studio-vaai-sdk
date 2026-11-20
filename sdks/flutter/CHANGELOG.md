@@ -16,6 +16,11 @@ minor versions, like the web SDK.
   (`keepSession`, `sessionStore`).
 - HEIC photos are uploaded as JPEG, decoded by the platform, or refused; the API's JPEG XL photos
   are decoded by the core where the platform cannot (`TryOnNetworkImage`).
+- studio vaai analytics (`createTryOnAnalytics`, `package:studio_vaai/analytics.dart`): the web
+  SDK's mapping of the try-on's events to the analytics catalogue, request for request (checked
+  against the web's mapper), with `StudioVaaiTryOn(analytics: …)` and the shop's own events
+  (entry point impression, cart item, order, experiment). `TryOnExperience.tryOnEvents` delivers
+  the web's `sv-try-on-*` events.
 - A headless try-on journey (`StudioVaai`, `TryOnJourney`): product, consent, photo, height and
   try-on, driven by the shared Rust SDK core through UniFFI-generated Dart bindings.
 - `IoHttpTransport` sends the requests the core builds with `dart:io`; `ScriptedApi`

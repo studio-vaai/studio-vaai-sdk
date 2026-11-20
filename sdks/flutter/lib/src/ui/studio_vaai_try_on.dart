@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../experience/devices.dart';
 import '../experience/experience.dart';
 import '../experience/product.dart';
+import '../analytics/analytics.dart';
 import '../experience/session_store.dart';
 import '../generated/state_machine.dart';
 import '../session.dart';
@@ -78,6 +79,7 @@ class StudioVaaiTryOn extends StatefulWidget {
     this.onAddToCart,
     this.onDownload,
     this.onEvent,
+    this.analytics,
     this.onError,
     this.onReadyChange,
     this.onLink,
@@ -133,6 +135,10 @@ class StudioVaaiTryOn extends StatefulWidget {
 
   /// The shopper's journey, the same facts as the web's `sv-try-on-*` events.
   final void Function(ExperienceEvent event)? onEvent;
+
+  /// studio vaai analytics ([createTryOnAnalytics]): observes the
+  /// experience's events, as the web components' `analytics` property.
+  final TryOnAnalytics? analytics;
   final void Function(Object error)? onError;
   final void Function(bool ready)? onReadyChange;
 
@@ -165,6 +171,7 @@ class StudioVaaiTryOn extends StatefulWidget {
 class _StudioVaaiTryOnState extends State<StudioVaaiTryOn> {
   TryOnExperience? _experience;
   StreamSubscription<ExperienceEvent>? _events;
+  void Function()? _stopAnalytics;
   TryOnMessages? _messages;
   (String, Map<String, String>?)? _messagesKey;
   bool _ready = false;
@@ -206,6 +213,7 @@ class _StudioVaaiTryOnState extends State<StudioVaaiTryOn> {
       _events = experience.events.listen(
         widget.onEvent == null ? null : (e) => widget.onEvent?.call(e),
       );
+      _observeAnalytics();
       experience.addListener(_changed);
       _changed();
     } catch (error) {
@@ -213,6 +221,17 @@ class _StudioVaaiTryOnState extends State<StudioVaaiTryOn> {
         widget.onError?.call(error);
       }
     }
+  }
+
+  void _observeAnalytics() {
+    _stopAnalytics?.call();
+    _stopAnalytics = null;
+    final experience = _experience, analytics = widget.analytics;
+    if (experience == null || analytics == null) return;
+    _stopAnalytics = analytics.observe((listener) {
+      final subscription = experience.tryOnEvents.listen(listener);
+      return () => unawaited(subscription.cancel());
+    });
   }
 
   void _teardown() {
@@ -224,6 +243,9 @@ class _StudioVaaiTryOnState extends State<StudioVaaiTryOn> {
     experience?.removeListener(_changed);
     _popRoute();
     experience?.dispose();
+    // After the experience's final events (a detached operation, the closed view).
+    _stopAnalytics?.call();
+    _stopAnalytics = null;
     _setReady(false);
   }
 
@@ -259,6 +281,7 @@ class _StudioVaaiTryOnState extends State<StudioVaaiTryOn> {
         experience.updateCommerce(widget.commerce);
       }
       if (oldWidget.active != widget.active) experience.setProductActive(widget.active);
+      if (oldWidget.analytics != widget.analytics) _observeAnalytics();
     }
     _revision.value++;
   }
