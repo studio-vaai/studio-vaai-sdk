@@ -52,7 +52,13 @@ export function PhotoUploadRejectedScreen({
 }: PhotoUploadRejectedScreenProps) {
   const m = useStudioVaaiUi().messages.photoUpload;
   const isModal = useStudioVaaiUi().responsive.layout === "modal";
-  const previewFrame = useNaturalAspectPreviewFrame(previewSrc, frameLock);
+  // Modal only: its body cannot scroll, so a very tall photo shrinks to fit instead of being
+  // cut off at the top (see the height step).
+  const previewFrame = useNaturalAspectPreviewFrame(
+    previewSrc,
+    frameLock,
+    isModal ? { minShrinkScale: 0 } : {},
+  );
 
   const primaryCta = (
     <Button

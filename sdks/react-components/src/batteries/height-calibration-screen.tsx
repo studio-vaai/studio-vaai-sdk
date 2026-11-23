@@ -54,7 +54,14 @@ export function HeightCalibrationScreen({
   const isModal = responsive.layout === "modal";
   const labelId = useId();
   const [valueCm, setValueCm] = useState(heightCm);
-  const previewFrame = useNaturalAspectPreviewFrame(previewSrc, frameLock);
+  // The modal body cannot scroll, so a photo taller than the dialog has to shrink all the way
+  // to fit: at the default floor a very tall upload (a phone screenshot) stayed at full column
+  // width and was cut off at the top. The sheet scrolls and keeps the default floor.
+  const previewFrame = useNaturalAspectPreviewFrame(
+    previewSrc,
+    frameLock,
+    isModal ? { minShrinkScale: 0 } : {},
+  );
 
   useEffect(() => {
     setValueCm(heightCm);
