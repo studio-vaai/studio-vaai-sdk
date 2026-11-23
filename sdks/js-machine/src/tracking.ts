@@ -162,7 +162,16 @@ function enrichSignal(signal: AnalyticsSignal, source: Step): TrackingEvent {
       };
     }
     case "height-entered": {
-      return { name: "height-entered", data: { "product-id": signal["product-id"], source } };
+      return { name: "height-entered", data: { "product-id": signal["product-id"] } };
+    }
+    case "height-step-opened": {
+      return { name: "height-step-opened", data: { "product-id": signal["product-id"], source } };
+    }
+    case "photo-rejected": {
+      return {
+        name: "photo-rejected",
+        data: { "product-id": signal["product-id"], method: signal.method },
+      };
     }
     case "variant-selection-initiated": {
       return {
@@ -174,9 +183,10 @@ function enrichSignal(signal: AnalyticsSignal, source: Step): TrackingEvent {
         },
       };
     }
+    case "variant-changed":
     case "try-on-initiated": {
       return {
-        name: "try-on-initiated",
+        name: signal.type,
         data: { "product-id": signal["product-id"], ...variantWireKeys(signal.variants) },
       };
     }
@@ -216,6 +226,22 @@ function enrichHostSignal(signal: HostAnalyticsSignal, currentStep: Step): Track
         },
       };
     }
+    case "widget-opened": {
+      return {
+        name: signal.type,
+        data: {
+          "product-id": signal["product-id"],
+          ...(signal.entry === undefined ? {} : { entry: signal.entry }),
+        },
+      };
+    }
+    case "try-on-presented":
+    case "cart-requested": {
+      return {
+        name: signal.type,
+        data: { "product-id": signal["product-id"], ...variantWireKeys(signal.variants) },
+      };
+    }
     case "intro-opened": {
       return {
         name: "intro-opened",
@@ -237,7 +263,13 @@ function enrichHostSignal(signal: HostAnalyticsSignal, currentStep: Step): Track
     case "view-closed": {
       return {
         name: "view-closed",
-        data: { "product-id": signal["product-id"], "current-step": currentStep },
+        data: {
+          "product-id": signal["product-id"],
+          "current-step": currentStep,
+          ...(signal.resultDisplayed === undefined
+            ? {}
+            : { "result-displayed": signal.resultDisplayed }),
+        },
       };
     }
     default: {
@@ -274,9 +306,75 @@ const ALL_SIGNAL_TYPES = [
   "image-upload-aborted",
   "image-uploaded",
   "height-entered",
+  "height-step-opened",
+  "photo-rejected",
+  "gated-size-selected",
   "variant-selection-initiated",
   "try-on-initiated",
+  "variant-changed",
 ] as const;
+
+const funnelFlags = {
+  "intro-opened": "reached-intro",
+  "consent-granted": "granted-consent",
+  "image-uploaded": "accepted-photo",
+  "height-entered": "confirmed-height",
+  "variant-selection-initiated": "reached-selection",
+  "try-on-initiated": "requested-try-on",
+  "try-on-presented": "presented-result",
+  "cart-requested": "requested-cart",
+} as const;
+type FunnelFlag = (typeof funnelFlags)[keyof typeof funnelFlags];
+type SummaryData = Extract<TrackingEvent, { name: "experience-summary" }>["data"];
+
+function startSummary(productId: string, entry?: string) {
+  return {
+    productId,
+    entry,
+    startedAt: performance.now(),
+    flags: new Set<FunnelFlag>(),
+    results: new Set<string>(),
+    sizes: new Set<string>(),
+    colors: new Set<string>(),
+    waists: new Set<string>(),
+    lengths: new Set<string>(),
+    timeToResult: undefined as string | undefined,
+  };
+}
+
+function timeBucket(seconds: number): string {
+  if (seconds < 10) {
+    return "lt-10s";
+  }
+  if (seconds < 30) {
+    return "10-29s";
+  }
+  if (seconds < 60) {
+    return "30-59s";
+  }
+  return seconds < 120 ? "60-119s" : "120s-plus";
+}
+
+function summaryData(scope: ReturnType<typeof startSummary>): SummaryData {
+  return {
+    "product-id": scope.productId,
+    ...(scope.entry === undefined ? {} : { entry: scope.entry }),
+    "reached-intro": scope.flags.has("reached-intro"),
+    "granted-consent": scope.flags.has("granted-consent"),
+    "accepted-photo": scope.flags.has("accepted-photo"),
+    "confirmed-height": scope.flags.has("confirmed-height"),
+    "reached-selection": scope.flags.has("reached-selection"),
+    "requested-try-on": scope.flags.has("requested-try-on"),
+    "presented-result": scope.flags.has("presented-result"),
+    "requested-cart": scope.flags.has("requested-cart"),
+    "try-on-count": Math.min(scope.results.size, 32),
+    "distinct-sizes": scope.sizes.size,
+    "distinct-colors": scope.colors.size,
+    "distinct-waists": scope.waists.size,
+    "distinct-lengths": scope.lengths.size,
+    ...(scope.timeToResult === undefined ? {} : { "time-to-result": scope.timeToResult }),
+  };
+}
 
 /**
  * Wires an actor's emitted {@link AnalyticsSignal}s into a
@@ -304,9 +402,23 @@ export function createTrackingSubscriber(
     lastObservedStep = stepFromSnapshot(snapshot);
   });
 
-  const forward = (signal: AnalyticsSignal): void => {
-    const event = enrichSignal(signal, lastObservedStep);
+  let summary: ReturnType<typeof startSummary> | undefined;
+  function observe(event: TrackingEvent): void {
+    if (event.name !== "experiment-assigned" && summary !== undefined) {
+      const productId = event.data["product-id"];
+      if (summary.productId !== productId) {
+        summary = startSummary(productId, summary.entry);
+      }
+      const flag = funnelFlags[event.name as keyof typeof funnelFlags];
+      if (flag !== undefined) {
+        summary.flags.add(flag);
+      }
+    }
     tracking.trackEvent(event);
+  }
+
+  const forward = (signal: AnalyticsSignal): void => {
+    observe(enrichSignal(signal, lastObservedStep));
   };
 
   const emitSubs = ALL_SIGNAL_TYPES.map((t) => actor.on(t, forward));
@@ -319,8 +431,41 @@ export function createTrackingSubscriber(
       }
     },
     trackHostEvent: (signal) => {
-      const event = enrichHostSignal(signal, lastObservedStep);
-      tracking.trackEvent(event);
+      if (signal.type === "widget-opened") {
+        summary = startSummary(signal["product-id"], signal.entry);
+        if (lastObservedStep === "intro") {
+          summary.flags.add("reached-intro");
+        }
+        if (lastObservedStep === "variant-selection") {
+          summary.flags.add("reached-selection");
+        }
+      }
+      if (signal.type === "try-on-presented" && summary !== undefined) {
+        if (summary.productId !== signal["product-id"]) {
+          summary = startSummary(signal["product-id"], summary.entry);
+        }
+        if (summary.results.has(signal.resultKey)) {
+          return;
+        }
+        summary.results.add(signal.resultKey);
+        summary.timeToResult ??= timeBucket((performance.now() - summary.startedAt) / 1000);
+        for (const [axis, counts] of [
+          ["size", summary.sizes],
+          ["colorway", summary.colors],
+          ["waist", summary.waists],
+          ["length", summary.lengths],
+        ] as const) {
+          const value = signal.variants[axis];
+          if (value !== undefined && counts.size < 32) {
+            counts.add(value);
+          }
+        }
+      }
+      observe(enrichHostSignal(signal, lastObservedStep));
+      if (signal.type === "view-closed" && summary !== undefined) {
+        tracking.trackEvent({ name: "experience-summary", data: summaryData(summary) });
+        summary = undefined;
+      }
     },
   };
 }

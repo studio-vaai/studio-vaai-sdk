@@ -25,22 +25,15 @@ export interface TrackFailure {
  */
 export type TrackResult = TrackSuccess | TrackFailure;
 
-/**
- * Ambient page/session metadata that decorates every event. Mirrors the Umami
- * `/api/send` payload. The fetch transport strips URL query strings and fragments.
- *
- * Browser transports auto-populate these from `window`/`document`/`navigator`
- * when fields are absent; pass overrides via {@link TrackOptions.context} for
- * SSR, web workers, or tests.
- */
+/** Optional metadata for custom tracking clients. The collector transport ignores it. */
 export interface EventContext {
-  /** Page path or URL, e.g. `/products/abc`. The fetch transport strips query strings and fragments. */
+  /** Page path or URL, e.g. `/products/abc`. */
   url?: string;
   /** Document title. */
   title?: string;
   /** Hostname seen by the visitor, e.g. `shop.example.com`. */
   hostname?: string;
-  /** Referring page URL. The fetch transport strips query strings and fragments. */
+  /** Referring page URL. */
   referrer?: string;
   /** BCP-47 language tag, e.g. `en-US`. */
   language?: string;
@@ -49,9 +42,6 @@ export interface EventContext {
 }
 
 export interface TrackOptions {
-  /**
-   * Per-call overrides merged on top of whatever the transport auto-derives.
-   * Use this to attach SSR-known values or to scrub a field for a single event.
-   */
+  /** Optional metadata passed to a custom tracking client. */
   context?: EventContext;
 }

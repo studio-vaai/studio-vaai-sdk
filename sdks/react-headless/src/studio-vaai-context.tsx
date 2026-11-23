@@ -9,7 +9,6 @@ import { useActorRef, useSelector } from "@xstate/react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 
 import { StudioVaaiProviderError, StudioVaaiProviderErrorCode } from "./errors.js";
-import { getOrCreateVisitorId } from "./visitor-id.js";
 
 export type StudioVaaiProviderInput<TLogic extends AnyActorLogic> = Omit<
   InputFrom<TLogic>,
@@ -29,11 +28,7 @@ export type SubscribeTrackingFn<TLogic extends AnyActorLogic> = (
 export interface CreateStudioVaaiContextOptions<TLogic extends AnyActorLogic> {
   /** When provided, the provider wires analytics from the actor on mount. */
   subscribeTracking?: SubscribeTrackingFn<TLogic>;
-  /**
-   * Fallback `sdkVersion` stamped on every event when callers don't pass their
-   * own via {@link StudioVaaiProviderProps.sdkVersion}. Defaults to this
-   * package's id+version.
-   */
+  /** @deprecated Analytics no longer sends an SDK version. */
   defaultSdkVersion?: string;
 }
 
@@ -69,17 +64,9 @@ export interface StudioVaaiProviderProps<TLogic extends AnyActorLogic> {
    * collector transport using the client's existing key; no lookup is needed.
    */
   tracking?: TrackingClient;
-  /**
-   * SDK version stamped on every event (e.g. `"@studio-vaai/react-components@0.3.1"`).
-   * Higher SDK layers pass their own version so the analytics view reflects what
-   * merchants actually install. Falls back to `defaultSdkVersion` from the
-   * context factory.
-   */
+  /** @deprecated Analytics no longer sends an SDK version. */
   sdkVersion?: string;
 }
-
-/** Fallback `sdkVersion` when no caller supplies one. Mirrors package.json. */
-const DEFAULT_SDK_VERSION = "@studio-vaai/react-headless@0.3.1" as const;
 
 const noopHostEvent: (_signal: HostAnalyticsSignal) => void = () => {
   /* no subscriber wired yet */
@@ -104,7 +91,6 @@ export function createStudioVaaiContext<TLogic extends AnyActorLogic>(
     input,
     logic = defaultLogic,
     tracking: providedTracking,
-    sdkVersion,
   }: StudioVaaiProviderProps<TLogic>): JSX.Element {
     // `applyClientInterceptors` lets dev tools (e.g. js-debugger) wrap the client without modifying provider call sites.
     // Memoize so React-only consumers via `useStudioVaaiClient` see a stable reference across renders.
@@ -118,16 +104,10 @@ export function createStudioVaaiContext<TLogic extends AnyActorLogic>(
       input: mergedInput,
     });
 
-    const effectiveSdkVersion = sdkVersion ?? options.defaultSdkVersion ?? DEFAULT_SDK_VERSION;
-    const tracking = useMemo<TrackingClient>(() => {
-      if (providedTracking !== undefined) {
-        return providedTracking;
-      }
-      return wrappedClient.analytics.createTrackingClient({
-        sdkVersion: effectiveSdkVersion,
-        distinctId: getOrCreateVisitorId,
-      });
-    }, [providedTracking, wrappedClient, effectiveSdkVersion]);
+    const tracking = useMemo(
+      () => providedTracking ?? wrappedClient.analytics.createTrackingClient({}),
+      [providedTracking, wrappedClient],
+    );
 
     // Host-event forward indirected through a ref so the function identity
     // stays stable across subscription lifecycle changes — consumers can

@@ -2,12 +2,10 @@ import type { AnalyticsOptions, TryOnAnalytics } from "@studio-vaai/core/analyti
 
 import { createTryOnAnalytics as createCoreAnalytics } from "@studio-vaai/core/analytics";
 
-declare const STUDIO_VAAI_REACT_VERSION: string;
-
 export function createTryOnAnalytics(
   options: Omit<AnalyticsOptions, "sdkVersion">,
 ): TryOnAnalytics {
-  const analytics = createCoreAnalytics({ ...options, sdkVersion: STUDIO_VAAI_REACT_VERSION });
+  const analytics = createCoreAnalytics(options);
   return {
     ...analytics,
     dispose() {

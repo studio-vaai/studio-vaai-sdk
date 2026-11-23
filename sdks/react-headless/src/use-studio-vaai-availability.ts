@@ -106,6 +106,7 @@ export function useStudioVaaiAvailability(
   // Survives the effect re-running (it re-runs when the session resolves, to upgrade a
   // bucketed visitor). `true` once the server has answered at all, for this hook instance.
   const decidedRef = useRef(false);
+  const assignmentTracked = useRef(false);
 
   useEffect(() => {
     // One flag for the whole probe, not per attempt: unmount (or a dep change) has to stop
@@ -183,13 +184,13 @@ export function useStudioVaaiAvailability(
         }
         decidedRef.current = true;
         setStatus(decision.enabled ? "available" : "unavailable");
-        // Record the assignment once, via the same Umami transport the rest
-        // of the SDK uses — but only for anonymous visitors. A returning
+        // Record one eligible assignment for this hook instance. A returning
         // visitor (session restored, or a stored session still restoring)
         // bypasses the experiment, so logging an arm for them would mislabel
         // the data. Fire-and-forget; never throws.
         const returning = session !== undefined || sessionPersistence.read() !== undefined;
-        if (!returning) {
+        if (!returning && !assignmentTracked.current) {
+          assignmentTracked.current = true;
           tracking.trackEvent({
             name: "experiment-assigned",
             data: { experiment: "try-on-enabled", variant: decision.variant },

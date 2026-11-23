@@ -1,4 +1,4 @@
-export { createTryOnAnalytics } from "./analytics.js";
+export { createTryOnAnalytics } from "@studio-vaai/core/analytics";
 export {
   StudioVaaiTryOn,
   type StudioVaaiTryOnProps,

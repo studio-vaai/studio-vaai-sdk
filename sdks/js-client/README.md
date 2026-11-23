@@ -69,17 +69,14 @@ Create a tracking client locally using the API client's existing key and fetch
 implementation:
 
 ```ts
-const tracking = client.analytics.createTrackingClient({
-  sdkVersion: "my-storefront@1.0.0",
-  distinctId: "anonymous-visitor-id",
-});
+const tracking = client.analytics.createTrackingClient({});
 tracking.trackEvent({
   name: "cart-item-added",
   data: { "product-id": "longsleeve", "variant-size": "M" },
 });
 ```
 
-Events POST immediately to `https://a.studio-vaai.com/api/send` using the existing
+Events POST immediately to `https://a.studio-vaai.com/v2/events` using the existing
 client API key. Browser collection omits shopper credentials and cookies.
 `trackEvent` reports whether delivery was queued, not acknowledged.
 

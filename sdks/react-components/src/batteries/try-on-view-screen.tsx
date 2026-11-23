@@ -141,6 +141,8 @@ export interface TryOnViewScreenProps {
    * `onTryOnClose` when the sheet dismisses from this screen.
    */
   onShownAttributesChange?: (attributes: VariantAttributes) => void;
+  /** Reports an active result after its image loaded. */
+  onResultPresented?: (slide: TryOnViewCarouselSlide) => void;
   /**
    * Fired when the shopper commits a variant that has NO generated try-on yet — the host
    * should render one (e.g. re-run the try-on pipeline). Combinations that already have a
@@ -357,6 +359,7 @@ export function TryOnViewScreen({
   onClose,
   onAddToCart,
   onShownAttributesChange,
+  onResultPresented,
   slideOverlayColor,
   fitIntelligence,
   lastTryOnFailure,
@@ -1022,6 +1025,9 @@ export function TryOnViewScreen({
               const img = e.currentTarget;
               if (img.naturalWidth > 0 && img.naturalHeight > 0) {
                 setSlideAspect(img.naturalWidth / img.naturalHeight);
+                if (!busy && activeSlide?.src === activeSrc) {
+                  onResultPresented?.(activeSlide);
+                }
               }
             }}
           />

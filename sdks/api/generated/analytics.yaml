@@ -1,19 +1,20 @@
 openapi: 3.0.0
 info:
   title: studio vaai Analytics API
-  version: '2026-11-04'
-  summary: Collect storefront and try-on events.
+  version: '2026-11-20'
+  summary: Collect cookieless storefront and try-on event counts.
 tags:
   - name: analytics
 paths:
-  /api/send:
+  /v2/events:
     post:
       operationId: sendAnalyticsEvent
       summary: Send an analytics event
       description: |-
-        Send storefront and try-on events with the same X-Client-Api-Key used by the business API. The API key identifies the shop. Omit shopper credentials and cookies.
+        Send storefront and try-on events with the same X-Client-Api-Key used by the business API.
+        Omit shopper credentials, cookies and browser context. An event ID identifies one occurrence.
 
-        See [Analytics](/api/analytics) for integration guidance and the event catalogue.
+        See [Analytics](/analytics) for integration guidance and the event catalogue.
       parameters:
         - name: X-Client-Api-Key
           in: header
@@ -25,16 +26,52 @@ paths:
           description: 'There is no content to send for this request, but the headers may be useful. '
         '400':
           description: The server could not understand the request due to invalid syntax.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsEventProblem'
         '401':
           description: Access is unauthorized.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsEventProblem'
         '403':
           description: Access is forbidden.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsEventProblem'
+        '409':
+          description: The request conflicts with the current state of the server.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsEventProblem'
         '413':
           description: Client error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsEventProblem'
+        '415':
+          description: Client error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsEventProblem'
         '502':
           description: Server error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsEventProblem'
         '503':
           description: Service unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsEventProblem'
       tags:
         - analytics
       requestBody:
@@ -47,39 +84,11 @@ security:
   - {}
 components:
   schemas:
-    AnalyticsContext:
-      type: object
-      properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
     AnalyticsEvent:
       anyOf:
         - $ref: '#/components/schemas/EntrypointImpression'
         - $ref: '#/components/schemas/EntrypointClicked'
+        - $ref: '#/components/schemas/WidgetOpened'
         - $ref: '#/components/schemas/IntroOpened'
         - $ref: '#/components/schemas/ConsentGranted'
         - $ref: '#/components/schemas/ImageRecordInitiated'
@@ -87,37 +96,53 @@ components:
         - $ref: '#/components/schemas/ImageUploadInitiated'
         - $ref: '#/components/schemas/ImageUploadAborted'
         - $ref: '#/components/schemas/ImageUploaded'
+        - $ref: '#/components/schemas/PhotoRejected'
         - $ref: '#/components/schemas/HeightEntered'
+        - $ref: '#/components/schemas/HeightStepOpened'
         - $ref: '#/components/schemas/VariantSelectionInitiated'
+        - $ref: '#/components/schemas/VariantChanged'
         - $ref: '#/components/schemas/TryOnInitiated'
         - $ref: '#/components/schemas/GatedSizeSelected'
+        - $ref: '#/components/schemas/TryOnPresented'
+        - $ref: '#/components/schemas/ViewClosed'
+        - $ref: '#/components/schemas/ExperienceOperationFailed'
+        - $ref: '#/components/schemas/ExperienceSummary'
+        - $ref: '#/components/schemas/CartRequested'
         - $ref: '#/components/schemas/CartItemAdded'
         - $ref: '#/components/schemas/OrderPlaced'
-        - $ref: '#/components/schemas/ViewClosed'
         - $ref: '#/components/schemas/ExperimentAssigned'
-        - $ref: '#/components/schemas/ExperienceOperationFailed'
-      description: Named events supported by studio vaai integrations. Data values are flat string, number, or boolean properties; the event definitions specify the supported properties.
+      description: An event occurrence, with only its declared data fields.
+    AnalyticsEventProblem:
+      type: object
+      required:
+        - title
+        - kind
+      properties:
+        title:
+          type: string
+        kind:
+          type: string
+          enum:
+            - invalid-event
+            - invalid-client-key
+            - origin-forbidden
+            - event-id-conflict
+            - event-too-large
+            - unsupported-media-type
+            - upstream-delivery-failed
+            - collector-unavailable
     AnalyticsEventRequest:
       type: object
       required:
-        - type
-        - payload
+        - eventId
+        - event
       properties:
-        type:
+        eventId:
           type: string
-          enum:
-            - event
-        payload:
+          format: uuid
+          description: UUID v4 generated for this occurrence only. Reuse only when repeating the same request.
+        event:
           $ref: '#/components/schemas/AnalyticsEvent'
-      example:
-        type: event
-        payload:
-          hostname: shop.example.com
-          url: /products/longsleeve
-          name: try-on-initiated
-          data:
-            product-id: longsleeve
-            variant-size: M
     AnalyticsImageSource:
       type: string
       enum:
@@ -125,19 +150,20 @@ components:
         - variant-selection
         - image-rejection
         - height
-      description: Where the user starts selecting or taking a photo.
+    AnalyticsLabel:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: ^[A-Za-z0-9][A-Za-z0-9_.:-]*$
     AnalyticsProductData:
       type: object
       required:
         - product-id
       properties:
         product-id:
-          type: string
-          description: Product associated with this event.
-          example: longsleeve
-        sdk-version:
-          type: string
-          description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+          allOf:
+            - $ref: '#/components/schemas/CatalogKey'
+          description: Catalog product associated with this event.
     AnalyticsStep:
       type: string
       enum:
@@ -149,142 +175,87 @@ components:
         - height
         - variant-selection
         - try-on
-      description: A step in the user flow.
     AnalyticsVariantData:
       type: object
       required:
         - product-id
       properties:
         product-id:
-          type: string
-          description: Product associated with this event.
-          example: longsleeve
-        sdk-version:
-          type: string
-          description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+          allOf:
+            - $ref: '#/components/schemas/CatalogKey'
+          description: Catalog product associated with this event.
+        variant-id:
+          allOf:
+            - $ref: '#/components/schemas/CatalogKey'
+          description: Canonical variant ID, where supplied by the SDK.
         variant-size:
-          type: string
-          description: Selected size, if the product has a size axis.
+          allOf:
+            - $ref: '#/components/schemas/CatalogKey'
+          description: Catalog size, colorway, waist or length supplied by an existing host callback.
         variant-colorway:
-          type: string
-          description: Selected colorway, if the product has a colorway axis.
-      allOf:
-        - type: object
-          additionalProperties:
-            type: string
-      description: Additional variant-<axis> string properties describe the selected variant, for example variant-colorway or variant-length.
+          $ref: '#/components/schemas/CatalogKey'
+        variant-waist:
+          $ref: '#/components/schemas/CatalogKey'
+        variant-length:
+          $ref: '#/components/schemas/CatalogKey'
+    CappedCount:
+      type: integer
+      format: int32
+      minimum: 0
+      maximum: 32
     CartItemAdded:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
             - cart-item-added
         data:
           $ref: '#/components/schemas/AnalyticsVariantData'
-      description: A product variant is successfully added to the cart.
-      x-event-group: Cart & orders
+      description: The host reports a successful cart addition.
+      x-event-group: Commerce
+    CartRequested:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        name:
+          type: string
+          enum:
+            - cart-requested
+        data:
+          $ref: '#/components/schemas/AnalyticsVariantData'
+      description: The widget hands a cart request to the host.
+      x-event-group: Commerce
+    CatalogKey:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: ^[A-Za-z0-9][A-Za-z0-9_.:-]*$
     ConsentGranted:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
             - consent-granted
         data:
           $ref: '#/components/schemas/AnalyticsProductData'
-      description: The shopper consents to processing their photo and body measurements. Create the session separately.
-      x-event-group: Entry & consent
+      description: The widget acknowledges the photo and body processing consent action.
+      x-event-group: Setup
     EntrypointClicked:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
@@ -293,58 +264,22 @@ components:
           type: object
           properties:
             product-id:
-              type: string
-              description: Product associated with this event.
-              example: longsleeve
-            sdk-version:
-              type: string
-              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
             entry:
-              type: string
-              description: Merchant-defined entrypoint placement.
-            subentry:
-              type: string
-              description: Optional finer-grained placement.
-            current-step:
-              $ref: '#/components/schemas/AnalyticsStep'
+              $ref: '#/components/schemas/AnalyticsLabel'
           required:
             - product-id
             - entry
-            - current-step
-      description: The shopper clicks a try-on entrypoint to open or resume the flow.
-      x-event-group: Entry & consent
+      description: A try-on entry point activates.
+      x-event-group: Storefront
     EntrypointImpression:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
@@ -353,52 +288,22 @@ components:
           type: object
           properties:
             product-id:
-              type: string
-              description: Product associated with this event.
-              example: longsleeve
-            sdk-version:
-              type: string
-              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
             entry:
-              type: string
-              description: Merchant-defined entrypoint placement, for example pdp-button.
+              $ref: '#/components/schemas/AnalyticsLabel'
           required:
             - product-id
             - entry
-      description: A try-on button or link becomes visible.
-      x-event-group: Entry & consent
+      description: A try-on entry point becomes visible.
+      x-event-group: Storefront
     ExperienceOperationFailed:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
@@ -407,18 +312,31 @@ components:
           type: object
           properties:
             product-id:
-              type: string
-              description: Product associated with this event.
-              example: longsleeve
-            sdk-version:
-              type: string
-              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
             work:
               type: string
+              enum:
+                - session
+                - height
+                - camera
+                - capture
+                - picker
+                - photo
+                - try-on
             outcome:
               type: string
+              enum:
+                - failed
+                - uncertain
+                - detached
+                - in_progress
             reason:
               type: string
+              enum:
+                - deadline
+                - slow
             current-step:
               $ref: '#/components/schemas/AnalyticsStep'
           required:
@@ -426,7 +344,73 @@ components:
             - work
             - outcome
             - current-step
-      description: A try-on operation failed or its outcome could not be confirmed.
+      description: An operation fails, detaches or has an unknown outcome. Slow and deadline signals can be counted independently.
+      x-event-group: Try-on
+    ExperienceSummary:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        name:
+          type: string
+          enum:
+            - experience-summary
+        data:
+          type: object
+          properties:
+            product-id:
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
+            entry:
+              $ref: '#/components/schemas/AnalyticsLabel'
+            reached-intro:
+              type: boolean
+            granted-consent:
+              type: boolean
+            accepted-photo:
+              type: boolean
+            confirmed-height:
+              type: boolean
+            reached-selection:
+              type: boolean
+            requested-try-on:
+              type: boolean
+            presented-result:
+              type: boolean
+            requested-cart:
+              type: boolean
+            try-on-count:
+              $ref: '#/components/schemas/CappedCount'
+            distinct-sizes:
+              $ref: '#/components/schemas/CappedCount'
+            distinct-colors:
+              $ref: '#/components/schemas/CappedCount'
+            distinct-waists:
+              $ref: '#/components/schemas/CappedCount'
+            distinct-lengths:
+              $ref: '#/components/schemas/CappedCount'
+            time-to-result:
+              type: string
+              enum:
+                - lt-10s
+                - 10-29s
+                - 30-59s
+                - 60-119s
+                - 120s-plus
+          required:
+            - product-id
+            - reached-intro
+            - granted-consent
+            - accepted-photo
+            - confirmed-height
+            - reached-selection
+            - requested-try-on
+            - presented-result
+            - requested-cart
+            - try-on-count
+      description: A bounded summary for one observed open and product.
       x-event-group: Try-on
     ExperimentAssigned:
       type: object
@@ -434,32 +418,6 @@ components:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
@@ -476,13 +434,10 @@ components:
               enum:
                 - enabled
                 - disabled
-            sdk-version:
-              type: string
-              description: SDK package and version, when applicable.
           required:
             - experiment
             - variant
-      description: A visitor receives a rollout assignment. Send once per assignment using the same anonymous visitor ID.
+      description: An eligible rollout decision is observed.
       x-event-group: Rollout
     GatedSizeSelected:
       type: object
@@ -490,144 +445,58 @@ components:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
             - gated-size-selected
         data:
-          type: object
-          properties:
-            product-id:
-              type: string
-              description: Product associated with this event.
-              example: longsleeve
-            sdk-version:
-              type: string
-              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
-            variant-size:
-              type: string
-            gate:
-              type: string
-              enum:
-                - too_small
-                - too_large
-          required:
-            - product-id
-            - variant-size
-            - gate
-      description: The shopper selects a size marked too small or too large.
-      x-event-group: Selection & try-on
+          $ref: '#/components/schemas/AnalyticsProductData'
+      description: The shopper selects a fit-gated size.
+      x-event-group: Try-on
     HeightEntered:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
             - height-entered
         data:
+          $ref: '#/components/schemas/AnalyticsProductData'
+      description: The widget acknowledges a height confirmation.
+      x-event-group: Setup
+    HeightStepOpened:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        name:
+          type: string
+          enum:
+            - height-step-opened
+        data:
           type: object
           properties:
             product-id:
-              type: string
-              description: Product associated with this event.
-              example: longsleeve
-            sdk-version:
-              type: string
-              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
             source:
               $ref: '#/components/schemas/AnalyticsStep'
           required:
             - product-id
             - source
-      description: The shopper confirms or updates their height.
-      x-event-group: Photo & height
+      description: The widget opens the height step.
+      x-event-group: Setup
     ImageRecordAborted:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
@@ -636,51 +505,22 @@ components:
           type: object
           properties:
             product-id:
-              type: string
-              description: Product associated with this event.
-              example: longsleeve
-            sdk-version:
-              type: string
-              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
             source:
               $ref: '#/components/schemas/AnalyticsImageSource'
           required:
             - product-id
             - source
-      description: The shopper leaves the camera without submitting a photo.
-      x-event-group: Photo & height
+      description: The shopper cancels the camera flow.
+      x-event-group: Setup
     ImageRecordInitiated:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
@@ -689,51 +529,22 @@ components:
           type: object
           properties:
             product-id:
-              type: string
-              description: Product associated with this event.
-              example: longsleeve
-            sdk-version:
-              type: string
-              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
             source:
               $ref: '#/components/schemas/AnalyticsImageSource'
           required:
             - product-id
             - source
-      description: The shopper enters the camera flow.
-      x-event-group: Photo & height
+      description: The shopper launches the camera flow.
+      x-event-group: Setup
     ImageUploadAborted:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
@@ -742,51 +553,22 @@ components:
           type: object
           properties:
             product-id:
-              type: string
-              description: Product associated with this event.
-              example: longsleeve
-            sdk-version:
-              type: string
-              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
             source:
               $ref: '#/components/schemas/AnalyticsImageSource'
           required:
             - product-id
             - source
-      description: The photo picker closes without a selection.
-      x-event-group: Photo & height
+      description: The shopper cancels the photo picker.
+      x-event-group: Setup
     ImageUploadInitiated:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
@@ -795,51 +577,22 @@ components:
           type: object
           properties:
             product-id:
-              type: string
-              description: Product associated with this event.
-              example: longsleeve
-            sdk-version:
-              type: string
-              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
             source:
               $ref: '#/components/schemas/AnalyticsImageSource'
           required:
             - product-id
             - source
-      description: The photo picker opens.
-      x-event-group: Photo & height
+      description: The shopper launches the photo picker.
+      x-event-group: Setup
     ImageUploaded:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
@@ -848,12 +601,9 @@ components:
           type: object
           properties:
             product-id:
-              type: string
-              description: Product associated with this event.
-              example: longsleeve
-            sdk-version:
-              type: string
-              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
             image-source:
               type: string
               enum:
@@ -863,40 +613,14 @@ components:
           required:
             - product-id
             - image-source
-      description: Photo processing completes; the photo is ready for height confirmation.
-      x-event-group: Photo & height
+      description: Photo processing succeeds.
+      x-event-group: Setup
     IntroOpened:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
@@ -905,131 +629,131 @@ components:
           type: object
           properties:
             product-id:
-              type: string
-              description: Product associated with this event.
-              example: longsleeve
-            sdk-version:
-              type: string
-              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
             source:
               $ref: '#/components/schemas/AnalyticsStep'
           required:
             - product-id
             - source
-      description: The introduction opens. Use entry as the source on first open.
-      x-event-group: Entry & consent
+      description: The introduction opens.
+      x-event-group: Setup
     OrderPlaced:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
             - order-placed
         data:
           $ref: '#/components/schemas/AnalyticsVariantData'
-      description: A purchase completes. Send once per product variant.
-      x-event-group: Cart & orders
+      description: The host reports one purchased variant.
+      x-event-group: Commerce
+    PhotoRejected:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        name:
+          type: string
+          enum:
+            - photo-rejected
+        data:
+          type: object
+          properties:
+            product-id:
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
+            method:
+              type: string
+              enum:
+                - camera
+                - picker
+          required:
+            - product-id
+            - method
+      description: Photo processing rejects the photo.
+      x-event-group: Setup
     TryOnInitiated:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
             - try-on-initiated
         data:
+          type: object
+          properties:
+            product-id:
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
+            variant-id:
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Canonical variant ID, where supplied by the SDK.
+            variant-size:
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog size, colorway, waist or length supplied by an existing host callback.
+            variant-colorway:
+              $ref: '#/components/schemas/CatalogKey'
+            variant-waist:
+              $ref: '#/components/schemas/CatalogKey'
+            variant-length:
+              $ref: '#/components/schemas/CatalogKey'
+            origin:
+              type: string
+              enum:
+                - shopper
+                - automatic
+          required:
+            - product-id
+      description: The widget requests a try-on.
+      x-event-group: Try-on
+    TryOnPresented:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        name:
+          type: string
+          enum:
+            - try-on-presented
+        data:
           $ref: '#/components/schemas/AnalyticsVariantData'
-      description: A try-on starts for the selected variant.
-      x-event-group: Selection & try-on
+      description: A distinct try-on result is shown in the widget.
+      x-event-group: Try-on
+    VariantChanged:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        name:
+          type: string
+          enum:
+            - variant-changed
+        data:
+          $ref: '#/components/schemas/AnalyticsVariantData'
+      description: The selection changes to a different variant.
+      x-event-group: Try-on
     VariantSelectionInitiated:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
@@ -1038,12 +762,9 @@ components:
           type: object
           properties:
             product-id:
-              type: string
-              description: Product associated with this event.
-              example: longsleeve
-            sdk-version:
-              type: string
-              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
             source:
               $ref: '#/components/schemas/AnalyticsStep'
             via:
@@ -1054,40 +775,14 @@ components:
           required:
             - product-id
             - source
-      description: Size and colour selection opens.
-      x-event-group: Selection & try-on
+      description: The variant selection screen opens.
+      x-event-group: Try-on
     ViewClosed:
       type: object
       required:
         - name
         - data
       properties:
-        hostname:
-          type: string
-          maxLength: 100
-          description: Storefront hostname, without a scheme or path.
-          example: shop.example.com
-        url:
-          type: string
-          description: Page path or URL. Prefer a path without sensitive query parameters.
-          example: /products/longsleeve
-        id:
-          type: string
-          description: Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-        language:
-          type: string
-          maxLength: 35
-          description: Browser language, for example en-GB.
-        screen:
-          type: string
-          maxLength: 11
-          description: Screen dimensions, for example 390x844.
-        title:
-          type: string
-          description: Page title.
-        referrer:
-          type: string
-          description: Referring page path or URL.
         name:
           type: string
           enum:
@@ -1096,19 +791,41 @@ components:
           type: object
           properties:
             product-id:
-              type: string
-              description: Product associated with this event.
-              example: longsleeve
-            sdk-version:
-              type: string
-              description: SDK package and version, when using an SDK. Custom integrations may omit this property.
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
             current-step:
               $ref: '#/components/schemas/AnalyticsStep'
+            result-displayed:
+              type: boolean
           required:
             - product-id
             - current-step
-      description: The try-on view closes; include the current step.
-      x-event-group: Selection & try-on
+      description: An open widget closes.
+      x-event-group: Try-on
+    WidgetOpened:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        name:
+          type: string
+          enum:
+            - widget-opened
+        data:
+          type: object
+          properties:
+            product-id:
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
+            entry:
+              $ref: '#/components/schemas/AnalyticsLabel'
+          required:
+            - product-id
+      description: A widget opens or resumes.
+      x-event-group: Storefront
 servers:
   - url: https://a.studio-vaai.com
     description: Analytics

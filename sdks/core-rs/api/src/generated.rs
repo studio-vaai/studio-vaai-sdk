@@ -1920,14 +1920,9 @@ impl crate::runtime::WireModel for TryOnGarmentTooLarge {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct EntrypointImpressionData {
-    /// Product associated with this event.
+    /// Catalog product associated with this event.
     #[serde(rename = "product-id")]
     pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
-    /// Merchant-defined entrypoint placement, for example pdp-button.
     #[serde(rename = "entry")]
     pub entry: String,
 }
@@ -1937,38 +1932,10 @@ impl crate::runtime::WireModel for EntrypointImpressionData {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
-/// A try-on button or link becomes visible.
+/// A try-on entry point becomes visible.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct EntrypointImpression {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data")]
     pub data: EntrypointImpressionData,
 }
@@ -1978,7 +1945,63 @@ impl crate::runtime::WireModel for EntrypointImpression {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
-/// A step in the user flow.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct EntrypointClickedData {
+    /// Catalog product associated with this event.
+    #[serde(rename = "product-id")]
+    pub product_id: String,
+    #[serde(rename = "entry")]
+    pub entry: String,
+}
+
+impl crate::runtime::WireModel for EntrypointClickedData {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
+/// A try-on entry point activates.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct EntrypointClicked {
+    #[serde(rename = "data")]
+    pub data: EntrypointClickedData,
+}
+
+impl crate::runtime::WireModel for EntrypointClicked {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "entrypoint-clicked")];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct WidgetOpenedData {
+    /// Catalog product associated with this event.
+    #[serde(rename = "product-id")]
+    pub product_id: String,
+    #[serde(rename = "entry", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub entry: Option<String>,
+}
+
+impl crate::runtime::WireModel for WidgetOpenedData {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
+/// A widget opens or resumes.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct WidgetOpened {
+    #[serde(rename = "data")]
+    pub data: WidgetOpenedData,
+}
+
+impl crate::runtime::WireModel for WidgetOpened {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "widget-opened")];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum AnalyticsStep {
@@ -2050,81 +2073,10 @@ impl<'de> serde::Deserialize<'de> for AnalyticsStep {
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct EntrypointClickedData {
-    /// Product associated with this event.
-    #[serde(rename = "product-id")]
-    pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
-    /// Merchant-defined entrypoint placement.
-    #[serde(rename = "entry")]
-    pub entry: String,
-    /// Optional finer-grained placement.
-    #[serde(rename = "subentry", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub subentry: Option<String>,
-    #[serde(rename = "current-step")]
-    pub current_step: AnalyticsStep,
-}
-
-impl crate::runtime::WireModel for EntrypointClickedData {
-    const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
-    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("current-step", AnalyticsStep::KNOWN)];
-}
-
-/// The shopper clicks a try-on entrypoint to open or resume the flow.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct EntrypointClicked {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
-    #[serde(rename = "data")]
-    pub data: EntrypointClickedData,
-}
-
-impl crate::runtime::WireModel for EntrypointClicked {
-    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "entrypoint-clicked")];
-    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct IntroOpenedData {
-    /// Product associated with this event.
+    /// Catalog product associated with this event.
     #[serde(rename = "product-id")]
     pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
     #[serde(rename = "source")]
     pub source: AnalyticsStep,
 }
@@ -2134,38 +2086,10 @@ impl crate::runtime::WireModel for IntroOpenedData {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("source", AnalyticsStep::KNOWN)];
 }
 
-/// The introduction opens. Use entry as the source on first open.
+/// The introduction opens.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct IntroOpened {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data")]
     pub data: IntroOpenedData,
 }
@@ -2178,13 +2102,9 @@ impl crate::runtime::WireModel for IntroOpened {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct AnalyticsProductData {
-    /// Product associated with this event.
+    /// Catalog product associated with this event.
     #[serde(rename = "product-id")]
     pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
 }
 
 impl crate::runtime::WireModel for AnalyticsProductData {
@@ -2192,38 +2112,10 @@ impl crate::runtime::WireModel for AnalyticsProductData {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
-/// The shopper consents to processing their photo and body measurements. Create the session separately.
+/// The widget acknowledges the photo and body processing consent action.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ConsentGranted {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data")]
     pub data: AnalyticsProductData,
 }
@@ -2233,7 +2125,6 @@ impl crate::runtime::WireModel for ConsentGranted {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
-/// Where the user starts selecting or taking a photo.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum AnalyticsImageSource {
@@ -2290,13 +2181,9 @@ impl<'de> serde::Deserialize<'de> for AnalyticsImageSource {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ImageRecordInitiatedData {
-    /// Product associated with this event.
+    /// Catalog product associated with this event.
     #[serde(rename = "product-id")]
     pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
     #[serde(rename = "source")]
     pub source: AnalyticsImageSource,
 }
@@ -2306,38 +2193,10 @@ impl crate::runtime::WireModel for ImageRecordInitiatedData {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("source", AnalyticsImageSource::KNOWN)];
 }
 
-/// The shopper enters the camera flow.
+/// The shopper launches the camera flow.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ImageRecordInitiated {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data")]
     pub data: ImageRecordInitiatedData,
 }
@@ -2350,13 +2209,9 @@ impl crate::runtime::WireModel for ImageRecordInitiated {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ImageRecordAbortedData {
-    /// Product associated with this event.
+    /// Catalog product associated with this event.
     #[serde(rename = "product-id")]
     pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
     #[serde(rename = "source")]
     pub source: AnalyticsImageSource,
 }
@@ -2366,38 +2221,10 @@ impl crate::runtime::WireModel for ImageRecordAbortedData {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("source", AnalyticsImageSource::KNOWN)];
 }
 
-/// The shopper leaves the camera without submitting a photo.
+/// The shopper cancels the camera flow.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ImageRecordAborted {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data")]
     pub data: ImageRecordAbortedData,
 }
@@ -2410,13 +2237,9 @@ impl crate::runtime::WireModel for ImageRecordAborted {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ImageUploadInitiatedData {
-    /// Product associated with this event.
+    /// Catalog product associated with this event.
     #[serde(rename = "product-id")]
     pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
     #[serde(rename = "source")]
     pub source: AnalyticsImageSource,
 }
@@ -2426,38 +2249,10 @@ impl crate::runtime::WireModel for ImageUploadInitiatedData {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("source", AnalyticsImageSource::KNOWN)];
 }
 
-/// The photo picker opens.
+/// The shopper launches the photo picker.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ImageUploadInitiated {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data")]
     pub data: ImageUploadInitiatedData,
 }
@@ -2470,13 +2265,9 @@ impl crate::runtime::WireModel for ImageUploadInitiated {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ImageUploadAbortedData {
-    /// Product associated with this event.
+    /// Catalog product associated with this event.
     #[serde(rename = "product-id")]
     pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
     #[serde(rename = "source")]
     pub source: AnalyticsImageSource,
 }
@@ -2486,38 +2277,10 @@ impl crate::runtime::WireModel for ImageUploadAbortedData {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("source", AnalyticsImageSource::KNOWN)];
 }
 
-/// The photo picker closes without a selection.
+/// The shopper cancels the photo picker.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ImageUploadAborted {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data")]
     pub data: ImageUploadAbortedData,
 }
@@ -2579,13 +2342,9 @@ impl<'de> serde::Deserialize<'de> for ImageUploadedDataImageSource {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ImageUploadedData {
-    /// Product associated with this event.
+    /// Catalog product associated with this event.
     #[serde(rename = "product-id")]
     pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
     #[serde(rename = "image-source")]
     pub image_source: ImageUploadedDataImageSource,
 }
@@ -2595,38 +2354,10 @@ impl crate::runtime::WireModel for ImageUploadedData {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("image-source", ImageUploadedDataImageSource::KNOWN)];
 }
 
-/// Photo processing completes; the photo is ready for height confirmation.
+/// Photo processing succeeds.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ImageUploaded {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data")]
     pub data: ImageUploadedData,
 }
@@ -2636,63 +2367,117 @@ impl crate::runtime::WireModel for ImageUploaded {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum PhotoRejectedDataMethod {
+    /// `camera`
+    Camera,
+    /// `picker`
+    Picker,
+    /// A value this client does not know yet.
+    Unknown { value: String },
+}
+
+impl PhotoRejectedDataMethod {
+    /// The value on the wire.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Camera => "camera",
+            Self::Picker => "picker",
+            Self::Unknown { value } => value,
+        }
+    }
+
+    pub(crate) const KNOWN: &'static [&'static str] = &["camera", "picker"];
+
+    pub fn from_wire(value: &str) -> Self {
+        match value {
+            "camera" => Self::Camera,
+            "picker" => Self::Picker,
+            other => Self::Unknown { value: other.to_owned() },
+        }
+    }
+}
+
+impl serde::Serialize for PhotoRejectedDataMethod {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PhotoRejectedDataMethod {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = <std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
+        Ok(Self::from_wire(&value))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct HeightEnteredData {
-    /// Product associated with this event.
+pub struct PhotoRejectedData {
+    /// Catalog product associated with this event.
     #[serde(rename = "product-id")]
     pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
-    #[serde(rename = "source")]
-    pub source: AnalyticsStep,
+    #[serde(rename = "method")]
+    pub method: PhotoRejectedDataMethod,
 }
 
-impl crate::runtime::WireModel for HeightEnteredData {
+impl crate::runtime::WireModel for PhotoRejectedData {
     const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
-    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("source", AnalyticsStep::KNOWN)];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("method", PhotoRejectedDataMethod::KNOWN)];
 }
 
-/// The shopper confirms or updates their height.
+/// Photo processing rejects the photo.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct PhotoRejected {
+    #[serde(rename = "data")]
+    pub data: PhotoRejectedData,
+}
+
+impl crate::runtime::WireModel for PhotoRejected {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "photo-rejected")];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
+/// The widget acknowledges a height confirmation.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct HeightEntered {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data")]
-    pub data: HeightEnteredData,
+    pub data: AnalyticsProductData,
 }
 
 impl crate::runtime::WireModel for HeightEntered {
     const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "height-entered")];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct HeightStepOpenedData {
+    /// Catalog product associated with this event.
+    #[serde(rename = "product-id")]
+    pub product_id: String,
+    #[serde(rename = "source")]
+    pub source: AnalyticsStep,
+}
+
+impl crate::runtime::WireModel for HeightStepOpenedData {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("source", AnalyticsStep::KNOWN)];
+}
+
+/// The widget opens the height step.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct HeightStepOpened {
+    #[serde(rename = "data")]
+    pub data: HeightStepOpenedData,
+}
+
+impl crate::runtime::WireModel for HeightStepOpened {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "height-step-opened")];
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
@@ -2744,13 +2529,9 @@ impl<'de> serde::Deserialize<'de> for VariantSelectionInitiatedDataVia {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct VariantSelectionInitiatedData {
-    /// Product associated with this event.
+    /// Catalog product associated with this event.
     #[serde(rename = "product-id")]
     pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
     #[serde(rename = "source")]
     pub source: AnalyticsStep,
     #[serde(rename = "via", default, skip_serializing_if = "Option::is_none")]
@@ -2763,38 +2544,10 @@ impl crate::runtime::WireModel for VariantSelectionInitiatedData {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("source", AnalyticsStep::KNOWN), ("via", VariantSelectionInitiatedDataVia::KNOWN)];
 }
 
-/// Size and colour selection opens.
+/// The variant selection screen opens.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct VariantSelectionInitiated {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data")]
     pub data: VariantSelectionInitiatedData,
 }
@@ -2804,28 +2557,29 @@ impl crate::runtime::WireModel for VariantSelectionInitiated {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
-/// Additional variant-<axis> string properties describe the selected variant, for example variant-colorway or variant-length.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct AnalyticsVariantData {
-    /// Product associated with this event.
+    /// Catalog product associated with this event.
     #[serde(rename = "product-id")]
     pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
+    /// Canonical variant ID, where supplied by the SDK.
+    #[serde(rename = "variant-id", default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
-    /// Selected size, if the product has a size axis.
+    pub variant_id: Option<String>,
+    /// Catalog size, colorway, waist or length supplied by an existing host callback.
     #[serde(rename = "variant-size", default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "uniffi", uniffi(default))]
     pub variant_size: Option<String>,
-    /// Selected colorway, if the product has a colorway axis.
     #[serde(rename = "variant-colorway", default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "uniffi", uniffi(default))]
     pub variant_colorway: Option<String>,
-    #[serde(flatten)]
+    #[serde(rename = "variant-waist", default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub additional: std::collections::HashMap<String, String>,
+    pub variant_waist: Option<String>,
+    #[serde(rename = "variant-length", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub variant_length: Option<String>,
 }
 
 impl crate::runtime::WireModel for AnalyticsVariantData {
@@ -2833,86 +2587,58 @@ impl crate::runtime::WireModel for AnalyticsVariantData {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
-/// A try-on starts for the selected variant.
+/// The selection changes to a different variant.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct TryOnInitiated {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
+pub struct VariantChanged {
     #[serde(rename = "data")]
     pub data: AnalyticsVariantData,
 }
 
-impl crate::runtime::WireModel for TryOnInitiated {
-    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "try-on-initiated")];
+impl crate::runtime::WireModel for VariantChanged {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "variant-changed")];
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-pub enum GatedSizeSelectedDataGate {
-    /// `too_small`
-    TooSmall,
-    /// `too_large`
-    TooLarge,
+pub enum TryOnInitiatedDataOrigin {
+    /// `shopper`
+    Shopper,
+    /// `automatic`
+    Automatic,
     /// A value this client does not know yet.
     Unknown { value: String },
 }
 
-impl GatedSizeSelectedDataGate {
+impl TryOnInitiatedDataOrigin {
     /// The value on the wire.
     pub fn as_str(&self) -> &str {
         match self {
-            Self::TooSmall => "too_small",
-            Self::TooLarge => "too_large",
+            Self::Shopper => "shopper",
+            Self::Automatic => "automatic",
             Self::Unknown { value } => value,
         }
     }
 
-    pub(crate) const KNOWN: &'static [&'static str] = &["too_small", "too_large"];
+    pub(crate) const KNOWN: &'static [&'static str] = &["shopper", "automatic"];
 
     pub fn from_wire(value: &str) -> Self {
         match value {
-            "too_small" => Self::TooSmall,
-            "too_large" => Self::TooLarge,
+            "shopper" => Self::Shopper,
+            "automatic" => Self::Automatic,
             other => Self::Unknown { value: other.to_owned() },
         }
     }
 }
 
-impl serde::Serialize for GatedSizeSelectedDataGate {
+impl serde::Serialize for TryOnInitiatedDataOrigin {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(self.as_str())
     }
 }
 
-impl<'de> serde::Deserialize<'de> for GatedSizeSelectedDataGate {
+impl<'de> serde::Deserialize<'de> for TryOnInitiatedDataOrigin {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = <std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
         Ok(Self::from_wire(&value))
@@ -2921,59 +2647,56 @@ impl<'de> serde::Deserialize<'de> for GatedSizeSelectedDataGate {
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct GatedSizeSelectedData {
-    /// Product associated with this event.
+pub struct TryOnInitiatedData {
+    /// Catalog product associated with this event.
     #[serde(rename = "product-id")]
     pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
+    /// Canonical variant ID, where supplied by the SDK.
+    #[serde(rename = "variant-id", default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
-    #[serde(rename = "variant-size")]
-    pub variant_size: String,
-    #[serde(rename = "gate")]
-    pub gate: GatedSizeSelectedDataGate,
+    pub variant_id: Option<String>,
+    /// Catalog size, colorway, waist or length supplied by an existing host callback.
+    #[serde(rename = "variant-size", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub variant_size: Option<String>,
+    #[serde(rename = "variant-colorway", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub variant_colorway: Option<String>,
+    #[serde(rename = "variant-waist", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub variant_waist: Option<String>,
+    #[serde(rename = "variant-length", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub variant_length: Option<String>,
+    #[serde(rename = "origin", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub origin: Option<TryOnInitiatedDataOrigin>,
 }
 
-impl crate::runtime::WireModel for GatedSizeSelectedData {
+impl crate::runtime::WireModel for TryOnInitiatedData {
     const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
-    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("gate", GatedSizeSelectedDataGate::KNOWN)];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("origin", TryOnInitiatedDataOrigin::KNOWN)];
 }
 
-/// The shopper selects a size marked too small or too large.
+/// The widget requests a try-on.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct TryOnInitiated {
+    #[serde(rename = "data")]
+    pub data: TryOnInitiatedData,
+}
+
+impl crate::runtime::WireModel for TryOnInitiated {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "try-on-initiated")];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
+/// The shopper selects a fit-gated size.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct GatedSizeSelected {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data")]
-    pub data: GatedSizeSelectedData,
+    pub data: AnalyticsProductData,
 }
 
 impl crate::runtime::WireModel for GatedSizeSelected {
@@ -2981,38 +2704,384 @@ impl crate::runtime::WireModel for GatedSizeSelected {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
-/// A product variant is successfully added to the cart.
+/// A distinct try-on result is shown in the widget.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct TryOnPresented {
+    #[serde(rename = "data")]
+    pub data: AnalyticsVariantData,
+}
+
+impl crate::runtime::WireModel for TryOnPresented {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "try-on-presented")];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ViewClosedData {
+    /// Catalog product associated with this event.
+    #[serde(rename = "product-id")]
+    pub product_id: String,
+    #[serde(rename = "current-step")]
+    pub current_step: AnalyticsStep,
+    #[serde(rename = "result-displayed", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub result_displayed: Option<bool>,
+}
+
+impl crate::runtime::WireModel for ViewClosedData {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("current-step", AnalyticsStep::KNOWN)];
+}
+
+/// An open widget closes.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ViewClosed {
+    #[serde(rename = "data")]
+    pub data: ViewClosedData,
+}
+
+impl crate::runtime::WireModel for ViewClosed {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "view-closed")];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum ExperienceOperationFailedDataWork {
+    /// `session`
+    Session,
+    /// `height`
+    Height,
+    /// `camera`
+    Camera,
+    /// `capture`
+    Capture,
+    /// `picker`
+    Picker,
+    /// `photo`
+    Photo,
+    /// `try-on`
+    TryOn,
+    /// A value this client does not know yet.
+    Unknown { value: String },
+}
+
+impl ExperienceOperationFailedDataWork {
+    /// The value on the wire.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Session => "session",
+            Self::Height => "height",
+            Self::Camera => "camera",
+            Self::Capture => "capture",
+            Self::Picker => "picker",
+            Self::Photo => "photo",
+            Self::TryOn => "try-on",
+            Self::Unknown { value } => value,
+        }
+    }
+
+    pub(crate) const KNOWN: &'static [&'static str] = &["session", "height", "camera", "capture", "picker", "photo", "try-on"];
+
+    pub fn from_wire(value: &str) -> Self {
+        match value {
+            "session" => Self::Session,
+            "height" => Self::Height,
+            "camera" => Self::Camera,
+            "capture" => Self::Capture,
+            "picker" => Self::Picker,
+            "photo" => Self::Photo,
+            "try-on" => Self::TryOn,
+            other => Self::Unknown { value: other.to_owned() },
+        }
+    }
+}
+
+impl serde::Serialize for ExperienceOperationFailedDataWork {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ExperienceOperationFailedDataWork {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = <std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
+        Ok(Self::from_wire(&value))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum ExperienceOperationFailedDataOutcome {
+    /// `failed`
+    Failed,
+    /// `uncertain`
+    Uncertain,
+    /// `detached`
+    Detached,
+    /// `in_progress`
+    InProgress,
+    /// A value this client does not know yet.
+    Unknown { value: String },
+}
+
+impl ExperienceOperationFailedDataOutcome {
+    /// The value on the wire.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Failed => "failed",
+            Self::Uncertain => "uncertain",
+            Self::Detached => "detached",
+            Self::InProgress => "in_progress",
+            Self::Unknown { value } => value,
+        }
+    }
+
+    pub(crate) const KNOWN: &'static [&'static str] = &["failed", "uncertain", "detached", "in_progress"];
+
+    pub fn from_wire(value: &str) -> Self {
+        match value {
+            "failed" => Self::Failed,
+            "uncertain" => Self::Uncertain,
+            "detached" => Self::Detached,
+            "in_progress" => Self::InProgress,
+            other => Self::Unknown { value: other.to_owned() },
+        }
+    }
+}
+
+impl serde::Serialize for ExperienceOperationFailedDataOutcome {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ExperienceOperationFailedDataOutcome {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = <std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
+        Ok(Self::from_wire(&value))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum ExperienceOperationFailedDataReason {
+    /// `deadline`
+    Deadline,
+    /// `slow`
+    Slow,
+    /// A value this client does not know yet.
+    Unknown { value: String },
+}
+
+impl ExperienceOperationFailedDataReason {
+    /// The value on the wire.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Deadline => "deadline",
+            Self::Slow => "slow",
+            Self::Unknown { value } => value,
+        }
+    }
+
+    pub(crate) const KNOWN: &'static [&'static str] = &["deadline", "slow"];
+
+    pub fn from_wire(value: &str) -> Self {
+        match value {
+            "deadline" => Self::Deadline,
+            "slow" => Self::Slow,
+            other => Self::Unknown { value: other.to_owned() },
+        }
+    }
+}
+
+impl serde::Serialize for ExperienceOperationFailedDataReason {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ExperienceOperationFailedDataReason {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = <std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
+        Ok(Self::from_wire(&value))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ExperienceOperationFailedData {
+    /// Catalog product associated with this event.
+    #[serde(rename = "product-id")]
+    pub product_id: String,
+    #[serde(rename = "work")]
+    pub work: ExperienceOperationFailedDataWork,
+    #[serde(rename = "outcome")]
+    pub outcome: ExperienceOperationFailedDataOutcome,
+    #[serde(rename = "reason", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub reason: Option<ExperienceOperationFailedDataReason>,
+    #[serde(rename = "current-step")]
+    pub current_step: AnalyticsStep,
+}
+
+impl crate::runtime::WireModel for ExperienceOperationFailedData {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("work", ExperienceOperationFailedDataWork::KNOWN), ("outcome", ExperienceOperationFailedDataOutcome::KNOWN), ("reason", ExperienceOperationFailedDataReason::KNOWN), ("current-step", AnalyticsStep::KNOWN)];
+}
+
+/// An operation fails, detaches or has an unknown outcome. Slow and deadline signals can be counted independently.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ExperienceOperationFailed {
+    #[serde(rename = "data")]
+    pub data: ExperienceOperationFailedData,
+}
+
+impl crate::runtime::WireModel for ExperienceOperationFailed {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "experience-operation-failed")];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum ExperienceSummaryDataTimeToResult {
+    /// `lt-10s`
+    Lt10s,
+    /// `10-29s`
+    V1029s,
+    /// `30-59s`
+    V3059s,
+    /// `60-119s`
+    V60119s,
+    /// `120s-plus`
+    V120sPlus,
+    /// A value this client does not know yet.
+    Unknown { value: String },
+}
+
+impl ExperienceSummaryDataTimeToResult {
+    /// The value on the wire.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Lt10s => "lt-10s",
+            Self::V1029s => "10-29s",
+            Self::V3059s => "30-59s",
+            Self::V60119s => "60-119s",
+            Self::V120sPlus => "120s-plus",
+            Self::Unknown { value } => value,
+        }
+    }
+
+    pub(crate) const KNOWN: &'static [&'static str] = &["lt-10s", "10-29s", "30-59s", "60-119s", "120s-plus"];
+
+    pub fn from_wire(value: &str) -> Self {
+        match value {
+            "lt-10s" => Self::Lt10s,
+            "10-29s" => Self::V1029s,
+            "30-59s" => Self::V3059s,
+            "60-119s" => Self::V60119s,
+            "120s-plus" => Self::V120sPlus,
+            other => Self::Unknown { value: other.to_owned() },
+        }
+    }
+}
+
+impl serde::Serialize for ExperienceSummaryDataTimeToResult {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ExperienceSummaryDataTimeToResult {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = <std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
+        Ok(Self::from_wire(&value))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ExperienceSummaryData {
+    /// Catalog product associated with this event.
+    #[serde(rename = "product-id")]
+    pub product_id: String,
+    #[serde(rename = "entry", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub entry: Option<String>,
+    #[serde(rename = "reached-intro")]
+    pub reached_intro: bool,
+    #[serde(rename = "granted-consent")]
+    pub granted_consent: bool,
+    #[serde(rename = "accepted-photo")]
+    pub accepted_photo: bool,
+    #[serde(rename = "confirmed-height")]
+    pub confirmed_height: bool,
+    #[serde(rename = "reached-selection")]
+    pub reached_selection: bool,
+    #[serde(rename = "requested-try-on")]
+    pub requested_try_on: bool,
+    #[serde(rename = "presented-result")]
+    pub presented_result: bool,
+    #[serde(rename = "requested-cart")]
+    pub requested_cart: bool,
+    #[serde(rename = "try-on-count")]
+    pub try_on_count: i32,
+    #[serde(rename = "distinct-sizes", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub distinct_sizes: Option<i32>,
+    #[serde(rename = "distinct-colors", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub distinct_colors: Option<i32>,
+    #[serde(rename = "distinct-waists", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub distinct_waists: Option<i32>,
+    #[serde(rename = "distinct-lengths", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub distinct_lengths: Option<i32>,
+    #[serde(rename = "time-to-result", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub time_to_result: Option<ExperienceSummaryDataTimeToResult>,
+}
+
+impl crate::runtime::WireModel for ExperienceSummaryData {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("time-to-result", ExperienceSummaryDataTimeToResult::KNOWN)];
+}
+
+/// A bounded summary for one observed open and product.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ExperienceSummary {
+    #[serde(rename = "data")]
+    pub data: ExperienceSummaryData,
+}
+
+impl crate::runtime::WireModel for ExperienceSummary {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "experience-summary")];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
+/// The widget hands a cart request to the host.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct CartRequested {
+    #[serde(rename = "data")]
+    pub data: AnalyticsVariantData,
+}
+
+impl crate::runtime::WireModel for CartRequested {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "cart-requested")];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
+/// The host reports a successful cart addition.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct CartItemAdded {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data")]
     pub data: AnalyticsVariantData,
 }
@@ -3022,104 +3091,16 @@ impl crate::runtime::WireModel for CartItemAdded {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
-/// A purchase completes. Send once per product variant.
+/// The host reports one purchased variant.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct OrderPlaced {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data")]
     pub data: AnalyticsVariantData,
 }
 
 impl crate::runtime::WireModel for OrderPlaced {
     const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "order-placed")];
-    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct ViewClosedData {
-    /// Product associated with this event.
-    #[serde(rename = "product-id")]
-    pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
-    #[serde(rename = "current-step")]
-    pub current_step: AnalyticsStep,
-}
-
-impl crate::runtime::WireModel for ViewClosedData {
-    const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
-    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("current-step", AnalyticsStep::KNOWN)];
-}
-
-/// The try-on view closes; include the current step.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct ViewClosed {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
-    #[serde(rename = "data")]
-    pub data: ViewClosedData,
-}
-
-impl crate::runtime::WireModel for ViewClosed {
-    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "view-closed")];
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
@@ -3173,10 +3154,6 @@ impl<'de> serde::Deserialize<'de> for ExperimentAssignedDataVariant {
 pub struct ExperimentAssignedData {
     #[serde(rename = "variant")]
     pub variant: ExperimentAssignedDataVariant,
-    /// SDK package and version, when applicable.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
 }
 
 impl crate::runtime::WireModel for ExperimentAssignedData {
@@ -3184,38 +3161,10 @@ impl crate::runtime::WireModel for ExperimentAssignedData {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("variant", ExperimentAssignedDataVariant::KNOWN)];
 }
 
-/// A visitor receives a rollout assignment. Send once per assignment using the same anonymous visitor ID.
+/// An eligible rollout decision is observed.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ExperimentAssigned {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
     #[serde(rename = "data", serialize_with = "runtime::serialize_wire_model")]
     pub data: ExperimentAssignedData,
 }
@@ -3225,78 +3174,12 @@ impl crate::runtime::WireModel for ExperimentAssigned {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct ExperienceOperationFailedData {
-    /// Product associated with this event.
-    #[serde(rename = "product-id")]
-    pub product_id: String,
-    /// SDK package and version, when using an SDK. Custom integrations may omit this property.
-    #[serde(rename = "sdk-version", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub sdk_version: Option<String>,
-    #[serde(rename = "work")]
-    pub work: String,
-    #[serde(rename = "outcome")]
-    pub outcome: String,
-    #[serde(rename = "reason", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub reason: Option<String>,
-    #[serde(rename = "current-step")]
-    pub current_step: AnalyticsStep,
-}
-
-impl crate::runtime::WireModel for ExperienceOperationFailedData {
-    const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
-    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("current-step", AnalyticsStep::KNOWN)];
-}
-
-/// A try-on operation failed or its outcome could not be confirmed.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct ExperienceOperationFailed {
-    /// Storefront hostname, without a scheme or path.
-    #[serde(rename = "hostname", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub hostname: Option<String>,
-    /// Page path or URL. Prefer a path without sensitive query parameters.
-    #[serde(rename = "url", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub url: Option<String>,
-    /// Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.
-    #[serde(rename = "id", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub id: Option<String>,
-    /// Browser language, for example en-GB.
-    #[serde(rename = "language", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub language: Option<String>,
-    /// Screen dimensions, for example 390x844.
-    #[serde(rename = "screen", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub screen: Option<String>,
-    /// Page title.
-    #[serde(rename = "title", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub title: Option<String>,
-    /// Referring page path or URL.
-    #[serde(rename = "referrer", default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "uniffi", uniffi(default))]
-    pub referrer: Option<String>,
-    #[serde(rename = "data")]
-    pub data: ExperienceOperationFailedData,
-}
-
-impl crate::runtime::WireModel for ExperienceOperationFailed {
-    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "experience-operation-failed")];
-    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
-}
-
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum AnalyticsEvent {
     EntrypointImpression { event: EntrypointImpression },
     EntrypointClicked { event: EntrypointClicked },
+    WidgetOpened { event: WidgetOpened },
     IntroOpened { event: IntroOpened },
     ConsentGranted { event: ConsentGranted },
     ImageRecordInitiated { event: ImageRecordInitiated },
@@ -3304,15 +3187,21 @@ pub enum AnalyticsEvent {
     ImageUploadInitiated { event: ImageUploadInitiated },
     ImageUploadAborted { event: ImageUploadAborted },
     ImageUploaded { event: ImageUploaded },
+    PhotoRejected { event: PhotoRejected },
     HeightEntered { event: HeightEntered },
+    HeightStepOpened { event: HeightStepOpened },
     VariantSelectionInitiated { event: VariantSelectionInitiated },
+    VariantChanged { event: VariantChanged },
     TryOnInitiated { event: TryOnInitiated },
     GatedSizeSelected { event: GatedSizeSelected },
+    TryOnPresented { event: TryOnPresented },
+    ViewClosed { event: ViewClosed },
+    ExperienceOperationFailed { event: ExperienceOperationFailed },
+    ExperienceSummary { event: ExperienceSummary },
+    CartRequested { event: CartRequested },
     CartItemAdded { event: CartItemAdded },
     OrderPlaced { event: OrderPlaced },
-    ViewClosed { event: ViewClosed },
     ExperimentAssigned { event: ExperimentAssigned },
-    ExperienceOperationFailed { event: ExperienceOperationFailed },
 }
 
 impl serde::Serialize for AnalyticsEvent {
@@ -3320,6 +3209,7 @@ impl serde::Serialize for AnalyticsEvent {
         let value = match self {
             Self::EntrypointImpression { event } => runtime::wire_value(event),
             Self::EntrypointClicked { event } => runtime::wire_value(event),
+            Self::WidgetOpened { event } => runtime::wire_value(event),
             Self::IntroOpened { event } => runtime::wire_value(event),
             Self::ConsentGranted { event } => runtime::wire_value(event),
             Self::ImageRecordInitiated { event } => runtime::wire_value(event),
@@ -3327,15 +3217,21 @@ impl serde::Serialize for AnalyticsEvent {
             Self::ImageUploadInitiated { event } => runtime::wire_value(event),
             Self::ImageUploadAborted { event } => runtime::wire_value(event),
             Self::ImageUploaded { event } => runtime::wire_value(event),
+            Self::PhotoRejected { event } => runtime::wire_value(event),
             Self::HeightEntered { event } => runtime::wire_value(event),
+            Self::HeightStepOpened { event } => runtime::wire_value(event),
             Self::VariantSelectionInitiated { event } => runtime::wire_value(event),
+            Self::VariantChanged { event } => runtime::wire_value(event),
             Self::TryOnInitiated { event } => runtime::wire_value(event),
             Self::GatedSizeSelected { event } => runtime::wire_value(event),
+            Self::TryOnPresented { event } => runtime::wire_value(event),
+            Self::ViewClosed { event } => runtime::wire_value(event),
+            Self::ExperienceOperationFailed { event } => runtime::wire_value(event),
+            Self::ExperienceSummary { event } => runtime::wire_value(event),
+            Self::CartRequested { event } => runtime::wire_value(event),
             Self::CartItemAdded { event } => runtime::wire_value(event),
             Self::OrderPlaced { event } => runtime::wire_value(event),
-            Self::ViewClosed { event } => runtime::wire_value(event),
             Self::ExperimentAssigned { event } => runtime::wire_value(event),
-            Self::ExperienceOperationFailed { event } => runtime::wire_value(event),
         }.map_err(serde::ser::Error::custom)?;
         serde::Serialize::serialize(&value, serializer)
     }
@@ -3347,6 +3243,7 @@ impl<'de> serde::Deserialize<'de> for AnalyticsEvent {
         match value.get("name").and_then(serde_json::Value::as_str) {
             Some("entrypoint-impression") => serde_json::from_value(value).map(|event| Self::EntrypointImpression { event }).map_err(serde::de::Error::custom),
             Some("entrypoint-clicked") => serde_json::from_value(value).map(|event| Self::EntrypointClicked { event }).map_err(serde::de::Error::custom),
+            Some("widget-opened") => serde_json::from_value(value).map(|event| Self::WidgetOpened { event }).map_err(serde::de::Error::custom),
             Some("intro-opened") => serde_json::from_value(value).map(|event| Self::IntroOpened { event }).map_err(serde::de::Error::custom),
             Some("consent-granted") => serde_json::from_value(value).map(|event| Self::ConsentGranted { event }).map_err(serde::de::Error::custom),
             Some("image-record-initiated") => serde_json::from_value(value).map(|event| Self::ImageRecordInitiated { event }).map_err(serde::de::Error::custom),
@@ -3354,15 +3251,21 @@ impl<'de> serde::Deserialize<'de> for AnalyticsEvent {
             Some("image-upload-initiated") => serde_json::from_value(value).map(|event| Self::ImageUploadInitiated { event }).map_err(serde::de::Error::custom),
             Some("image-upload-aborted") => serde_json::from_value(value).map(|event| Self::ImageUploadAborted { event }).map_err(serde::de::Error::custom),
             Some("image-uploaded") => serde_json::from_value(value).map(|event| Self::ImageUploaded { event }).map_err(serde::de::Error::custom),
+            Some("photo-rejected") => serde_json::from_value(value).map(|event| Self::PhotoRejected { event }).map_err(serde::de::Error::custom),
             Some("height-entered") => serde_json::from_value(value).map(|event| Self::HeightEntered { event }).map_err(serde::de::Error::custom),
+            Some("height-step-opened") => serde_json::from_value(value).map(|event| Self::HeightStepOpened { event }).map_err(serde::de::Error::custom),
             Some("variant-selection-initiated") => serde_json::from_value(value).map(|event| Self::VariantSelectionInitiated { event }).map_err(serde::de::Error::custom),
+            Some("variant-changed") => serde_json::from_value(value).map(|event| Self::VariantChanged { event }).map_err(serde::de::Error::custom),
             Some("try-on-initiated") => serde_json::from_value(value).map(|event| Self::TryOnInitiated { event }).map_err(serde::de::Error::custom),
             Some("gated-size-selected") => serde_json::from_value(value).map(|event| Self::GatedSizeSelected { event }).map_err(serde::de::Error::custom),
+            Some("try-on-presented") => serde_json::from_value(value).map(|event| Self::TryOnPresented { event }).map_err(serde::de::Error::custom),
+            Some("view-closed") => serde_json::from_value(value).map(|event| Self::ViewClosed { event }).map_err(serde::de::Error::custom),
+            Some("experience-operation-failed") => serde_json::from_value(value).map(|event| Self::ExperienceOperationFailed { event }).map_err(serde::de::Error::custom),
+            Some("experience-summary") => serde_json::from_value(value).map(|event| Self::ExperienceSummary { event }).map_err(serde::de::Error::custom),
+            Some("cart-requested") => serde_json::from_value(value).map(|event| Self::CartRequested { event }).map_err(serde::de::Error::custom),
             Some("cart-item-added") => serde_json::from_value(value).map(|event| Self::CartItemAdded { event }).map_err(serde::de::Error::custom),
             Some("order-placed") => serde_json::from_value(value).map(|event| Self::OrderPlaced { event }).map_err(serde::de::Error::custom),
-            Some("view-closed") => serde_json::from_value(value).map(|event| Self::ViewClosed { event }).map_err(serde::de::Error::custom),
             Some("experiment-assigned") => serde_json::from_value(value).map(|event| Self::ExperimentAssigned { event }).map_err(serde::de::Error::custom),
-            Some("experience-operation-failed") => serde_json::from_value(value).map(|event| Self::ExperienceOperationFailed { event }).map_err(serde::de::Error::custom),
             _ => Err(serde::de::Error::custom("unknown event name")),
         }
     }
@@ -3371,13 +3274,99 @@ impl<'de> serde::Deserialize<'de> for AnalyticsEvent {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct AnalyticsEventRequest {
-    #[serde(rename = "payload")]
-    pub payload: AnalyticsEvent,
+    /// UUID v4 generated for this occurrence only. Reuse only when repeating the same request.
+    #[serde(rename = "eventId")]
+    pub event_id: String,
+    #[serde(rename = "event")]
+    pub event: AnalyticsEvent,
 }
 
 impl crate::runtime::WireModel for AnalyticsEventRequest {
-    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("type", "event")];
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum AnalyticsEventProblemKind {
+    /// `invalid-event`
+    InvalidEvent,
+    /// `invalid-client-key`
+    InvalidClientKey,
+    /// `origin-forbidden`
+    OriginForbidden,
+    /// `event-id-conflict`
+    EventIdConflict,
+    /// `event-too-large`
+    EventTooLarge,
+    /// `unsupported-media-type`
+    UnsupportedMediaType,
+    /// `upstream-delivery-failed`
+    UpstreamDeliveryFailed,
+    /// `collector-unavailable`
+    CollectorUnavailable,
+    /// A value this client does not know yet.
+    Unknown { value: String },
+}
+
+impl AnalyticsEventProblemKind {
+    /// The value on the wire.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::InvalidEvent => "invalid-event",
+            Self::InvalidClientKey => "invalid-client-key",
+            Self::OriginForbidden => "origin-forbidden",
+            Self::EventIdConflict => "event-id-conflict",
+            Self::EventTooLarge => "event-too-large",
+            Self::UnsupportedMediaType => "unsupported-media-type",
+            Self::UpstreamDeliveryFailed => "upstream-delivery-failed",
+            Self::CollectorUnavailable => "collector-unavailable",
+            Self::Unknown { value } => value,
+        }
+    }
+
+    pub(crate) const KNOWN: &'static [&'static str] = &["invalid-event", "invalid-client-key", "origin-forbidden", "event-id-conflict", "event-too-large", "unsupported-media-type", "upstream-delivery-failed", "collector-unavailable"];
+
+    pub fn from_wire(value: &str) -> Self {
+        match value {
+            "invalid-event" => Self::InvalidEvent,
+            "invalid-client-key" => Self::InvalidClientKey,
+            "origin-forbidden" => Self::OriginForbidden,
+            "event-id-conflict" => Self::EventIdConflict,
+            "event-too-large" => Self::EventTooLarge,
+            "unsupported-media-type" => Self::UnsupportedMediaType,
+            "upstream-delivery-failed" => Self::UpstreamDeliveryFailed,
+            "collector-unavailable" => Self::CollectorUnavailable,
+            other => Self::Unknown { value: other.to_owned() },
+        }
+    }
+}
+
+impl serde::Serialize for AnalyticsEventProblemKind {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for AnalyticsEventProblemKind {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = <std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
+        Ok(Self::from_wire(&value))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct AnalyticsEventProblem {
+    #[serde(rename = "title")]
+    pub title: String,
+    #[serde(rename = "kind")]
+    pub kind: AnalyticsEventProblemKind,
+}
+
+impl crate::runtime::WireModel for AnalyticsEventProblem {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("kind", AnalyticsEventProblemKind::KNOWN)];
 }
 
 /// An error response's body (`application/problem+json`), by the error model it matched.
@@ -3420,6 +3409,7 @@ pub enum ApiProblem {
     TryOnGarmentTooSmall { problem: TryOnGarmentTooSmall },
     /// The selected size is too large for this body. Choose another size.
     TryOnGarmentTooLarge { problem: TryOnGarmentTooLarge },
+    AnalyticsEventProblem { problem: AnalyticsEventProblem },
     /// A problem no error model of the operation matched (a newer server, a proxy).
     Other { problem: ProblemDetails },
 }
@@ -3447,6 +3437,7 @@ impl ApiProblem {
             Self::TryOnNotFoundProblem { problem } => problem.kind.as_str().to_owned(),
             Self::TryOnGarmentTooSmall { problem } => { let _ = problem; "try-on-size-rejected".to_owned() },
             Self::TryOnGarmentTooLarge { problem } => { let _ = problem; "try-on-size-rejected".to_owned() },
+            Self::AnalyticsEventProblem { problem } => problem.kind.as_str().to_owned(),
             Self::Other { problem } => problem.kind.clone(),
         }
     }
@@ -3879,9 +3870,9 @@ pub fn get_try_on_response(response: &HttpResponse) -> Result<TryOnSuccess, ApiE
     }
 }
 
-/// Builds the `sendAnalyticsEvent` request (`POST /api/send`).
+/// Builds the `sendAnalyticsEvent` request (`POST /v2/events`).
 pub fn send_analytics_event_request(context: &RequestContext, body: &AnalyticsEventRequest) -> Result<HttpRequest, ApiError> {
-    let path = "/api/send".to_owned();
+    let path = "/v2/events".to_owned();
     let query: Vec<(&str, String)> = Vec::new();
     let mut request = context.request("POST", &path, &query);
     request.header("X-Client-Api-Key", context.client_api_key.clone());
@@ -3894,12 +3885,14 @@ pub fn send_analytics_event_request(context: &RequestContext, body: &AnalyticsEv
 pub fn send_analytics_event_response(response: &HttpResponse) -> Result<(), ApiError> {
     match response.status {
         204 => Ok(()),
-        400 => Err(runtime::decode_problem(response, &[], |problem: ProblemDetails| ApiProblem::Other { problem })),
-        401 => Err(runtime::decode_problem(response, &[], |problem: ProblemDetails| ApiProblem::Other { problem })),
-        403 => Err(runtime::decode_problem(response, &[], |problem: ProblemDetails| ApiProblem::Other { problem })),
-        413 => Err(runtime::decode_problem(response, &[], |problem: ProblemDetails| ApiProblem::Other { problem })),
-        502 => Err(runtime::decode_problem(response, &[], |problem: ProblemDetails| ApiProblem::Other { problem })),
-        503 => Err(runtime::decode_problem(response, &[], |problem: ProblemDetails| ApiProblem::Other { problem })),
+        400 => Err(runtime::decode_problem(response, &[runtime::candidate::<AnalyticsEventProblem>(|problem| ApiProblem::AnalyticsEventProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
+        401 => Err(runtime::decode_problem(response, &[runtime::candidate::<AnalyticsEventProblem>(|problem| ApiProblem::AnalyticsEventProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
+        403 => Err(runtime::decode_problem(response, &[runtime::candidate::<AnalyticsEventProblem>(|problem| ApiProblem::AnalyticsEventProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
+        409 => Err(runtime::decode_problem(response, &[runtime::candidate::<AnalyticsEventProblem>(|problem| ApiProblem::AnalyticsEventProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
+        413 => Err(runtime::decode_problem(response, &[runtime::candidate::<AnalyticsEventProblem>(|problem| ApiProblem::AnalyticsEventProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
+        415 => Err(runtime::decode_problem(response, &[runtime::candidate::<AnalyticsEventProblem>(|problem| ApiProblem::AnalyticsEventProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
+        502 => Err(runtime::decode_problem(response, &[runtime::candidate::<AnalyticsEventProblem>(|problem| ApiProblem::AnalyticsEventProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
+        503 => Err(runtime::decode_problem(response, &[runtime::candidate::<AnalyticsEventProblem>(|problem| ApiProblem::AnalyticsEventProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
         _ => Err(runtime::unexpected_status(response, |problem: ProblemDetails| ApiProblem::Other { problem })),
     }
 }
@@ -4032,9 +4025,10 @@ impl ApiClient {
         get_try_on_response(&response)
     }
 
-    /// Send storefront and try-on events with the same X-Client-Api-Key used by the business API. The API key identifies the shop. Omit shopper credentials and cookies.
+    /// Send storefront and try-on events with the same X-Client-Api-Key used by the business API.
+    /// Omit shopper credentials, cookies and browser context. An event ID identifies one occurrence.
     ///
-    /// See [Analytics](/api/analytics) for integration guidance and the event catalogue.
+    /// See [Analytics](/analytics) for integration guidance and the event catalogue.
     pub async fn send_analytics_event(&self, body: AnalyticsEventRequest) -> Result<(), ApiError> {
         let request = send_analytics_event_request(&self.context(), &body)?;
         let response = self.send(request).await?;

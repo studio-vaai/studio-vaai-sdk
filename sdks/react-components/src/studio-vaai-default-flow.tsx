@@ -870,11 +870,14 @@ function StudioVaaiDefaultFlowInner({
   const sheetOpen: boolean = hydrated && internalOpen;
   const stateRef = useRef(state);
   stateRef.current = state;
+  const isOpenForAnalytics = useRef(false);
+  const hasDisplayedResult = useRef(false);
   const shownAttributesRef = useRef<VariantAttributes | null>(null);
   const tryOnViewActive = isTryOnViewActive(state);
   useEffect(() => {
     if (!tryOnViewActive) {
       shownAttributesRef.current = null;
+      hasDisplayedResult.current = false;
     }
   }, [tryOnViewActive]);
   const onTryOnShownAttributesChange = useCallback((attributes: VariantAttributes): void => {
@@ -884,6 +887,15 @@ function StudioVaaiDefaultFlowInner({
     (next: boolean, opts?: { skipTryOnClose?: boolean }): void => {
       if (!next) {
         stopPreviewConversion();
+        if (isOpenForAnalytics.current) {
+          trackHostEvent({
+            type: "view-closed",
+            "product-id": String(stateRef.current.context.product.id),
+            resultDisplayed: hasDisplayedResult.current && isTryOnViewActive(stateRef.current),
+          });
+          isOpenForAnalytics.current = false;
+          hasDisplayedResult.current = false;
+        }
       }
       // Mark as a transition so updates arriving from outside React's commit cycle
       // (close button during a still-suspending parent route) don't preempt
@@ -902,7 +914,7 @@ function StudioVaaiDefaultFlowInner({
         onOpenChange?.(next);
       });
     },
-    [onOpenChange, onTryOnClose, stopPreviewConversion],
+    [onOpenChange, onTryOnClose, stopPreviewConversion, trackHostEvent],
   );
   const onSheetOpenChange = useCallback(
     (next: boolean): void => {
@@ -917,6 +929,14 @@ function StudioVaaiDefaultFlowInner({
       open: (opts) => {
         const entry = opts?.entry ?? "unknown";
         const snap = stateRef.current;
+        if (!isOpenForAnalytics.current) {
+          isOpenForAnalytics.current = true;
+          trackHostEvent({
+            type: "widget-opened",
+            "product-id": String(snap.context.product.id),
+            entry,
+          });
+        }
         trackHostEvent({
           type: "entrypoint-clicked",
           "product-id": String(snap.context.product.id),
@@ -944,16 +964,12 @@ function StudioVaaiDefaultFlowInner({
     // Drop any queued camera open so reopening doesn't auto-jump into
     // `photoCapture` after session creation resolves in the background.
     pendingCameraOpenRef.current = false;
-    trackHostEvent({
-      type: "view-closed",
-      "product-id": String(stateRef.current.context.product.id),
-    });
     setSheetOpen(false, opts);
   };
 
   const handleAddToCart = (attributes: VariantAttributes): void => {
     trackHostEvent({
-      type: "cart-item-added",
+      type: "cart-requested",
       "product-id": String(stateRef.current.context.product.id),
       variants: { ...attributes },
     });
@@ -1168,6 +1184,18 @@ function StudioVaaiDefaultFlowInner({
           onClose={closeSheet}
           onAddToCart={handleAddToCart}
           onShownAttributesChange={onTryOnShownAttributesChange}
+          onResultPresented={(slide) => {
+            if (!isOpenForAnalytics.current) {
+              return;
+            }
+            hasDisplayedResult.current = true;
+            trackHostEvent({
+              type: "try-on-presented",
+              "product-id": String(stateRef.current.context.product.id),
+              resultKey: slide.tryOnId ?? slide.src,
+              variants: slide.attributes,
+            });
+          }}
           onSelectVariant={onTryOnSelectVariant}
           onRetryRecommendation={() => {
             dispatch({ type: "RECOMMENDATION_REQUEST" });

@@ -1,30 +1,20 @@
 import type { TryOnExperienceEvent, TryOnExperienceStep } from "../experience/events.js";
 
-import {
-  AnalyticsEvent,
-  AnalyticsImageSource,
-  AnalyticsStep,
-  ApiClient,
-  ExperimentAssignedDataVariant,
-  ImageUploadedDataImageSource,
-} from "../../build/wasm2/api.js";
-import manifest from "../../package.json";
-import { browserTransport } from "../browser-transport.js";
-import { initializeCore } from "../runtime.js";
-
 export interface AnalyticsOptions {
   clientApiKey: string;
-  /** SDK integrations can identify their own package and version. */
+  /** Compatibility option. Cookieless analytics does not attach an SDK version. */
   sdkVersion?: string;
   baseUrl?: string;
-  /** The storefront may turn collection on or off as its consent state changes. */
+  /** The storefront can turn collection on or off over the lifetime of the widget. */
   enabled: () => boolean;
+  /** Compatibility option. Analytics no longer reads or sends visitor IDs. */
   visitorId?: () => string;
   fetch?: typeof fetch;
 }
 
 let visitor: { day: string; id: string } | undefined;
 
+/** @deprecated This helper is no longer used by analytics. */
 export function getAnalyticsVisitorId(): string {
   if (typeof window === "undefined") {
     return crypto.randomUUID();
@@ -37,284 +27,324 @@ export function getAnalyticsVisitorId(): string {
 }
 
 const steps = {
-  intro: new AnalyticsStep.Intro(),
-  camera: new AnalyticsStep.ImageRecord(),
-  "photo-upload": new AnalyticsStep.ImageUpload(),
-  "photo-rejected": new AnalyticsStep.ImageRejection(),
-  height: new AnalyticsStep.Height(),
-  "variant-selection": new AnalyticsStep.VariantSelection(),
-  "try-on": new AnalyticsStep.TryOn(),
-};
+  intro: "intro",
+  camera: "image-record",
+  "photo-upload": "image-upload",
+  "photo-rejected": "image-rejection",
+  height: "height",
+  "variant-selection": "variant-selection",
+  "try-on": "try-on",
+} as const;
 
-function imageSource(step: TryOnExperienceStep | undefined): AnalyticsImageSource {
-  // oxlint-disable-next-line eslint/default-case -- Every possible step is covered.
-  switch (step) {
-    case "height": {
-      return new AnalyticsImageSource.Height();
-    }
-    case "variant-selection":
-    case "try-on": {
-      return new AnalyticsImageSource.VariantSelection();
-    }
-    case "photo-rejected": {
-      return new AnalyticsImageSource.ImageRejection();
-    }
-    case "intro":
-    case "camera":
-    case "photo-upload":
-    case undefined: {
-      return new AnalyticsImageSource.Intro();
-    }
+function imageSource(step: TryOnExperienceStep): string {
+  if (step === "height" || step === "variant-selection") {
+    return step;
   }
+  if (step === "try-on") {
+    return "variant-selection";
+  }
+  return step === "photo-rejected" ? "image-rejection" : "intro";
 }
 
-function context(visitorId: () => string) {
-  const id = visitorId().slice(0, 50);
-  if (typeof window === "undefined") {
-    return { id };
-  }
-  const [referrer] = globalThis.document.referrer.split(/[?#]/u, 1);
-  return {
-    id,
-    hostname: globalThis.location.hostname,
-    url: globalThis.location.pathname,
-    language: globalThis.navigator.language,
-    screen: `${globalThis.screen.width}x${globalThis.screen.height}`,
-    title: globalThis.document.title,
-    ...(referrer !== undefined && referrer !== "" && { referrer }),
-  };
-}
+const axes = ["size", "colorway", "waist", "length"] as const;
+const limit = 32;
+
+type EventData = Record<string, string | number | boolean>;
 
 export interface CommerceAnalyticsEvent {
   productId: string;
+  variantId?: string;
   foreignIds: Readonly<Record<string, string>>;
 }
 
-/** Publishes the existing collector catalogue via the generated, unauthenticated API method. */
+function variantData({ productId, variantId, foreignIds }: CommerceAnalyticsEvent): EventData {
+  const data: EventData = { "product-id": productId };
+  if (variantId === undefined) {
+    // The older host callback only carries catalog axes.
+    for (const axis of axes) {
+      const value = foreignIds[axis];
+      if (value !== undefined) {
+        data[`variant-${axis}`] = value;
+      }
+    }
+  } else {
+    data["variant-id"] = variantId;
+  }
+  return data;
+}
+
+function timeBucket(seconds: number): string {
+  if (seconds < 10) {
+    return "lt-10s";
+  }
+  if (seconds < 30) {
+    return "10-29s";
+  }
+  if (seconds < 60) {
+    return "30-59s";
+  }
+  return seconds < 120 ? "60-119s" : "120s-plus";
+}
+
+function startSummary(productId: string, entry?: string) {
+  return {
+    productId,
+    entry,
+    startedAt: performance.now(),
+    intro: false,
+    consent: false,
+    photo: false,
+    height: false,
+    selection: false,
+    requested: false,
+    cart: false,
+    timeToResult: undefined as string | undefined,
+    missingVariant: false,
+    variants: new Map<string, Readonly<Record<string, string>>>(),
+    displayed: new Set<string>(),
+    axes: {
+      size: new Set<string>(),
+      colorway: new Set<string>(),
+      waist: new Set<string>(),
+      length: new Set<string>(),
+    },
+  };
+}
+
+/** Counts lifecycle facts without sending a shopper identity or reading browser context. */
 export function createTryOnAnalytics(options: AnalyticsOptions): TryOnAnalytics {
-  let client: Promise<ApiClient> | undefined;
   let disposed = false;
-  const inFlight = new Set<Promise<void>>();
-  const visitorId = options.visitorId ?? getAnalyticsVisitorId;
-  const sdkVersion = options.sdkVersion ?? `${manifest.name}@${manifest.version}`;
-  const common = (productId: string) => ({ productId, sdkVersion });
-  const browserContext = () => context(visitorId);
+  const endpoint = `${(options.baseUrl ?? "https://a.studio-vaai.com").replace(/\/$/u, "")}/v2/events`;
 
-  function variantData({ productId, foreignIds }: CommerceAnalyticsEvent) {
-    const additional = new Map<string, string>();
-    for (const [axis, value] of Object.entries(foreignIds)) {
-      if (axis !== "size" && axis !== "colorway") {
-        additional.set(`variant-${axis}`, value);
-      }
-    }
-    const { size, colorway } = foreignIds;
-    return {
-      ...common(productId),
-      ...(size !== undefined && { variantSize: size }),
-      ...(colorway !== undefined && { variantColorway: colorway }),
-      additional,
-    };
-  }
-
-  async function connect(): Promise<ApiClient> {
+  async function deliver(name: string, data: EventData): Promise<void> {
     try {
-      await initializeCore();
-      return new ApiClient(
-        {
-          baseUrl: options.baseUrl ?? "https://a.studio-vaai.com",
-          clientApiKey: options.clientApiKey,
-        },
-        browserTransport(options.fetch, true),
-      );
-    } catch (error) {
-      client = undefined;
-      throw error;
-    }
-  }
-
-  async function deliver(payload: AnalyticsEvent): Promise<void> {
-    try {
-      client ??= connect();
-      const api = await client;
-      if (options.enabled()) {
-        await api.sendAnalyticsEvent({ payload });
-      }
+      const fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
+      await fetchImpl(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Client-Api-Key": options.clientApiKey },
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+        keepalive: true,
+        body: JSON.stringify({ eventId: crypto.randomUUID(), event: { name, data } }),
+      });
     } catch {
-      // Analytics is best effort and never delays storefront actions.
+      // Analytics is best effort, including in environments without fetch or Web Crypto.
     }
   }
 
-  async function finishDelivery(work: Promise<void>): Promise<void> {
-    await work;
-    inFlight.delete(work);
-  }
-
-  async function releaseClient(): Promise<void> {
-    await Promise.allSettled(inFlight);
-    try {
-      const api = await client;
-      api?.uniffiDestroy();
-    } catch {
-      // Initialization may have failed before there was a client to release.
+  function send(name: string, data: EventData): void {
+    if (!disposed && options.enabled()) {
+      void deliver(name, data);
     }
-  }
-
-  function send(event: () => AnalyticsEvent): void {
-    if (disposed || !options.enabled()) {
-      return;
-    }
-    const work = deliver(event());
-    inFlight.add(work);
-    void finishDelivery(work);
   }
 
   function observe(subscribe: (listener: (event: TryOnExperienceEvent) => void) => () => void) {
+    let summary: ReturnType<typeof startSummary> | undefined;
+    const shopperRequests = new Map<string, string>();
     return subscribe((event) => {
+      if (disposed || !options.enabled()) {
+        summary = undefined;
+        shopperRequests.clear();
+        return;
+      }
       const { detail } = event;
-      const data = common(detail.productId);
-      const eventContext = browserContext();
-      function operationStatus(
-        work: string,
-        outcome: "failed" | "uncertain" | "detached" | "in_progress",
-        reason?: string,
+      const { productId } = detail;
+      const data = { "product-id": productId };
+      if (
+        summary !== undefined &&
+        summary.productId !== productId &&
+        (event.type === "sv-try-on-step-changed" ||
+          event.type === "sv-try-on-variant-changed" ||
+          event.type === "sv-try-on-presented")
       ) {
-        send(
-          () =>
-            new AnalyticsEvent.ExperienceOperationFailed({
-              event: {
-                ...eventContext,
-                data: {
-                  ...data,
-                  work,
-                  outcome,
-                  ...(reason !== undefined && { reason }),
-                  currentStep: steps[detail.step],
-                },
-              },
-            }),
-        );
+        summary = startSummary(productId, summary.entry);
+      }
+      const scope = summary?.productId === productId ? summary : undefined;
+      const step = steps[detail.step];
+      function operationStatus(work: string, outcome: string, reason?: "slow" | "deadline") {
+        send("experience-operation-failed", {
+          ...data,
+          work,
+          outcome,
+          "current-step": step,
+          ...(reason === undefined ? {} : { reason }),
+        });
       }
 
-      // oxlint-disable-next-line eslint/default-case -- Every experience event is covered.
+      // oxlint-disable-next-line eslint/default-case -- The lifecycle event union is exhaustive.
       switch (event.type) {
         case "sv-try-on-opened": {
-          if (event.detail.entry !== undefined) {
-            const { entry, subentry } = event.detail;
-            send(
-              () =>
-                new AnalyticsEvent.EntrypointClicked({
-                  event: {
-                    ...eventContext,
-                    data: {
-                      ...data,
-                      entry,
-                      ...(subentry !== undefined && { subentry }),
-                      currentStep: steps[detail.step],
-                    },
-                  },
-                }),
-            );
+          const { entry } = event.detail;
+          shopperRequests.clear();
+          summary = startSummary(productId, entry);
+          summary.intro = detail.step === "intro";
+          summary.selection = detail.step === "variant-selection";
+          const withEntry = entry === undefined ? data : { ...data, entry };
+          send("widget-opened", withEntry);
+          if (entry !== undefined) {
+            send("entrypoint-clicked", withEntry);
           }
           break;
         }
         case "sv-try-on-step-changed": {
           const source =
-            event.detail.previousStep === undefined
-              ? new AnalyticsStep.Entry()
-              : steps[event.detail.previousStep];
+            event.detail.previousStep === undefined ? "entry" : steps[event.detail.previousStep];
           if (detail.step === "intro") {
-            send(
-              () =>
-                new AnalyticsEvent.IntroOpened({
-                  event: { ...eventContext, data: { ...data, source } },
-                }),
-            );
+            if (scope !== undefined) {
+              scope.intro = true;
+            }
+            send("intro-opened", { ...data, source });
           } else if (detail.step === "height") {
-            send(
-              () =>
-                new AnalyticsEvent.HeightEntered({
-                  event: { ...eventContext, data: { ...data, source } },
-                }),
-            );
+            send("height-step-opened", { ...data, source });
           } else if (detail.step === "variant-selection") {
-            send(
-              () =>
-                new AnalyticsEvent.VariantSelectionInitiated({
-                  event: { ...eventContext, data: { ...data, source } },
-                }),
-            );
+            if (scope !== undefined) {
+              scope.selection = true;
+            }
+            send("variant-selection-initiated", { ...data, source });
           }
           break;
         }
         case "sv-try-on-consent-granted": {
-          send(() => new AnalyticsEvent.ConsentGranted({ event: { ...eventContext, data } }));
+          if (scope !== undefined) {
+            scope.consent = true;
+          }
+          send("consent-granted", data);
           break;
         }
-        case "sv-try-on-photo-source-started": {
-          const source = imageSource(event.detail.originStep);
-          const info = { ...eventContext, data: { ...data, source } };
-          send(() =>
-            event.detail.source === "camera"
-              ? new AnalyticsEvent.ImageRecordInitiated({ event: info })
-              : new AnalyticsEvent.ImageUploadInitiated({ event: info }),
-          );
-          break;
-        }
+        case "sv-try-on-photo-source-started":
         case "sv-try-on-photo-source-cancelled": {
-          const source = imageSource(event.detail.originStep);
-          const info = { ...eventContext, data: { ...data, source } };
-          send(() =>
-            event.detail.source === "camera"
-              ? new AnalyticsEvent.ImageRecordAborted({ event: info })
-              : new AnalyticsEvent.ImageUploadAborted({ event: info }),
-          );
-          break;
-        }
-        case "sv-try-on-photo-processing": {
+          const started = event.type === "sv-try-on-photo-source-started";
+          const family = event.detail.source === "camera" ? "image-record" : "image-upload";
+          send(`${family}-${started ? "initiated" : "aborted"}`, {
+            ...data,
+            source: imageSource(event.detail.originStep),
+          });
           break;
         }
         case "sv-try-on-photo-accepted": {
-          send(
-            () =>
-              new AnalyticsEvent.ImageUploaded({
-                event: {
-                  ...eventContext,
-                  data: {
-                    ...data,
-                    imageSource:
-                      event.detail.source === "camera"
-                        ? new ImageUploadedDataImageSource.RecordSelfTimer()
-                        : new ImageUploadedDataImageSource.Select(),
-                  },
-                },
-              }),
-          );
+          if (scope !== undefined) {
+            scope.photo = true;
+          }
+          send("image-uploaded", {
+            ...data,
+            "image-source": event.detail.source === "camera" ? "record-self-timer" : "select",
+          });
+          break;
+        }
+        case "sv-try-on-photo-rejected": {
+          send("photo-rejected", {
+            ...data,
+            method: event.detail.source === "camera" ? "camera" : "picker",
+          });
+          break;
+        }
+        case "sv-try-on-height-confirmed": {
+          if (scope !== undefined) {
+            scope.height = true;
+          }
+          send("height-entered", data);
+          break;
+        }
+        case "sv-try-on-variant-changed": {
+          if (
+            scope !== undefined &&
+            (scope.variants.size < limit || scope.variants.has(event.detail.variantId))
+          ) {
+            scope.variants.set(event.detail.variantId, event.detail.foreignIds);
+          }
+          send("variant-changed", variantData(event.detail));
           break;
         }
         case "sv-try-on-requested": {
-          send(
-            () =>
-              new AnalyticsEvent.TryOnInitiated({
-                event: { ...eventContext, data: variantData(event.detail) },
-              }),
-          );
+          if (scope !== undefined) {
+            scope.requested = true;
+            if (scope.variants.size < limit || scope.variants.has(event.detail.variantId)) {
+              scope.variants.set(event.detail.variantId, event.detail.foreignIds);
+            }
+          }
+          if (event.detail.origin === "shopper") {
+            if (shopperRequests.size >= limit) {
+              const oldest = shopperRequests.keys().next().value;
+              if (oldest !== undefined) {
+                shopperRequests.delete(oldest);
+              }
+            }
+            shopperRequests.set(event.detail.requestId, productId);
+          }
+          send("try-on-initiated", { ...variantData(event.detail), origin: event.detail.origin });
+          break;
+        }
+        case "sv-try-on-presented": {
+          const { tryOnId, variantId } = event.detail;
+          if (scope?.displayed.has(tryOnId) === true) {
+            break;
+          }
+          if (scope !== undefined) {
+            scope.displayed.add(tryOnId);
+            scope.timeToResult ??= timeBucket((performance.now() - scope.startedAt) / 1000);
+            const selected = scope.variants.get(variantId);
+            scope.missingVariant ||= selected === undefined;
+            for (const axis of axes) {
+              const value = selected?.[axis];
+              if (value !== undefined && scope.axes[axis].size < limit) {
+                scope.axes[axis].add(value);
+              }
+            }
+          }
+          send("try-on-presented", { ...data, "variant-id": variantId });
           break;
         }
         case "sv-try-on-closed": {
-          send(
-            () =>
-              new AnalyticsEvent.ViewClosed({
-                event: { ...eventContext, data: { ...data, currentStep: steps[detail.step] } },
-              }),
-          );
+          send("view-closed", {
+            ...data,
+            "current-step": step,
+            "result-displayed": event.detail.displayed !== undefined,
+          });
+          if (scope !== undefined) {
+            send("experience-summary", {
+              ...data,
+              ...(scope.entry === undefined ? {} : { entry: scope.entry }),
+              "reached-intro": scope.intro,
+              "granted-consent": scope.consent,
+              "accepted-photo": scope.photo,
+              "confirmed-height": scope.height,
+              "reached-selection": scope.selection,
+              "requested-try-on": scope.requested,
+              "presented-result": scope.displayed.size > 0,
+              "requested-cart": scope.cart,
+              "try-on-count": Math.min(limit, scope.displayed.size),
+              ...(scope.missingVariant
+                ? {}
+                : {
+                    "distinct-sizes": scope.axes.size.size,
+                    "distinct-colors": scope.axes.colorway.size,
+                    "distinct-waists": scope.axes.waist.size,
+                    "distinct-lengths": scope.axes.length.size,
+                  }),
+              ...(scope.timeToResult === undefined ? {} : { "time-to-result": scope.timeToResult }),
+            });
+          }
+          summary = undefined;
+          shopperRequests.clear();
+          break;
+        }
+        case "sv-try-on-add-to-cart-requested": {
+          if (scope !== undefined) {
+            scope.cart = true;
+          }
+          send("cart-requested", variantData(event.detail));
           break;
         }
         case "sv-try-on-session-failed": {
-          operationStatus("session", "failed", event.detail.reason);
+          operationStatus("session", "failed");
           break;
         }
         case "sv-try-on-height-failed": {
-          operationStatus("height", "failed", event.detail.reason);
+          operationStatus("height", "failed");
+          break;
+        }
+        case "sv-try-on-operation-uncertain": {
+          operationStatus(event.detail.work, "uncertain");
           break;
         }
         case "sv-try-on-operation-slow": {
@@ -325,42 +355,45 @@ export function createTryOnAnalytics(options: AnalyticsOptions): TryOnAnalytics 
           operationStatus(event.detail.work, "failed", "deadline");
           break;
         }
-        case "sv-try-on-operation-uncertain": {
-          operationStatus(event.detail.work, "uncertain");
-          break;
-        }
         case "sv-try-on-camera-failed": {
-          operationStatus("camera", "failed", event.detail.reason);
+          operationStatus("camera", "failed");
           break;
         }
         case "sv-try-on-capture-failed": {
-          operationStatus("capture", "failed", event.detail.reason);
+          operationStatus("capture", "failed");
           break;
         }
         case "sv-try-on-picker-failed": {
-          operationStatus("picker", "failed", event.detail.reason);
+          operationStatus("picker", "failed");
           break;
         }
         case "sv-try-on-photo-failed": {
-          operationStatus("photo", "failed", event.detail.reason);
+          operationStatus("photo", "failed");
           break;
         }
         case "sv-try-on-failed": {
-          operationStatus("try-on", "failed", event.detail.reason);
+          shopperRequests.delete(event.detail.requestId);
+          operationStatus("try-on", "failed");
           break;
         }
         case "sv-try-on-detached": {
-          operationStatus("try-on", "detached", event.detail.stage);
+          shopperRequests.delete(event.detail.requestId);
+          operationStatus("try-on", "detached");
           break;
         }
-        case "sv-try-on-add-to-cart-requested":
-        case "sv-try-on-height-confirmed":
-        case "sv-try-on-photo-rejected":
-        case "sv-try-on-presented":
-        case "sv-try-on-refused":
-        case "sv-try-on-rendered":
-        case "sv-try-on-request-resolved":
-        case "sv-try-on-variant-changed": {
+        case "sv-try-on-refused": {
+          if (shopperRequests.get(event.detail.requestId) === productId) {
+            send("gated-size-selected", data);
+          }
+          shopperRequests.delete(event.detail.requestId);
+          break;
+        }
+        case "sv-try-on-request-resolved": {
+          shopperRequests.delete(event.detail.requestId);
+          break;
+        }
+        case "sv-try-on-photo-processing":
+        case "sv-try-on-rendered": {
           break;
         }
       }
@@ -369,49 +402,23 @@ export function createTryOnAnalytics(options: AnalyticsOptions): TryOnAnalytics 
 
   return {
     observe,
-    entrypointImpression(productId: string, entry: string) {
-      send(
-        () =>
-          new AnalyticsEvent.EntrypointImpression({
-            event: { ...browserContext(), data: { ...common(productId), entry } },
-          }),
-      );
+    entrypointImpression(productId, entry) {
+      send("entrypoint-impression", { "product-id": productId, entry });
     },
-    cartItemAdded(event: CommerceAnalyticsEvent) {
-      send(
-        () =>
-          new AnalyticsEvent.CartItemAdded({
-            event: { ...browserContext(), data: variantData(event) },
-          }),
-      );
+    cartItemAdded(event) {
+      send("cart-item-added", variantData(event));
     },
-    orderPlaced(event: CommerceAnalyticsEvent) {
-      send(
-        () =>
-          new AnalyticsEvent.OrderPlaced({
-            event: { ...browserContext(), data: variantData(event) },
-          }),
-      );
+    orderPlaced(event) {
+      send("order-placed", variantData(event));
     },
-    experimentAssigned(enabled: boolean) {
-      send(
-        () =>
-          new AnalyticsEvent.ExperimentAssigned({
-            event: {
-              ...browserContext(),
-              data: {
-                sdkVersion,
-                variant: enabled
-                  ? new ExperimentAssignedDataVariant.Enabled()
-                  : new ExperimentAssignedDataVariant.Disabled(),
-              },
-            },
-          }),
-      );
+    experimentAssigned(enabled) {
+      send("experiment-assigned", {
+        experiment: "try-on-enabled",
+        variant: enabled ? "enabled" : "disabled",
+      });
     },
     dispose() {
       disposed = true;
-      void releaseClient();
     },
   };
 }

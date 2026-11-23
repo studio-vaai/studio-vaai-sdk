@@ -1,177 +1,114 @@
-import { initializeCore } from "@studio-vaai/core";
-import { createTryOnAnalytics } from "@studio-vaai/core/analytics";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import manifest from "../package.json";
+import type { TryOnExperienceEvent } from "../src/experience/events.js";
+
+import { createTryOnAnalytics } from "../src/analytics/index.js";
 
 describe("collector analytics", () => {
-  beforeAll(async () => {
-    await initializeCore(
-      new Uint8Array(await readFile(resolve(import.meta.dirname, "../dist/studio_vaai_core.wasm"))),
-    );
-  });
-
-  it("sends the generated catalogue body to the collector without shopper credentials", async () => {
+  it("projects lifecycle facts to cookieless occurrences and one bounded summary", async () => {
     const requests: Request[] = [];
-    const sdkVersion = `${manifest.name}@${manifest.version}`;
+    const visitorId = vi.fn<() => string>(() => "private-visitor");
     const publisher = createTryOnAnalytics({
       clientApiKey: "public-shop-key",
       baseUrl: "https://collector.example.test",
       enabled: () => true,
-      visitorId: () => "visitor",
+      visitorId,
       fetch: async (input, init) => {
         requests.push(new Request(input, init));
         return new Response(null, { status: 204 });
       },
     });
-    const foreignIds = { size: "28", inseam: "32", colorway: "blue" };
+    const product = { productId: "shirt", step: "try-on" } as const;
+    const variant = {
+      variantId: "v",
+      foreignIds: { size: "28", waist: "28", length: "32", colorway: "blue" },
+    };
+    const requested = {
+      ...product,
+      ...variant,
+      requestId: "private-request",
+      origin: "shopper",
+    } as const;
+    const displayed = { tryOnId: "private-result", variantId: "v" };
+    const facts: TryOnExperienceEvent[] = [
+      { type: "sv-try-on-opened", detail: { ...product, step: "intro", entry: "pdp" } },
+      {
+        type: "sv-try-on-step-changed",
+        detail: { ...product, step: "height", previousStep: "photo-upload" },
+      },
+      { type: "sv-try-on-height-confirmed", detail: { ...product, step: "height" } },
+      { type: "sv-try-on-variant-changed", detail: { ...product, ...variant } },
+      { type: "sv-try-on-requested", detail: requested },
+      { type: "sv-try-on-rendered", detail: { ...product, ...displayed } },
+      { type: "sv-try-on-presented", detail: { ...product, ...displayed } },
+      { type: "sv-try-on-presented", detail: { ...product, ...displayed } },
+      { type: "sv-try-on-add-to-cart-requested", detail: { ...product, ...variant } },
+      { type: "sv-try-on-closed", detail: { ...product, displayed } },
+    ];
     publisher.observe((listener) => {
-      listener({
-        type: "sv-try-on-requested",
-        detail: {
-          productId: "shirt",
-          step: "try-on",
-          origin: "shopper",
-          variantId: "v",
-          requestId: "r",
-          foreignIds,
-        },
-      });
-      listener({
-        type: "sv-try-on-add-to-cart-requested",
-        detail: { productId: "shirt", step: "try-on", variantId: "v", foreignIds },
-      });
+      for (const fact of facts) {
+        listener(fact);
+      }
       return () => {
-        // The test source has no active subscription to release.
+        // The fixture sends its events synchronously.
       };
     });
 
-    await vi.waitFor(() => {
-      expect(requests).toHaveLength(1);
+    expect(visitorId).not.toHaveBeenCalled();
+    expect(requests[0]?.url).toBe("https://collector.example.test/v2/events");
+    expect(requests[0]?.credentials).toBe("omit");
+    expect(requests[0]?.referrerPolicy).toBe("no-referrer");
+    expect(requests[0]?.headers.get("X-Client-Api-Key")).toBe("public-shop-key");
+    const bodies = await Promise.all(
+      requests.map(
+        async (req) =>
+          (await req.json()) as {
+            eventId: string;
+            event: { name: string; data: Record<string, unknown> };
+          },
+      ),
+    );
+    expect(new Set(bodies.map((body) => body.eventId)).size).toBe(bodies.length);
+    expect(bodies.map((body) => body.event.name)).toEqual([
+      "widget-opened",
+      "entrypoint-clicked",
+      "height-step-opened",
+      "height-entered",
+      "variant-changed",
+      "try-on-initiated",
+      "try-on-presented",
+      "cart-requested",
+      "view-closed",
+      "experience-summary",
+    ]);
+    expect(bodies.at(-1)?.event.data).toMatchObject({
+      "reached-intro": true,
+      "confirmed-height": true,
+      "presented-result": true,
+      "requested-cart": true,
+      "try-on-count": 1,
+      "distinct-colors": 1,
+      "distinct-sizes": 1,
+      "distinct-waists": 1,
+      "distinct-lengths": 1,
+      "time-to-result": "lt-10s",
     });
-    const request = requests[0];
-    expect(request.url).toBe("https://collector.example.test/api/send");
-    expect(request.credentials).toBe("omit");
-    expect(request.keepalive).toBe(true);
-    expect(request.headers.get("X-Client-Api-Key")).toBe("public-shop-key");
-    expect(request.headers.has("Authorization")).toBe(false);
-    expect(request.headers.has("X-Client-Version")).toBe(false);
-    await expect(request.json()).resolves.toEqual({
-      type: "event",
-      payload: {
-        id: "visitor",
-        name: "try-on-initiated",
-        data: {
-          "product-id": "shirt",
-          "sdk-version": sdkVersion,
-          "variant-size": "28",
-          "variant-inseam": "32",
-          "variant-colorway": "blue",
-        },
-      },
-    });
+    expect(JSON.stringify(bodies)).not.toMatch(/private-(visitor|request|result)/);
+  });
+
+  it("honors the enabled callback and disposal before sending", () => {
+    let enabled = false;
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    const publisher = createTryOnAnalytics({ clientApiKey: "key", enabled: () => enabled, fetch });
+    publisher.entrypointImpression("p", "pdp");
+    expect(fetch).not.toHaveBeenCalled();
+    enabled = true;
     publisher.experimentAssigned(true);
-    await vi.waitFor(() => {
-      expect(requests).toHaveLength(2);
-    });
-    await expect(requests[1]?.json()).resolves.toEqual({
-      type: "event",
-      payload: {
-        id: "visitor",
-        name: "experiment-assigned",
-        data: { experiment: "try-on-enabled", variant: "enabled", "sdk-version": sdkVersion },
-      },
-    });
-    publisher.observe((listener) => {
-      listener({
-        type: "sv-try-on-height-failed",
-        detail: { productId: "shirt", step: "height", reason: "unavailable" },
-      });
-      listener({
-        type: "sv-try-on-operation-deadline",
-        detail: { productId: "shirt", step: "try-on", work: "try-on" },
-      });
-      listener({
-        type: "sv-try-on-operation-slow",
-        detail: { productId: "shirt", step: "try-on", work: "try-on" },
-      });
-      listener({
-        type: "sv-try-on-operation-uncertain",
-        detail: { productId: "shirt", step: "try-on", work: "try-on" },
-      });
-      listener({
-        type: "sv-try-on-picker-failed",
-        detail: { productId: "shirt", step: "intro", reason: "unavailable" },
-      });
-      listener({
-        type: "sv-try-on-capture-failed",
-        detail: { productId: "shirt", step: "camera", reason: "failed" },
-      });
-      return () => {
-        // The test source has no active subscription to release.
-      };
-    });
-    await vi.waitFor(() => {
-      expect(requests).toHaveLength(8);
-    });
-    const failures = await Promise.all(
-      requests.slice(2).map(async (request): Promise<unknown> => await request.json()),
-    );
-    expect(failures).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          payload: expect.objectContaining({
-            name: "experience-operation-failed",
-            data: expect.objectContaining({
-              work: "try-on",
-              outcome: "failed",
-              reason: "deadline",
-            }),
-          }),
-        }),
-        expect.objectContaining({
-          payload: expect.objectContaining({
-            name: "experience-operation-failed",
-            data: expect.objectContaining({
-              work: "try-on",
-              outcome: "in_progress",
-              reason: "slow",
-            }),
-          }),
-        }),
-        expect.objectContaining({
-          payload: expect.objectContaining({
-            name: "experience-operation-failed",
-            data: expect.objectContaining({
-              work: "height",
-              outcome: "failed",
-              reason: "unavailable",
-              "current-step": "height",
-            }),
-          }),
-        }),
-        expect.objectContaining({
-          payload: expect.objectContaining({
-            name: "experience-operation-failed",
-            data: expect.objectContaining({ work: "try-on", outcome: "uncertain" }),
-          }),
-        }),
-        expect.objectContaining({
-          payload: expect.objectContaining({
-            name: "experience-operation-failed",
-            data: expect.objectContaining({ work: "picker", outcome: "failed" }),
-          }),
-        }),
-        expect.objectContaining({
-          payload: expect.objectContaining({
-            name: "experience-operation-failed",
-            data: expect.objectContaining({ work: "capture", outcome: "failed" }),
-          }),
-        }),
-      ]),
-    );
+    expect(fetch).toHaveBeenCalledOnce();
     publisher.dispose();
+    publisher.entrypointImpression("p", "pdp");
+    expect(fetch).toHaveBeenCalledOnce();
   });
 });

@@ -1,11 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
-import 'dart:ui' show PlatformDispatcher;
+import 'dart:typed_data';
 
 import '../experience/try_on_event.dart';
 import '../generated/api.dart';
 import '../transport.dart';
-import 'version.dart';
 
 /// The default collector, as the web's.
 const defaultAnalyticsBaseUrl = 'https://a.studio-vaai.com';
@@ -13,9 +13,10 @@ const defaultAnalyticsBaseUrl = 'https://a.studio-vaai.com';
 /// A product added to the cart or ordered, by the shop's product ID and the
 /// variant's foreign IDs by axis (`size`, `colorway`, and any other axis).
 final class CommerceAnalyticsEvent {
-  const CommerceAnalyticsEvent({required this.productId, required this.foreignIds});
+  const CommerceAnalyticsEvent({required this.productId, required this.foreignIds, this.variantId});
 
   final String productId;
+  final String? variantId;
   final Map<String, String> foreignIds;
 }
 
@@ -27,8 +28,7 @@ final class CommerceAnalyticsEvent {
 /// Pass it as a `StudioVaaiTryOn`'s `analytics` to observe the experience;
 /// report the shop's own facts with [entrypointImpression], [cartItemAdded],
 /// [orderPlaced] and [experimentAssigned]. Every event is sent only while
-/// `enabled()` holds (the shop's consent state), checked when it happens
-/// and again when it is sent. Sending is best effort and never throws.
+/// `enabled()` holds. Sending is best effort.
 abstract interface class TryOnAnalytics {
   /// Maps the events [subscribe] delivers; call the returned function to
   /// stop. A `StudioVaaiTryOn` given this analytics does it for you.
@@ -51,9 +51,8 @@ abstract interface class TryOnAnalytics {
 
 /// Creates [TryOnAnalytics] for the shop's public [clientApiKey].
 ///
-/// [visitorId] defaults to [analyticsVisitorId]: random, kept in memory only,
-/// and replaced every UTC day, as on the web. [sdkVersion] identifies the
-/// integration; it defaults to this package (`studio_vaai@<version>`).
+/// Each request carries a random occurrence ID. The [visitorId], [context],
+/// and [sdkVersion] parameters are retained for source compatibility and ignored.
 TryOnAnalytics createTryOnAnalytics({
   required String clientApiKey,
   required bool Function() enabled,
@@ -65,16 +64,14 @@ TryOnAnalytics createTryOnAnalytics({
 }) => _TryOnAnalytics(
   clientApiKey: clientApiKey,
   enabled: enabled,
-  sdkVersion: sdkVersion ?? studioVaaiSdkVersion,
   baseUrl: baseUrl,
-  visitorId: visitorId ?? analyticsVisitorId,
   transport: transport,
-  context: context ?? analyticsDeviceContext,
 );
 
 ({String day, String id})? _visitor;
 
-/// The visitor ID the web uses: random, in memory only, new every UTC day.
+/// Returns a random identifier for the current UTC day, kept in memory.
+@Deprecated('Analytics uses independent occurrence IDs.')
 String analyticsVisitorId() {
   final day = DateTime.now().toUtc().toIso8601String().substring(0, 10);
   final visitor = _visitor;
@@ -94,17 +91,103 @@ String _uuid4() {
       '${hex.substring(16, 20)}-${hex.substring(20)}';
 }
 
-/// What the web reads from the browser that an app has too: the device's
-/// language and its screen in logical pixels. No page, title or referrer.
-Map<String, String> analyticsDeviceContext() {
-  final dispatcher = PlatformDispatcher.instance;
-  final display = dispatcher.displays.firstOrNull;
-  return {
-    'language': dispatcher.locale.toLanguageTag(),
-    if (display != null && display.devicePixelRatio > 0)
-      'screen':
-          '${(display.size.width / display.devicePixelRatio).round()}x'
-          '${(display.size.height / display.devicePixelRatio).round()}',
+const _axes = ['size', 'colorway', 'waist', 'length'];
+const _limit = 32;
+
+Map<String, Object> _variantData(
+  String productId,
+  String? variantId,
+  Map<String, String> foreignIds,
+) => {
+  'product-id': productId,
+  if (variantId != null)
+    'variant-id': variantId
+  else
+    for (final axis in _axes)
+      if (foreignIds[axis] case final value?) 'variant-$axis': value,
+};
+
+Map<String, String> _foreignIds(Map<String, Object?> detail) =>
+    (detail['foreignIds'] as Map?)?.cast<String, String>() ?? const {};
+
+String _step(String step) => switch (step) {
+  'camera' => 'image-record',
+  'photo-upload' => 'image-upload',
+  'photo-rejected' => 'image-rejection',
+  _ => step,
+};
+
+String _imageSource(String? step) => switch (step) {
+  'height' => 'height',
+  'variant-selection' || 'try-on' => 'variant-selection',
+  'photo-rejected' => 'image-rejection',
+  _ => 'intro',
+};
+
+String _timeBucket(int seconds) => switch (seconds) {
+  < 10 => 'lt-10s',
+  < 30 => '10-29s',
+  < 60 => '30-59s',
+  < 120 => '60-119s',
+  _ => '120s-plus',
+};
+
+final class _Summary {
+  _Summary(this.productId, this.entry);
+  final String productId;
+  final String? entry;
+  final elapsed = Stopwatch()..start();
+  final variants = <String, Map<String, String>>{};
+  final displayed = <String>{};
+  final axes = {for (final axis in _axes) axis: <String>{}};
+  bool intro = false;
+  bool consent = false;
+  bool photo = false;
+  bool height = false;
+  bool selection = false;
+  bool requested = false;
+  bool cart = false;
+  bool missingVariant = false;
+  String? timeToResult;
+
+  void rememberVariant(String variantId, Map<String, String> foreignIds) {
+    if (variants.length < _limit || variants.containsKey(variantId)) {
+      variants[variantId] = foreignIds;
+    }
+  }
+
+  bool present(String tryOnId, String variantId) {
+    if (!displayed.add(tryOnId)) return false;
+    timeToResult ??= _timeBucket(elapsed.elapsed.inSeconds);
+    final variant = variants[variantId];
+    missingVariant = missingVariant || variant == null;
+    for (final axis in _axes) {
+      final value = variant?[axis];
+      final seen = axes[axis]!;
+      if (value != null && seen.length < _limit) seen.add(value);
+    }
+    return true;
+  }
+
+  Map<String, Object> toData() => {
+    'product-id': productId,
+    if (entry case final value?) 'entry': value,
+    'reached-intro': intro,
+    'granted-consent': consent,
+    'accepted-photo': photo,
+    'confirmed-height': height,
+    'reached-selection': selection,
+    'requested-try-on': requested,
+    'presented-result': displayed.isNotEmpty,
+    'requested-cart': cart,
+    'try-on-count': min(_limit, displayed.length),
+    if (!missingVariant) ...{
+      'distinct-sizes': axes['size']!.length,
+      'distinct-colors': axes['colorway']!.length,
+      'distinct-waists': axes['waist']!.length,
+      'distinct-lengths': axes['length']!.length,
+    },
+    if (timeToResult case final value?) 'time-to-result': value,
   };
 }
 
@@ -112,385 +195,232 @@ final class _TryOnAnalytics implements TryOnAnalytics {
   _TryOnAnalytics({
     required this.clientApiKey,
     required this.enabled,
-    required this.sdkVersion,
-    required this.baseUrl,
-    required this.visitorId,
-    required this.context,
-    required this._transport,
-  });
+    required String baseUrl,
+    required HttpTransport? transport,
+  }) : _endpoint = '${baseUrl.replaceFirst(RegExp(r'/$'), '')}/v2/events',
+       _transport = transport;
 
   final String clientApiKey;
   final bool Function() enabled;
-  final String sdkVersion;
-  final String baseUrl;
-  final String Function() visitorId;
-  final Map<String, String> Function() context;
+  final String _endpoint;
   final HttpTransport? _transport;
   final _inFlight = <Future<void>>{};
-  ApiClient? _client;
   IoHttpTransport? _ownTransport;
   bool _disposed = false;
   bool _releasing = false;
 
-  ApiClient _connect() => _client ??= ApiClient(
-    config: ClientConfig(baseUrl: baseUrl, clientApiKey: clientApiKey),
-    transport: _transport ?? (_ownTransport = IoHttpTransport()),
-  );
-
-  _Context _eventContext() {
-    final id = visitorId();
-    final device = context();
-    return _Context(
-      id: id.length > 50 ? id.substring(0, 50) : id,
-      language: device['language'],
-      screen: device['screen'],
-    );
-  }
-
-  Future<void> _deliver(AnalyticsEvent payload) async {
+  Future<void> _deliver(String name, Map<String, Object> data) async {
     try {
-      final api = _connect();
-      if (enabled()) {
-        await api.sendAnalyticsEvent(body: AnalyticsEventRequest(payload: payload));
-      }
+      final transport = _transport ?? (_ownTransport ??= IoHttpTransport());
+      await transport.send(
+        HttpRequest(
+          method: 'POST',
+          url: _endpoint,
+          withCredentials: false,
+          headers: [
+            HttpHeader(name: 'Content-Type', value: 'application/json'),
+            HttpHeader(name: 'X-Client-Api-Key', value: clientApiKey),
+          ],
+          body: Uint8List.fromList(
+            utf8.encode(
+              jsonEncode({
+                'eventId': _uuid4(),
+                'event': {'name': name, 'data': data},
+              }),
+            ),
+          ),
+        ),
+      );
     } catch (_) {
       // Analytics is best effort and never delays the shop.
     }
   }
 
-  void _send(AnalyticsEvent Function() event) {
+  void _send(String name, Map<String, Object> data) {
     if (_disposed || !enabled()) return;
     late final Future<void> work;
-    work = _deliver(event()).whenComplete(() => _inFlight.remove(work));
+    work = _deliver(name, data).whenComplete(() => _inFlight.remove(work));
     _inFlight.add(work);
   }
-
-  AnalyticsProductData _product(String productId) =>
-      AnalyticsProductData(productId: productId, sdkVersion: sdkVersion);
-
-  AnalyticsVariantData _variant(String productId, Map<String, String> foreignIds) =>
-      AnalyticsVariantData(
-        productId: productId,
-        sdkVersion: sdkVersion,
-        variantSize: foreignIds['size'],
-        variantColorway: foreignIds['colorway'],
-        additional: {
-          for (final MapEntry(:key, :value) in foreignIds.entries)
-            if (key != 'size' && key != 'colorway') 'variant-$key': value,
-        },
-      );
 
   @override
   void Function() observe(
     void Function() Function(void Function(TryOnExperienceEvent event)) subscribe,
-  ) => subscribe(_map);
+  ) {
+    _Summary? summary;
+    final shopperRequests = <String, String>{};
 
-  void _map(TryOnExperienceEvent event) {
-    final d = event.detail;
-    final productId = event.productId;
-    final c = _eventContext();
-    final step = _step(event.step);
-    void operation(String work, String outcome, [String? reason]) => _send(
-      () => ExperienceOperationFailedAnalyticsEvent(
-        ExperienceOperationFailed(
-          id: c.id,
-          language: c.language,
-          screen: c.screen,
-          data: ExperienceOperationFailedData(
-            productId: productId,
-            sdkVersion: sdkVersion,
-            work: work,
-            outcome: outcome,
-            reason: reason,
-            currentStep: step,
-          ),
-        ),
-      ),
-    );
-    switch (event.type) {
-      case 'sv-try-on-opened':
-        final entry = d['entry'] as String?;
-        if (entry != null) {
-          _send(
-            () => EntrypointClickedAnalyticsEvent(
-              EntrypointClicked(
-                id: c.id,
-                language: c.language,
-                screen: c.screen,
-                data: EntrypointClickedData(
-                  productId: productId,
-                  sdkVersion: sdkVersion,
-                  entry: entry,
-                  subentry: d['subentry'] as String?,
-                  currentStep: step,
-                ),
-              ),
-            ),
-          );
-        }
-      case 'sv-try-on-step-changed':
-        final previous = d['previousStep'] as String?;
-        final source = previous == null ? EntryAnalyticsStep() : _step(previous);
-        switch (event.step) {
-          case 'intro':
-            _send(
-              () => IntroOpenedAnalyticsEvent(
-                IntroOpened(
-                  id: c.id,
-                  language: c.language,
-                  screen: c.screen,
-                  data: IntroOpenedData(
-                    productId: productId,
-                    sdkVersion: sdkVersion,
-                    source: source,
-                  ),
-                ),
-              ),
-            );
-          case 'height':
-            _send(
-              () => HeightEnteredAnalyticsEvent(
-                HeightEntered(
-                  id: c.id,
-                  language: c.language,
-                  screen: c.screen,
-                  data: HeightEnteredData(
-                    productId: productId,
-                    sdkVersion: sdkVersion,
-                    source: source,
-                  ),
-                ),
-              ),
-            );
-          case 'variant-selection':
-            _send(
-              () => VariantSelectionInitiatedAnalyticsEvent(
-                VariantSelectionInitiated(
-                  id: c.id,
-                  language: c.language,
-                  screen: c.screen,
-                  data: VariantSelectionInitiatedData(
-                    productId: productId,
-                    sdkVersion: sdkVersion,
-                    source: source,
-                  ),
-                ),
-              ),
-            );
-        }
-      case 'sv-try-on-consent-granted':
-        _send(
-          () => ConsentGrantedAnalyticsEvent(
-            ConsentGranted(
-              id: c.id,
-              language: c.language,
-              screen: c.screen,
-              data: _product(productId),
-            ),
-          ),
-        );
-      case 'sv-try-on-photo-source-started':
-        final source = _imageSource(d['originStep'] as String?);
-        _send(
-          () => d['source'] == 'camera'
-              ? ImageRecordInitiatedAnalyticsEvent(
-                  ImageRecordInitiated(
-                    id: c.id,
-                    language: c.language,
-                    screen: c.screen,
-                    data: ImageRecordInitiatedData(
-                      productId: productId,
-                      sdkVersion: sdkVersion,
-                      source: source,
-                    ),
-                  ),
-                )
-              : ImageUploadInitiatedAnalyticsEvent(
-                  ImageUploadInitiated(
-                    id: c.id,
-                    language: c.language,
-                    screen: c.screen,
-                    data: ImageUploadInitiatedData(
-                      productId: productId,
-                      sdkVersion: sdkVersion,
-                      source: source,
-                    ),
-                  ),
-                ),
-        );
-      case 'sv-try-on-photo-source-cancelled':
-        final source = _imageSource(d['originStep'] as String?);
-        _send(
-          () => d['source'] == 'camera'
-              ? ImageRecordAbortedAnalyticsEvent(
-                  ImageRecordAborted(
-                    id: c.id,
-                    language: c.language,
-                    screen: c.screen,
-                    data: ImageRecordAbortedData(
-                      productId: productId,
-                      sdkVersion: sdkVersion,
-                      source: source,
-                    ),
-                  ),
-                )
-              : ImageUploadAbortedAnalyticsEvent(
-                  ImageUploadAborted(
-                    id: c.id,
-                    language: c.language,
-                    screen: c.screen,
-                    data: ImageUploadAbortedData(
-                      productId: productId,
-                      sdkVersion: sdkVersion,
-                      source: source,
-                    ),
-                  ),
-                ),
-        );
-      case 'sv-try-on-photo-accepted':
-        _send(
-          () => ImageUploadedAnalyticsEvent(
-            ImageUploaded(
-              id: c.id,
-              language: c.language,
-              screen: c.screen,
-              data: ImageUploadedData(
-                productId: productId,
-                sdkVersion: sdkVersion,
-                imageSource: d['source'] == 'camera'
-                    ? RecordSelfTimerImageUploadedDataImageSource()
-                    : SelectImageUploadedDataImageSource(),
-              ),
-            ),
-          ),
-        );
-      case 'sv-try-on-requested':
-        _send(
-          () => TryOnInitiatedAnalyticsEvent(
-            TryOnInitiated(
-              id: c.id,
-              language: c.language,
-              screen: c.screen,
-              data: _variant(productId, _foreignIds(d)),
-            ),
-          ),
-        );
-      case 'sv-try-on-closed':
-        _send(
-          () => ViewClosedAnalyticsEvent(
-            ViewClosed(
-              id: c.id,
-              language: c.language,
-              screen: c.screen,
-              data: ViewClosedData(productId: productId, sdkVersion: sdkVersion, currentStep: step),
-            ),
-          ),
-        );
-      case 'sv-try-on-session-failed':
-        operation('session', 'failed', d['reason'] as String?);
-      case 'sv-try-on-height-failed':
-        operation('height', 'failed', d['reason'] as String?);
-      case 'sv-try-on-operation-slow':
-        operation(d['work']! as String, 'in_progress', 'slow');
-      case 'sv-try-on-operation-deadline':
-        operation(d['work']! as String, 'failed', 'deadline');
-      case 'sv-try-on-operation-uncertain':
-        operation(d['work']! as String, 'uncertain');
-      case 'sv-try-on-camera-failed':
-        operation('camera', 'failed', d['reason'] as String?);
-      case 'sv-try-on-capture-failed':
-        operation('capture', 'failed', d['reason'] as String?);
-      case 'sv-try-on-picker-failed':
-        operation('picker', 'failed', d['reason'] as String?);
-      case 'sv-try-on-photo-failed':
-        operation('photo', 'failed', d['reason'] as String?);
-      case 'sv-try-on-failed':
-        operation('try-on', 'failed', d['reason'] as String?);
-      case 'sv-try-on-detached':
-        operation('try-on', 'detached', d['stage'] as String?);
-      default:
-        // Processing, rejections, presentation, rendering, variant changes and
-        // the cart request carry nothing the catalogue records, as on the web.
-        break;
-    }
+    return subscribe((event) {
+      if (_disposed || !enabled()) {
+        summary = null;
+        shopperRequests.clear();
+        return;
+      }
+      final detail = event.detail;
+      final productId = event.productId;
+      final data = {'product-id': productId};
+      final step = _step(event.step);
+      final variantId = detail['variantId'] as String?;
+      final existing = summary;
+      if (existing != null &&
+          existing.productId != productId &&
+          (event.type == 'sv-try-on-step-changed' ||
+              event.type == 'sv-try-on-variant-changed' ||
+              event.type == 'sv-try-on-presented')) {
+        summary = _Summary(productId, existing.entry);
+      }
+      final scope = summary?.productId == productId ? summary : null;
+
+      void operation(String work, String outcome, [String? reason]) =>
+          _send('experience-operation-failed', {
+            ...data,
+            'work': work,
+            'outcome': outcome,
+            'current-step': step,
+            if (reason != null) 'reason': reason,
+          });
+
+      switch (event.type) {
+        case 'sv-try-on-opened':
+          final entry = detail['entry'] as String?;
+          shopperRequests.clear();
+          summary = _Summary(productId, entry)
+            ..intro = event.step == 'intro'
+            ..selection = event.step == 'variant-selection';
+          final withEntry = {...data, if (entry != null) 'entry': entry};
+          _send('widget-opened', withEntry);
+          if (entry != null) _send('entrypoint-clicked', withEntry);
+        case 'sv-try-on-step-changed':
+          final previous = detail['previousStep'] as String?;
+          final stepData = {...data, 'source': previous == null ? 'entry' : _step(previous)};
+          switch (event.step) {
+            case 'intro':
+              scope?.intro = true;
+              _send('intro-opened', stepData);
+            case 'height':
+              _send('height-step-opened', stepData);
+            case 'variant-selection':
+              scope?.selection = true;
+              _send('variant-selection-initiated', stepData);
+          }
+        case 'sv-try-on-consent-granted':
+          scope?.consent = true;
+          _send('consent-granted', data);
+        case 'sv-try-on-photo-source-started' || 'sv-try-on-photo-source-cancelled':
+          final started = event.type == 'sv-try-on-photo-source-started';
+          final family = detail['source'] == 'camera' ? 'image-record' : 'image-upload';
+          _send('$family-${started ? 'initiated' : 'aborted'}', {
+            ...data,
+            'source': _imageSource(detail['originStep'] as String?),
+          });
+        case 'sv-try-on-photo-accepted':
+          scope?.photo = true;
+          _send('image-uploaded', {
+            ...data,
+            'image-source': detail['source'] == 'camera' ? 'record-self-timer' : 'select',
+          });
+        case 'sv-try-on-photo-rejected':
+          _send('photo-rejected', {
+            ...data,
+            'method': detail['source'] == 'camera' ? 'camera' : 'picker',
+          });
+        case 'sv-try-on-height-confirmed':
+          scope?.height = true;
+          _send('height-entered', data);
+        case 'sv-try-on-variant-changed':
+          final foreignIds = _foreignIds(detail);
+          if (variantId != null) scope?.rememberVariant(variantId, foreignIds);
+          _send('variant-changed', _variantData(productId, variantId, foreignIds));
+        case 'sv-try-on-requested':
+          final foreignIds = _foreignIds(detail);
+          scope?.requested = true;
+          if (variantId != null) scope?.rememberVariant(variantId, foreignIds);
+          final requestId = detail['requestId'] as String;
+          final origin = detail['origin'] as String;
+          if (origin == 'shopper') {
+            if (shopperRequests.length >= _limit) {
+              shopperRequests.remove(shopperRequests.keys.first);
+            }
+            shopperRequests[requestId] = productId;
+          }
+          _send('try-on-initiated', {
+            ..._variantData(productId, variantId, foreignIds),
+            'origin': origin,
+          });
+        case 'sv-try-on-presented':
+          if (variantId != null &&
+              (scope?.present(detail['tryOnId'] as String, variantId) ?? true)) {
+            _send('try-on-presented', {...data, 'variant-id': variantId});
+          }
+        case 'sv-try-on-closed':
+          _send('view-closed', {
+            ...data,
+            'current-step': step,
+            'result-displayed': detail['displayed'] != null,
+          });
+          if (scope != null) _send('experience-summary', scope.toData());
+          summary = null;
+          shopperRequests.clear();
+        case 'sv-try-on-add-to-cart-requested':
+          scope?.cart = true;
+          _send('cart-requested', _variantData(productId, variantId, _foreignIds(detail)));
+        case 'sv-try-on-session-failed':
+          operation('session', 'failed');
+        case 'sv-try-on-height-failed':
+          operation('height', 'failed');
+        case 'sv-try-on-operation-uncertain':
+          operation(detail['work'] as String, 'uncertain');
+        case 'sv-try-on-operation-slow':
+          operation(detail['work'] as String, 'in_progress', 'slow');
+        case 'sv-try-on-operation-deadline':
+          operation(detail['work'] as String, 'failed', 'deadline');
+        case 'sv-try-on-camera-failed':
+          operation('camera', 'failed');
+        case 'sv-try-on-capture-failed':
+          operation('capture', 'failed');
+        case 'sv-try-on-picker-failed':
+          operation('picker', 'failed');
+        case 'sv-try-on-photo-failed':
+          operation('photo', 'failed');
+        case 'sv-try-on-failed':
+          shopperRequests.remove(detail['requestId']);
+          operation('try-on', 'failed');
+        case 'sv-try-on-detached':
+          shopperRequests.remove(detail['requestId']);
+          operation('try-on', 'detached');
+        case 'sv-try-on-refused':
+          if (shopperRequests.remove(detail['requestId']) == productId) {
+            _send('gated-size-selected', data);
+          }
+        case 'sv-try-on-request-resolved':
+          shopperRequests.remove(detail['requestId']);
+      }
+    });
   }
 
   @override
-  void entrypointImpression(String productId, String entry) {
-    final c = _eventContext();
-    _send(
-      () => EntrypointImpressionAnalyticsEvent(
-        EntrypointImpression(
-          id: c.id,
-          language: c.language,
-          screen: c.screen,
-          data: EntrypointImpressionData(
-            productId: productId,
-            sdkVersion: sdkVersion,
-            entry: entry,
-          ),
-        ),
-      ),
-    );
-  }
+  void entrypointImpression(String productId, String entry) =>
+      _send('entrypoint-impression', {'product-id': productId, 'entry': entry});
 
   @override
-  void cartItemAdded(CommerceAnalyticsEvent event) {
-    final c = _eventContext();
-    _send(
-      () => CartItemAddedAnalyticsEvent(
-        CartItemAdded(
-          id: c.id,
-          language: c.language,
-          screen: c.screen,
-          data: _variant(event.productId, event.foreignIds),
-        ),
-      ),
-    );
-  }
+  void cartItemAdded(CommerceAnalyticsEvent event) =>
+      _send('cart-item-added', _variantData(event.productId, event.variantId, event.foreignIds));
 
   @override
-  void orderPlaced(CommerceAnalyticsEvent event) {
-    final c = _eventContext();
-    _send(
-      () => OrderPlacedAnalyticsEvent(
-        OrderPlaced(
-          id: c.id,
-          language: c.language,
-          screen: c.screen,
-          data: _variant(event.productId, event.foreignIds),
-        ),
-      ),
-    );
-  }
+  void orderPlaced(CommerceAnalyticsEvent event) =>
+      _send('order-placed', _variantData(event.productId, event.variantId, event.foreignIds));
 
   @override
-  void experimentAssigned(bool enabled) {
-    final c = _eventContext();
-    _send(
-      () => ExperimentAssignedAnalyticsEvent(
-        ExperimentAssigned(
-          id: c.id,
-          language: c.language,
-          screen: c.screen,
-          data: ExperimentAssignedData(
-            sdkVersion: sdkVersion,
-            variant: enabled
-                ? EnabledExperimentAssignedDataVariant()
-                : DisabledExperimentAssignedDataVariant(),
-          ),
-        ),
-      ),
-    );
-  }
+  void experimentAssigned(bool enabled) => _send('experiment-assigned', {
+    'experiment': 'try-on-enabled',
+    'variant': enabled ? 'enabled' : 'disabled',
+  });
 
   @override
   void dispose() {
     if (_disposed || _releasing) return;
     _releasing = true;
-    // An experience disposed in the same frame still publishes its final
-    // events (a detached operation, the closed view) synchronously after
-    // this call, as React's cleanups run: take those, then stop.
+    // Include final synchronous experience events from the same frame.
     scheduleMicrotask(() {
       _disposed = true;
       unawaited(_release());
@@ -499,33 +429,6 @@ final class _TryOnAnalytics implements TryOnAnalytics {
 
   Future<void> _release() async {
     await Future.wait([..._inFlight]);
-    _client?.dispose();
     _ownTransport?.close();
   }
-}
-
-Map<String, String> _foreignIds(Map<String, Object?> detail) =>
-    (detail['foreignIds'] as Map?)?.cast<String, String>() ?? const {};
-
-AnalyticsStep _step(String step) => switch (step) {
-  'intro' => IntroAnalyticsStep(),
-  'camera' => ImageRecordAnalyticsStep(),
-  'photo-upload' => ImageUploadAnalyticsStep(),
-  'photo-rejected' => ImageRejectionAnalyticsStep(),
-  'height' => HeightAnalyticsStep(),
-  'variant-selection' => VariantSelectionAnalyticsStep(),
-  _ => TryOnAnalyticsStep(),
-};
-
-AnalyticsImageSource _imageSource(String? step) => switch (step) {
-  'height' => HeightAnalyticsImageSource(),
-  'variant-selection' || 'try-on' => VariantSelectionAnalyticsImageSource(),
-  'photo-rejected' => ImageRejectionAnalyticsImageSource(),
-  _ => IntroAnalyticsImageSource(),
-};
-
-final class _Context {
-  const _Context({required this.id, this.language, this.screen});
-  final String id;
-  final String? language, screen;
 }

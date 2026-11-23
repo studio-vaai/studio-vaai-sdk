@@ -12,16 +12,19 @@ import 'package:studio_vaai/studio_vaai.dart';
 
 final class _Collector implements HttpTransport {
   final sent = <Map<String, Object?>>[];
+  final eventIds = <String>{};
 
   @override
   Future<HttpResponse> send(HttpRequest request) async {
     String? header(String name) =>
         request.headers.where((h) => h.name.toLowerCase() == name.toLowerCase()).firstOrNull?.value;
+    final body = jsonDecode(utf8.decode(request.body!)) as Map<String, Object?>;
+    eventIds.add(body.remove('eventId') as String);
     sent.add({
       'method': request.method,
       'path': Uri.parse(request.url).path,
       'clientApiKey': header('X-Client-Api-Key'),
-      'body': jsonDecode(utf8.decode(request.body!)),
+      'body': body,
     });
     return HttpResponse(status: 204, headers: [], body: Uint8List(0));
   }
@@ -37,12 +40,8 @@ void main() {
     final analytics = createTryOnAnalytics(
       clientApiKey: input['clientApiKey'] as String,
       baseUrl: input['baseUrl'] as String,
-      sdkVersion: input['sdkVersion'] as String,
       enabled: () => enabled,
-      visitorId: () => input['visitorId'] as String,
       transport: collector,
-      // The web's mapper runs in Node here, where it has no page to describe.
-      context: () => const {},
     );
     void Function(TryOnExperienceEvent)? emit;
     analytics.observe((listener) {
@@ -76,6 +75,9 @@ void main() {
     }
     analytics.dispose();
     expect(collector.sent, expected['sent']);
+    expect(collector.eventIds, hasLength(collector.sent.length));
+    final uuid = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$');
+    expect(collector.eventIds.every(uuid.hasMatch), isTrue);
   });
 
   test('events in the same turn as dispose are sent; later ones are not', () async {
@@ -83,9 +85,7 @@ void main() {
     final analytics = createTryOnAnalytics(
       clientApiKey: 'key',
       enabled: () => true,
-      visitorId: () => 'visitor',
       transport: collector,
-      context: () => const {},
     );
     late void Function(TryOnExperienceEvent) emit;
     analytics.observe((listener) {
@@ -100,7 +100,7 @@ void main() {
     emit(closed);
     analytics.experimentAssigned(true);
     await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(collector.sent.map((s) => ((s['body']! as Map)['payload']! as Map)['name']), [
+    expect(collector.sent.map((s) => ((s['body']! as Map)['event']! as Map)['name']), [
       'view-closed',
     ]);
   });

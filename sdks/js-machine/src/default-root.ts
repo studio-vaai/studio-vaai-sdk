@@ -503,23 +503,31 @@ export const defaultRootMachine = setup({
             actions: raise({ type: "SESSION_EXPIRED" }),
           },
           {
-            guard: ({ event }) => {
+            guard: ({ context, event }) => {
               const snap = event.snapshot as PhotoUploadSnapshot;
               return (
                 snap.value === "rejected" &&
                 snap.context.image !== undefined &&
-                snap.context.lastError !== undefined
+                snap.context.lastError !== undefined &&
+                snap.context.lastError !== context.lastPhotoRejection?.error
               );
             },
-            actions: assign({
-              lastPhotoRejection: ({ event }) => {
-                const snap = event.snapshot as PhotoUploadSnapshot;
-                return {
-                  image: snap.context.image!,
-                  error: snap.context.lastError!,
-                };
-              },
-            }),
+            actions: [
+              assign({
+                lastPhotoRejection: ({ event }) => {
+                  const snap = event.snapshot as PhotoUploadSnapshot;
+                  return {
+                    image: snap.context.image!,
+                    error: snap.context.lastError!,
+                  };
+                },
+              }),
+              emit(({ context }) => ({
+                type: "photo-rejected" as const,
+                "product-id": context.product.id,
+                method: context.photoSource === "camera" ? "camera" : "picker",
+              })),
+            ],
           },
         ],
         onDone: {
@@ -628,6 +636,10 @@ export const defaultRootMachine = setup({
                     ];
                   },
                 }),
+                emit(({ context }) => ({
+                  type: "height-entered" as const,
+                  "product-id": context.product.id,
+                })),
                 // Calibration changes the body's measurements IN PLACE (same
                 // bodyId), so a size recommendation fetched pre-calibration is
                 // stale without any context field changing. Re-request it; the
@@ -689,7 +701,7 @@ export const defaultRootMachine = setup({
               // from the snapshot delta — typically image-upload or
               // variant-selection per the event spec.
               entry: emit(({ context }) => ({
-                type: "height-entered" as const,
+                type: "height-step-opened" as const,
                 "product-id": context.product.id,
               })),
               on: {

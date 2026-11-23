@@ -206,8 +206,6 @@ describe("useTryOns", () => {
 
   it("delivers the final events to host analytics disposed in an effect cleanup", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    // Vite defines the package version at build time.
-    vi.stubGlobal("STUDIO_VAAI_REACT_VERSION", "0.0.0-test");
     const eventListeners = new Set<(event: TryOnExperienceEvent) => void | Promise<void>>();
     const closed = {
       type: "sv-try-on-closed",

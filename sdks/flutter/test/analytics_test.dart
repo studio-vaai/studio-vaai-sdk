@@ -13,7 +13,7 @@ import 'support/scenarios.dart';
 
 final class _Collector implements HttpTransport {
   final bodies = <Map<String, Object?>>[];
-  List<String> get names => [for (final b in bodies) ((b['payload']! as Map)['name']! as String)];
+  List<String> get names => [for (final b in bodies) ((b['event']! as Map)['name']! as String)];
 
   @override
   Future<HttpResponse> send(HttpRequest request) async {
@@ -34,9 +34,9 @@ void main() {
     h.analytics = createTryOnAnalytics(
       clientApiKey: 'public-key',
       enabled: () => enabled,
-      visitorId: () => 'visitor',
+      visitorId: () => throw StateError('Analytics must omit visitor IDs'),
       transport: collector,
-      context: () => const {'language': 'en-US', 'screen': '390x844'},
+      context: () => throw StateError('Analytics must omit device context'),
     );
   });
   tearDown(() => h.dispose());
@@ -67,11 +67,9 @@ void main() {
         'try-on-initiated',
       ]),
     );
-    final first = collector.bodies.first['payload']! as Map;
-    expect(first['id'], 'visitor');
-    expect(first['language'], 'en-US');
-    expect(first['screen'], '390x844');
-    expect((first['data']! as Map)['sdk-version'], studioVaaiSdkVersion);
+    final first = collector.bodies.first['event']! as Map;
+    expect(first.keys, unorderedEquals(['name', 'data']));
+    expect(collector.bodies.first['eventId'], isA<String>());
     expect((first['data']! as Map)['product-id'], isNotEmpty);
     await finish(tester);
   });
@@ -84,8 +82,9 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     h.analytics!.dispose();
     await deliver(tester);
-    expect(collector.names.last, 'view-closed');
-    final closed = collector.bodies.last['payload']! as Map;
+    final closeIndex = collector.names.lastIndexOf('view-closed');
+    expect(closeIndex, greaterThanOrEqualTo(0));
+    final closed = collector.bodies[closeIndex]['event']! as Map;
     expect((closed['data']! as Map)['current-step'], 'height');
     // Nothing after that.
     final count = collector.bodies.length;
@@ -104,7 +103,7 @@ void main() {
     await tester.pump(const Duration(seconds: 31));
     await deliver(tester);
     expect(events.map((e) => e.type), contains('sv-try-on-operation-slow'));
-    final slow = collector.bodies.last['payload']! as Map;
+    final slow = collector.bodies.last['event']! as Map;
     expect(slow['name'], 'experience-operation-failed');
     expect(slow['data'], containsPair('reason', 'slow'));
     expect(slow['data'], containsPair('outcome', 'in_progress'));

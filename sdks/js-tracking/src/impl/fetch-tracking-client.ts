@@ -1,88 +1,126 @@
-import type { EventContext, TrackError, TrackOptions, TrackResult } from "../base.js";
+import type { EventContext, TrackError, TrackResult } from "../base.js";
 import type { TrackingClient } from "../client.js";
+import type { TrackingEvent } from "../events.js";
 
 export const DEFAULT_COLLECTOR_BASE_URL = "https://a.studio-vaai.com" as const;
 
 export interface FetchTrackingClientConfig {
   clientApiKey: string;
   baseUrl?: string;
-  sdkVersion: string;
+  /** Compatibility option. Cookieless analytics does not attach an SDK version. */
+  sdkVersion?: string;
+  /** Compatibility option. The transport ignores visitor identifiers. */
   distinctId?: string | (() => string);
   fetch?: typeof fetch;
+  /** Compatibility option. The transport ignores browser context. */
   defaultContext?: EventContext;
 }
-interface EventPayload {
-  hostname?: string;
-  language?: string;
-  screen?: string;
-  title?: string;
-  url?: string;
-  referrer?: string;
-}
-function deriveBrowserContext(): EventContext {
-  const ctx: EventContext = {};
-  if (typeof globalThis === "undefined") {
-    return ctx;
+const axes = [
+  "variant-id",
+  "variant-size",
+  "variant-colorway",
+  "variant-waist",
+  "variant-length",
+] as const;
+
+type WireData = Record<string, string | number | boolean>;
+
+function eventForCollector(event: TrackingEvent): { name: string; data: WireData } {
+  const fields = event.data;
+  if (event.name === "experiment-assigned") {
+    return {
+      name: event.name,
+      data: { experiment: event.data.experiment, variant: event.data.variant },
+    };
   }
-  const w = (globalThis as { window?: Window }).window;
-  if (typeof w === "undefined") {
-    return ctx;
-  }
-  const loc = w.location;
-  if (typeof loc !== "undefined") {
-    ctx.hostname = loc.hostname;
-    ctx.url = loc.pathname;
-  }
-  const doc = w.document;
-  if (typeof doc !== "undefined") {
-    ctx.title = doc.title;
-    if (doc.referrer !== "") {
-      ctx.referrer = doc.referrer;
+  const data: WireData = { "product-id": event.data["product-id"] };
+  const copy = (...keys: string[]) => {
+    for (const key of keys) {
+      const value: unknown = Reflect.get(fields, key);
+      if (typeof value === "string" || typeof value === "boolean" || typeof value === "number") {
+        data[key] = value;
+      }
+    }
+  };
+  // oxlint-disable-next-line eslint/default-case -- The event union is exhaustive.
+  switch (event.name) {
+    case "entrypoint-impression":
+    case "entrypoint-clicked":
+    case "widget-opened": {
+      copy("entry");
+      break;
+    }
+    case "intro-opened":
+    case "height-step-opened":
+    case "image-record-initiated":
+    case "image-record-aborted":
+    case "image-upload-initiated":
+    case "image-upload-aborted": {
+      copy("source");
+      break;
+    }
+    case "height-entered": {
+      // Older subscribers use this name on entry to the height step.
+      if ("source" in event.data) {
+        copy("source");
+        return { name: "height-step-opened", data };
+      }
+      break;
+    }
+    case "image-uploaded": {
+      copy("image-source");
+      break;
+    }
+    case "photo-rejected": {
+      copy("method");
+      break;
+    }
+    case "variant-selection-initiated": {
+      copy("source", "via");
+      break;
+    }
+    case "try-on-initiated": {
+      copy("origin", ...axes);
+      break;
+    }
+    case "variant-changed":
+    case "try-on-presented":
+    case "cart-requested":
+    case "cart-item-added":
+    case "order-placed": {
+      copy(...axes);
+      break;
+    }
+    case "view-closed": {
+      copy("current-step", "result-displayed");
+      break;
+    }
+    case "experience-summary": {
+      copy(
+        "entry",
+        "reached-intro",
+        "granted-consent",
+        "accepted-photo",
+        "confirmed-height",
+        "reached-selection",
+        "requested-try-on",
+        "presented-result",
+        "requested-cart",
+        "try-on-count",
+        "distinct-sizes",
+        "distinct-colors",
+        "distinct-waists",
+        "distinct-lengths",
+        "time-to-result",
+      );
+      break;
+    }
+    case "consent-granted":
+    case "gated-size-selected": {
+      break;
     }
   }
-  const nav = w.navigator;
-  if (typeof nav !== "undefined") {
-    ctx.language = nav.language;
-  }
-  const scr = w.screen;
-  if (typeof scr !== "undefined") {
-    ctx.screen = `${String(scr.width)}x${String(scr.height)}`;
-  }
-  return ctx;
-}
-
-function mergeContext(
-  base: EventContext,
-  defaults?: EventContext,
-  overrides?: EventContext,
-): EventContext {
-  return { ...base, ...defaults, ...overrides };
-}
-
-/** Keep page paths while excluding query parameters and fragments that may identify shoppers. */
-function withoutURLParameters(value: string): string {
-  return value.split(/[?#]/, 1)[0] ?? "";
-}
-
-function applyContext(payload: EventPayload, ctx: EventContext): void {
-  if (typeof ctx.hostname !== "undefined") {
-    payload.hostname = ctx.hostname;
-  }
-  if (typeof ctx.language !== "undefined") {
-    payload.language = ctx.language;
-  }
-  if (typeof ctx.screen !== "undefined") {
-    payload.screen = ctx.screen;
-  }
-  if (typeof ctx.title !== "undefined") {
-    payload.title = ctx.title;
-  }
-  if (typeof ctx.url !== "undefined") {
-    payload.url = withoutURLParameters(ctx.url);
-  }
-  if (typeof ctx.referrer !== "undefined") {
-    payload.referrer = withoutURLParameters(ctx.referrer);
-  }
+  return { name: event.name, data };
 }
 
 function networkError(message: string, details?: unknown): TrackError {
@@ -96,29 +134,15 @@ export function createFetchTrackingClient(config: FetchTrackingClientConfig): Tr
   const fetchImpl =
     config.fetch ??
     (typeof globalThis.fetch === "function" ? globalThis.fetch.bind(globalThis) : null);
-  const endpoint = `${(config.baseUrl ?? DEFAULT_COLLECTOR_BASE_URL).replace(/\/$/, "")}/api/send`;
+  const endpoint = `${(config.baseUrl ?? DEFAULT_COLLECTOR_BASE_URL).replace(/\/$/, "")}/v2/events`;
   return {
-    trackEvent: (event, options?: TrackOptions): TrackResult => {
+    trackEvent: (event): TrackResult => {
       if (fetchImpl === null) {
         return { ok: false, error: networkError("fetch is not available in this environment") };
       }
-      const payload: EventPayload = {};
-      applyContext(
-        payload,
-        mergeContext(deriveBrowserContext(), config.defaultContext, options?.context),
-      );
       try {
-        const distinctId =
-          typeof config.distinctId === "function" ? config.distinctId() : config.distinctId;
-        const body = JSON.stringify({
-          type: "event",
-          payload: {
-            ...payload,
-            name: event.name,
-            ...(distinctId === undefined ? {} : { id: distinctId.slice(0, 50) }),
-            data: { ...event.data, "sdk-version": config.sdkVersion },
-          },
-        });
+        const { name, data } = eventForCollector(event);
+        const body = JSON.stringify({ eventId: crypto.randomUUID(), event: { name, data } });
         const request = fetchImpl(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Client-Api-Key": config.clientApiKey },

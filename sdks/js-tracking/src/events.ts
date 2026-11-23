@@ -19,9 +19,7 @@ export interface TrackingEventBase {
 }
 
 /**
- * Fields present on every event's `data`. The transport additionally injects
- * `sdk-version` from {@link FetchTrackingClientConfig.sdkVersion}, so
- * callers never set that themselves.
+ * Catalog association for product-scoped events.
  */
 interface CommonData {
   readonly "product-id": string;
@@ -100,7 +98,7 @@ interface HeightEnteredEvent extends TrackingEventBase {
   readonly name: "height-entered";
   readonly data: CommonData & {
     /** Typically `image-upload` | `variant-selection`. */
-    readonly source: Step;
+    readonly source?: Step;
   };
 }
 
@@ -167,14 +165,14 @@ interface ViewClosedEvent extends TrackingEventBase {
   readonly name: "view-closed";
   readonly data: CommonData & {
     readonly "current-step": Step;
+    readonly "result-displayed"?: boolean;
   };
 }
 
 /**
  * Fires once when the backend assigns a visitor to an arm of the try-on
  * rollout A/B test. Feature-level (no `product-id`) — it gates the entry point
- * before any product context exists. Correlate `variant` against downstream
- * conversion events in Umami to measure the test.
+ * before any product context exists. Counts assignments by arm.
  */
 interface ExperimentAssignedEvent extends TrackingEventBase {
   readonly name: "experiment-assigned";
@@ -208,4 +206,31 @@ export type TrackingEvent =
   | CartItemAddedEvent
   | OrderPlacedEvent
   | ViewClosedEvent
-  | ExperimentAssignedEvent;
+  | ExperimentAssignedEvent
+  | { readonly name: "height-step-opened"; readonly data: CommonData & { source: Step } }
+  | { readonly name: "widget-opened"; readonly data: CommonData & { entry?: string } }
+  | { readonly name: "photo-rejected"; readonly data: CommonData & { method: "camera" | "picker" } }
+  | {
+      readonly name: "variant-changed" | "try-on-presented" | "cart-requested";
+      readonly data: CommonData & VariantData;
+    }
+  | {
+      readonly name: "experience-summary";
+      readonly data: CommonData & {
+        entry?: string;
+        "reached-intro": boolean;
+        "granted-consent": boolean;
+        "accepted-photo": boolean;
+        "confirmed-height": boolean;
+        "reached-selection": boolean;
+        "requested-try-on": boolean;
+        "presented-result": boolean;
+        "requested-cart": boolean;
+        "try-on-count": number;
+        "distinct-sizes": number;
+        "distinct-colors": number;
+        "distinct-waists": number;
+        "distinct-lengths": number;
+        "time-to-result"?: string;
+      };
+    };

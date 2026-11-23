@@ -22,7 +22,7 @@ describe("analytics factory", () => {
       ok: true,
     });
     expect(fetch).toHaveBeenCalledExactlyOnceWith(
-      "https://analytics.test/api/send",
+      "https://analytics.test/v2/events",
       expect.objectContaining({
         keepalive: true,
         headers: { "Content-Type": "application/json", "X-Client-Api-Key": "shop-key" },

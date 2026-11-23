@@ -218,12 +218,12 @@ describe("createTrackingSubscriber — machine-driven events", () => {
       "image-source": "select",
     });
 
-    // 5. height-entered on entry to `postCapture.screen.heightCalibration`.
+    // 5. height-step-opened on entry to `postCapture.screen.heightCalibration`.
     //    Source is "image-upload" — the step we were just in.
     await vi.waitFor(() => {
-      expect(events.find((e) => e.name === "height-entered")).toBeDefined();
+      expect(events.find((e) => e.name === "height-step-opened")).toBeDefined();
     });
-    expect(events.find((e) => e.name === "height-entered")!.data).toEqual({
+    expect(events.find((e) => e.name === "height-step-opened")!.data).toEqual({
       "product-id": testProduct.id,
       source: "image-upload",
     });
@@ -240,6 +240,11 @@ describe("createTrackingSubscriber — machine-driven events", () => {
     heightChild.send({ type: "CONFIRM" });
     await vi.waitFor(() => {
       expect(events.find((e) => e.name === "variant-selection-initiated")).toBeDefined();
+    });
+    await vi.waitFor(() => {
+      expect(events.find((e) => e.name === "height-entered")?.data).toEqual({
+        "product-id": testProduct.id,
+      });
     });
     expect(events.find((e) => e.name === "variant-selection-initiated")!.data).toEqual({
       "product-id": testProduct.id,
@@ -415,7 +420,7 @@ describe("createTrackingSubscriber — machine-driven events", () => {
     },
   );
 
-  it("emits height-entered with source variant-selection on BACK_TO_HEIGHT from product", async () => {
+  it("emits height-step-opened with source variant-selection on BACK_TO_HEIGHT from product", async () => {
     const actor = startActor();
     const { tracking, events } = makeRecordingTracking();
     const subscriber = createTrackingSubscriber(actor, tracking);
@@ -431,7 +436,7 @@ describe("createTrackingSubscriber — machine-driven events", () => {
 
     actor.send({ type: "BACK_TO_HEIGHT" });
     await vi.waitFor(() => {
-      const heightEvents = events.filter((e) => e.name === "height-entered");
+      const heightEvents = events.filter((e) => e.name === "height-step-opened");
       expect(heightEvents.length).toBeGreaterThan(1);
       expect(heightEvents.at(-1)!.data).toEqual({
         "product-id": testProduct.id,

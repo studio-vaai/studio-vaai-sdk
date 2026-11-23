@@ -152,6 +152,18 @@ const selectVariantActions = enqueueActions(({ context, event, enqueue }) => {
     sizeIsDefaultSelection: false,
     lastTryOnFailure: undefined,
   });
+  if (
+    Object.keys(selection).length !== Object.keys(ctx.selection).length ||
+    Object.entries(selection).some(([axis, value]) => ctx.selection[axis] !== value)
+  ) {
+    const signal: Extract<AnalyticsSignal, { type: "try-on-initiated" | "variant-changed" }> = {
+      type: "variant-changed",
+      "product-id": ctx.product.id,
+      variants: selection,
+    };
+    // oxlint-disable-next-line typescript-eslint/no-explicit-any, typescript-eslint/no-unsafe-argument -- XState v5 emit typing in a leaf region file
+    enqueue.emit(signal as any);
+  }
   if (gate !== undefined) {
     const signal: Extract<AnalyticsSignal, { type: "gated-size-selected" }> = {
       type: "gated-size-selected",

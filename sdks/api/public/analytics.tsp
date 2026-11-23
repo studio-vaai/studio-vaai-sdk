@@ -6,318 +6,283 @@ using TypeSpec.OpenAPI;
 
 @service(#{ title: "studio vaai Analytics API" })
 @OpenAPI.info(#{
-  version: "2026-11-04",
-  summary: "Collect storefront and try-on events.",
+  version: "2026-11-20",
+  summary: "Collect cookieless storefront and try-on event counts.",
 })
 @server("https://a.studio-vaai.com", "Analytics")
 @useAuth(NoAuth)
 namespace StudioVaaiAnalytics {
-  /** A step in the user flow. */
   union AnalyticsStep {
-    "entry",
-    "intro",
-    "image-record",
-    "image-upload",
-    "image-rejection",
-    "height",
-    "variant-selection",
-    "try-on",
+    "entry", "intro", "image-record", "image-upload", "image-rejection",
+    "height", "variant-selection", "try-on",
   }
 
-  /** Where the user starts selecting or taking a photo. */
-  union AnalyticsImageSource {
-    "intro",
-    "variant-selection",
-    "image-rejection",
-    "height",
-  }
+  union AnalyticsImageSource { "intro", "variant-selection", "image-rejection", "height" }
 
-  model AnalyticsContext {
-    @doc("Storefront hostname, without a scheme or path.")
-    @maxLength(100)
-    @example("shop.example.com")
-    hostname?: string;
-
-    @doc("Page path or URL. Prefer a path without sensitive query parameters.")
-    @example("/products/longsleeve")
-    url?: string;
-
-    @doc("Optional anonymous visitor identifier. Reuse the experiment assignment visitor ID to correlate rollout and conversion events. Never send a shopper session token or personal identifier.")
-    id?: string;
-
-    @doc("Browser language, for example en-GB.")
-    @maxLength(35)
-    language?: string;
-
-    @doc("Screen dimensions, for example 390x844.")
-    @maxLength(11)
-    screen?: string;
-
-    @doc("Page title.")
-    title?: string;
-
-    @doc("Referring page path or URL.")
-    referrer?: string;
-  }
+  @minLength(1) @maxLength(64) @pattern("^[A-Za-z0-9][A-Za-z0-9_.:-]*$") scalar CatalogKey extends string;
+  @minLength(1) @maxLength(64) @pattern("^[A-Za-z0-9][A-Za-z0-9_.:-]*$") scalar AnalyticsLabel extends string;
+  @minValue(0) @maxValue(32) scalar CappedCount extends int32;
 
   model AnalyticsProductData {
-    @doc("Product associated with this event.")
-    @example("longsleeve")
-    `product-id`: string;
-
-    @doc("SDK package and version, when using an SDK. Custom integrations may omit this property.")
-    `sdk-version`?: string;
+    /** Catalog product associated with this event. */
+    `product-id`: CatalogKey;
   }
 
-  /** Additional variant-<axis> string properties describe the selected variant, for example variant-colorway or variant-length. */
-  model AnalyticsVariantData extends Record<string> {
+  model AnalyticsVariantData {
     ...AnalyticsProductData;
-
-    @doc("Selected size, if the product has a size axis.")
-    `variant-size`?: string;
-
-    @doc("Selected colorway, if the product has a colorway axis.")
-    `variant-colorway`?: string;
+    /** Canonical variant ID, where supplied by the SDK. */
+    `variant-id`?: CatalogKey;
+    /** Catalog size, colorway, waist or length supplied by an existing host callback. */
+    `variant-size`?: CatalogKey;
+    `variant-colorway`?: CatalogKey;
+    `variant-waist`?: CatalogKey;
+    `variant-length`?: CatalogKey;
   }
 
-  /** A try-on button or link becomes visible. */
-  @extension("x-event-group", "Entry & consent")
+  /** A try-on entry point becomes visible. */
+  @extension("x-event-group", "Storefront")
   model EntrypointImpression {
-    ...AnalyticsContext;
     name: "entrypoint-impression";
-    data: {
-      ...AnalyticsProductData;
+    data: { ...AnalyticsProductData; entry: AnalyticsLabel; };
+  }
 
-      @doc("Merchant-defined entrypoint placement, for example pdp-button.")
-      entry: string;
-    };
-  }
-  /** The shopper clicks a try-on entrypoint to open or resume the flow. */
-  @extension("x-event-group", "Entry & consent")
+  /** A try-on entry point activates. */
+  @extension("x-event-group", "Storefront")
   model EntrypointClicked {
-    ...AnalyticsContext;
     name: "entrypoint-clicked";
-    data: {
-      ...AnalyticsProductData;
-      @doc("Merchant-defined entrypoint placement.") entry: string;
-      @doc("Optional finer-grained placement.") subentry?: string;
-      `current-step`: AnalyticsStep;
-    };
+    data: { ...AnalyticsProductData; entry: AnalyticsLabel; };
   }
-  /** The introduction opens. Use entry as the source on first open. */
-  @extension("x-event-group", "Entry & consent")
+
+  /** A widget opens or resumes. */
+  @extension("x-event-group", "Storefront")
+  model WidgetOpened {
+    name: "widget-opened";
+    data: { ...AnalyticsProductData; entry?: AnalyticsLabel; };
+  }
+
+  /** The introduction opens. */
+  @extension("x-event-group", "Setup")
   model IntroOpened {
-    ...AnalyticsContext;
     name: "intro-opened";
-    data: {
-      ...AnalyticsProductData;
-      source: AnalyticsStep;
-    };
+    data: { ...AnalyticsProductData; source: AnalyticsStep; };
   }
-  /** The shopper consents to processing their photo and body measurements. Create the session separately. */
-  @extension("x-event-group", "Entry & consent")
+
+  /** The widget acknowledges the photo and body processing consent action. */
+  @extension("x-event-group", "Setup")
   model ConsentGranted {
-    ...AnalyticsContext;
     name: "consent-granted";
     data: AnalyticsProductData;
   }
-  /** The shopper enters the camera flow. */
-  @extension("x-event-group", "Photo & height")
+
+  /** The shopper launches the camera flow. */
+  @extension("x-event-group", "Setup")
   model ImageRecordInitiated {
-    ...AnalyticsContext;
     name: "image-record-initiated";
-    data: {
-      ...AnalyticsProductData;
-      source: AnalyticsImageSource;
-    };
+    data: { ...AnalyticsProductData; source: AnalyticsImageSource; };
   }
-  /** The shopper leaves the camera without submitting a photo. */
-  @extension("x-event-group", "Photo & height")
+
+  /** The shopper cancels the camera flow. */
+  @extension("x-event-group", "Setup")
   model ImageRecordAborted {
-    ...AnalyticsContext;
     name: "image-record-aborted";
-    data: {
-      ...AnalyticsProductData;
-      source: AnalyticsImageSource;
-    };
+    data: { ...AnalyticsProductData; source: AnalyticsImageSource; };
   }
-  /** The photo picker opens. */
-  @extension("x-event-group", "Photo & height")
+
+  /** The shopper launches the photo picker. */
+  @extension("x-event-group", "Setup")
   model ImageUploadInitiated {
-    ...AnalyticsContext;
     name: "image-upload-initiated";
-    data: {
-      ...AnalyticsProductData;
-      source: AnalyticsImageSource;
-    };
+    data: { ...AnalyticsProductData; source: AnalyticsImageSource; };
   }
-  /** The photo picker closes without a selection. */
-  @extension("x-event-group", "Photo & height")
+
+  /** The shopper cancels the photo picker. */
+  @extension("x-event-group", "Setup")
   model ImageUploadAborted {
-    ...AnalyticsContext;
     name: "image-upload-aborted";
-    data: {
-      ...AnalyticsProductData;
-      source: AnalyticsImageSource;
-    };
+    data: { ...AnalyticsProductData; source: AnalyticsImageSource; };
   }
-  /** Photo processing completes; the photo is ready for height confirmation. */
-  @extension("x-event-group", "Photo & height")
+
+  /** Photo processing succeeds. */
+  @extension("x-event-group", "Setup")
   model ImageUploaded {
-    ...AnalyticsContext;
     name: "image-uploaded";
-    data: {
-      ...AnalyticsProductData;
-      `image-source`: "record-self-timer" | "record-system-dialog" | "select";
-    };
+    data: { ...AnalyticsProductData; `image-source`: "record-self-timer" | "record-system-dialog" | "select"; };
   }
-  /** The shopper confirms or updates their height. */
-  @extension("x-event-group", "Photo & height")
+
+  /** Photo processing rejects the photo. */
+  @extension("x-event-group", "Setup")
+  model PhotoRejected {
+    name: "photo-rejected";
+    data: { ...AnalyticsProductData; method: "camera" | "picker"; };
+  }
+
+  /** The widget acknowledges a height confirmation. */
+  @extension("x-event-group", "Setup")
   model HeightEntered {
-    ...AnalyticsContext;
     name: "height-entered";
-    data: {
-      ...AnalyticsProductData;
-      source: AnalyticsStep;
-    };
+    data: AnalyticsProductData;
   }
-  /** Size and colour selection opens. */
-  @extension("x-event-group", "Selection & try-on")
+
+  /** The widget opens the height step. */
+  @extension("x-event-group", "Setup")
+  model HeightStepOpened {
+    name: "height-step-opened";
+    data: { ...AnalyticsProductData; source: AnalyticsStep; };
+  }
+
+  /** The variant selection screen opens. */
+  @extension("x-event-group", "Try-on")
   model VariantSelectionInitiated {
-    ...AnalyticsContext;
     name: "variant-selection-initiated";
-    data: {
-      ...AnalyticsProductData;
-      source: AnalyticsStep;
-      via?: "back" | "go-to-product-overview";
-    };
+    data: { ...AnalyticsProductData; source: AnalyticsStep; via?: "back" | "go-to-product-overview"; };
   }
-  /** A try-on starts for the selected variant. */
-  @extension("x-event-group", "Selection & try-on")
-  model TryOnInitiated {
-    ...AnalyticsContext;
-    name: "try-on-initiated";
+
+  /** The selection changes to a different variant. */
+  @extension("x-event-group", "Try-on")
+  model VariantChanged {
+    name: "variant-changed";
     data: AnalyticsVariantData;
   }
-  /** The shopper selects a size marked too small or too large. */
-  @extension("x-event-group", "Selection & try-on")
+
+  /** The widget requests a try-on. */
+  @extension("x-event-group", "Try-on")
+  model TryOnInitiated {
+    name: "try-on-initiated";
+    data: { ...AnalyticsVariantData; origin?: "shopper" | "automatic"; };
+  }
+
+  /** The shopper selects a fit-gated size. */
+  @extension("x-event-group", "Try-on")
   model GatedSizeSelected {
-    ...AnalyticsContext;
     name: "gated-size-selected";
+    data: AnalyticsProductData;
+  }
+
+  /** A distinct try-on result is shown in the widget. */
+  @extension("x-event-group", "Try-on")
+  model TryOnPresented {
+    name: "try-on-presented";
+    data: AnalyticsVariantData;
+  }
+
+  /** An open widget closes. */
+  @extension("x-event-group", "Try-on")
+  model ViewClosed {
+    name: "view-closed";
+    data: { ...AnalyticsProductData; `current-step`: AnalyticsStep; `result-displayed`?: boolean; };
+  }
+
+  /** An operation fails, detaches or has an unknown outcome. Slow and deadline signals can be counted independently. */
+  @extension("x-event-group", "Try-on")
+  model ExperienceOperationFailed {
+    name: "experience-operation-failed";
+    data: { ...AnalyticsProductData; work: "session" | "height" | "camera" | "capture" | "picker" | "photo" | "try-on"; outcome: "failed" | "uncertain" | "detached" | "in_progress"; reason?: "deadline" | "slow"; `current-step`: AnalyticsStep; };
+  }
+
+  /** A bounded summary for one observed open and product. */
+  @extension("x-event-group", "Try-on")
+  model ExperienceSummary {
+    name: "experience-summary";
     data: {
       ...AnalyticsProductData;
-      `variant-size`: string;
-      gate: "too_small" | "too_large";
+      entry?: AnalyticsLabel;
+      `reached-intro`: boolean;
+      `granted-consent`: boolean;
+      `accepted-photo`: boolean;
+      `confirmed-height`: boolean;
+      `reached-selection`: boolean;
+      `requested-try-on`: boolean;
+      `presented-result`: boolean;
+      `requested-cart`: boolean;
+      `try-on-count`: CappedCount;
+      `distinct-sizes`?: CappedCount;
+      `distinct-colors`?: CappedCount;
+      `distinct-waists`?: CappedCount;
+      `distinct-lengths`?: CappedCount;
+      `time-to-result`?: "lt-10s" | "10-29s" | "30-59s" | "60-119s" | "120s-plus";
     };
   }
-  /** A product variant is successfully added to the cart. */
-  @extension("x-event-group", "Cart & orders")
+
+  /** The widget hands a cart request to the host. */
+  @extension("x-event-group", "Commerce")
+  model CartRequested {
+    name: "cart-requested";
+    data: AnalyticsVariantData;
+  }
+
+  /** The host reports a successful cart addition. */
+  @extension("x-event-group", "Commerce")
   model CartItemAdded {
-    ...AnalyticsContext;
     name: "cart-item-added";
     data: AnalyticsVariantData;
   }
-  /** A purchase completes. Send once per product variant. */
-  @extension("x-event-group", "Cart & orders")
+
+  /** The host reports one purchased variant. */
+  @extension("x-event-group", "Commerce")
   model OrderPlaced {
-    ...AnalyticsContext;
     name: "order-placed";
     data: AnalyticsVariantData;
   }
-  /** The try-on view closes; include the current step. */
-  @extension("x-event-group", "Selection & try-on")
-  model ViewClosed {
-    ...AnalyticsContext;
-    name: "view-closed";
-    data: {
-      ...AnalyticsProductData;
-      `current-step`: AnalyticsStep;
-    };
-  }
-  /** A visitor receives a rollout assignment. Send once per assignment using the same anonymous visitor ID. */
+
+  /** An eligible rollout decision is observed. */
   @extension("x-event-group", "Rollout")
   model ExperimentAssigned {
-    ...AnalyticsContext;
     name: "experiment-assigned";
-    data: {
-      experiment: "try-on-enabled";
-      variant: "enabled" | "disabled";
-
-      @doc("SDK package and version, when applicable.")
-      `sdk-version`?: string;
-    };
+    data: { experiment: "try-on-enabled"; variant: "enabled" | "disabled"; };
   }
 
-  /** A try-on operation failed or its outcome could not be confirmed. */
-  @extension("x-event-group", "Try-on")
-  model ExperienceOperationFailed {
-    ...AnalyticsContext;
-    name: "experience-operation-failed";
-    data: {
-      ...AnalyticsProductData;
-      work: string;
-      outcome: string;
-      reason?: string;
-      `current-step`: AnalyticsStep;
-    };
-  }
-
-  /** Named events supported by studio vaai integrations. Data values are flat string, number, or boolean properties; the event definitions specify the supported properties. */
+  /** An event occurrence, with only its declared data fields. */
   union AnalyticsEvent {
-    EntrypointImpression,
-    EntrypointClicked,
-    IntroOpened,
-    ConsentGranted,
-    ImageRecordInitiated,
-    ImageRecordAborted,
-    ImageUploadInitiated,
-    ImageUploadAborted,
-    ImageUploaded,
-    HeightEntered,
-    VariantSelectionInitiated,
-    TryOnInitiated,
-    GatedSizeSelected,
-    CartItemAdded,
-    OrderPlaced,
-    ViewClosed,
+    EntrypointImpression, EntrypointClicked, WidgetOpened, IntroOpened, ConsentGranted,
+    ImageRecordInitiated, ImageRecordAborted, ImageUploadInitiated, ImageUploadAborted,
+    ImageUploaded, PhotoRejected, HeightEntered, HeightStepOpened, VariantSelectionInitiated,
+    VariantChanged, TryOnInitiated, GatedSizeSelected, TryOnPresented, ViewClosed,
+    ExperienceOperationFailed, ExperienceSummary, CartRequested, CartItemAdded, OrderPlaced,
     ExperimentAssigned,
-    ExperienceOperationFailed,
   }
 
-  @example(#{
-    type: "event",
-    payload: #{
-      hostname: "shop.example.com",
-      url: "/products/longsleeve",
-      name: "try-on-initiated",
-      data: #{ `product-id`: "longsleeve", `variant-size`: "M" },
-    },
-  })
   model AnalyticsEventRequest {
-    type: "event";
-    payload: AnalyticsEvent;
+    /** UUID v4 generated for this occurrence only. Reuse only when repeating the same request. */
+    @format("uuid")
+    eventId: string;
+    event: AnalyticsEvent;
+  }
+
+  @error
+  model AnalyticsEventProblem {
+    title: string;
+    kind:
+        | "invalid-event"
+        | "invalid-client-key"
+        | "origin-forbidden"
+        | "event-id-conflict"
+        | "event-too-large"
+        | "unsupported-media-type"
+        | "upstream-delivery-failed"
+        | "collector-unavailable";
+  }
+
+  model AnalyticsEventError {
+    @statusCode status: 400 | 401 | 403 | 409 | 413 | 415 | 502 | 503;
+    @header contentType: "application/problem+json";
+    @body body: AnalyticsEventProblem;
   }
 
   @tag("analytics")
   interface Analytics {
     @post
-    @route("/api/send")
+    @route("/v2/events")
     @operationId("sendAnalyticsEvent")
     @summary("Send an analytics event")
     @doc("""
-      Send storefront and try-on events with the same X-Client-Api-Key used by the business API. The API key identifies the shop. Omit shopper credentials and cookies.
+      Send storefront and try-on events with the same X-Client-Api-Key used by the business API.
+      Omit shopper credentials, cookies and browser context. An event ID identifies one occurrence.
 
-      See [Analytics](/api/analytics) for integration guidance and the event catalogue.
+      See [Analytics](/analytics) for integration guidance and the event catalogue.
       """)
     sendAnalyticsEvent(
       @header("X-Client-Api-Key") clientApiKey: string,
       @body body: AnalyticsEventRequest,
-    ):
-      | {
-          @statusCode _: 204;
-        }
-      | {
-          @statusCode _: 400 | 401 | 403 | 413 | 502 | 503;
-        };
+    ): { @statusCode _: 204; } | AnalyticsEventError;
   }
 }

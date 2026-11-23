@@ -7,8 +7,6 @@ import { createFetchTrackingClient } from "@studio-vaai/js-tracking";
 
 const tracking = createFetchTrackingClient({
   clientApiKey: "sv_client_…",
-  sdkVersion: "my-integration@1.0.0",
-  distinctId: "visitor-id",
   // baseUrl: "https://a.studio-vaai.com", // default; override for local development
 });
 tracking.trackEvent({ name: "consent-granted", data: { "product-id": "p1" } });
@@ -17,7 +15,7 @@ tracking.trackEvent({ name: "consent-granted", data: { "product-id": "p1" } });
 When using `js-client`, reuse its key and fetch implementation:
 
 ```ts
-const tracking = client.analytics.createTrackingClient({ sdkVersion: "my-integration@1" });
+const tracking = client.analytics.createTrackingClient({});
 ```
 
 React providers create this transport automatically unless supplied with an explicit
@@ -25,6 +23,7 @@ React providers create this transport automatically unless supplied with an expl
 events must originate from one of the shop's allowed storefront origins.
 
 Events use `fetch` with `keepalive: true`, `credentials: "omit"`, and JSON POSTs to
-`/api/send`. Context is derived from browser APIs and supports defaults and per-event
-overrides. The return value reports whether the request was queued, not delivered.
-Asynchronous errors are absorbed so analytics cannot interrupt the host application.
+`/v2/events`. Each occurrence gets a fresh event UUID. The transport sends the typed event
+properties without browser context, visitor IDs or shopper credentials.
+The collector uses the UUID to deduplicate repeat deliveries of that occurrence.
+The `sdkVersion` option is accepted for compatibility and is omitted from the payload.

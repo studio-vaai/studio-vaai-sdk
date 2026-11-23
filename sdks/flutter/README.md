@@ -104,7 +104,7 @@ to the collector with the shop's public client key, never with the shopper's ses
 ```dart
 final analytics = createTryOnAnalytics(
   clientApiKey: clientApiKey,
-  enabled: () => consent.analytics, // read when an event happens and again when it is sent
+  enabled: () => analyticsEnabled,
 );
 
 StudioVaaiTryOn(sdk: sdk, productId: productId, analytics: analytics, /* … */);
@@ -116,12 +116,9 @@ analytics.experimentAssigned(true); // the shopper's arm in a try-on experiment
 analytics.dispose(); // when the shop no longer needs it
 ```
 
-- Nothing is sent while `enabled()` returns false: wire it to your consent state.
-- The visitor ID is random, kept in memory only and replaced every UTC day, as on the web; pass
-  `visitorId` to use your own. Events carry the device's language and screen size in logical
-  pixels, the app's counterparts of what the web reads from the page; nothing else about the
-  device or the shopper.
-- `sdkVersion` defaults to `studio_vaai@<version>`; `baseUrl` to `https://a.studio-vaai.com`.
+- `enabled()` controls collection. It is checked when an event occurs.
+- Each request carries a random ID for that event. Analytics omits visitor IDs and device context.
+- `baseUrl` defaults to `https://a.studio-vaai.com`.
 - Sending is best effort and never throws. `dispose` still sends the events of the same turn, so
   the final events of a try-on that closes with the page arrive, as React's analytics does.
 - `TryOnExperience.tryOnEvents` delivers the journey as the web's `sv-try-on-*` events

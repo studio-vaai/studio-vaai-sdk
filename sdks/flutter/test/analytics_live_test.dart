@@ -60,13 +60,13 @@ void main() {
     emit!(event('sv-try-on-consent-granted', 'intro'));
     emit!(event('sv-try-on-closed', 'intro'));
     analytics.experimentAssigned(true);
-    for (var i = 0; i < 100 && transport.statuses.length < 6; i++) {
+    for (var i = 0; i < 100 && transport.statuses.length < 8; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
     analytics.dispose();
     // ignore: avoid_print
     print('collector statuses: ${transport.statuses}');
-    expect(transport.statuses, hasLength(6));
+    expect(transport.statuses, hasLength(8));
     expect(transport.statuses.every((s) => s >= 200 && s < 300), isTrue);
   });
 }

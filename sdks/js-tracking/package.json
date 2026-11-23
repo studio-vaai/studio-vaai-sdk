@@ -2,7 +2,7 @@
   "name": "@studio-vaai/js-tracking",
   "version": "0.3.1",
   "private": true,
-  "description": "Typed analytics events for studio vaai, plus a fetch-based Umami transport.",
+  "description": "Typed analytics events for studio vaai, plus a fetch-based collector transport.",
   "license": "MIT",
   "files": [
     "dist"

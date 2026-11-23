@@ -44,13 +44,19 @@ export type AnalyticsSignal =
       readonly "photo-source": "camera" | "gallery";
     }
   | { readonly type: "height-entered"; readonly "product-id": string }
+  | { readonly type: "height-step-opened"; readonly "product-id": string }
+  | {
+      readonly type: "photo-rejected";
+      readonly "product-id": string;
+      readonly method: "camera" | "picker";
+    }
   | {
       readonly type: "variant-selection-initiated";
       readonly "product-id": string;
       readonly via?: VariantSelectionVia;
     }
   | {
-      readonly type: "try-on-initiated";
+      readonly type: "try-on-initiated" | "variant-changed";
       readonly "product-id": string;
       /** Flat axis-name → value map (e.g. `{ colorway: "A100-259", size: "M" }`). The
        * bridge flattens to `variant-<axis>` wire keys. */
@@ -74,6 +80,19 @@ export type AnalyticsSignal =
  * spec requires it, and forwards to `tracking.trackEvent`.
  */
 export type HostAnalyticsSignal =
+  | { readonly type: "widget-opened"; readonly "product-id": string; readonly entry?: string }
+  | {
+      readonly type: "try-on-presented";
+      readonly "product-id": string;
+      /** Local deduplication key. The tracking bridge never includes it in the event. */
+      readonly resultKey: string;
+      readonly variants: Readonly<Record<string, string>>;
+    }
+  | {
+      readonly type: "cart-requested";
+      readonly "product-id": string;
+      readonly variants: Readonly<Record<string, string>>;
+    }
   | {
       readonly type: "entrypoint-impression";
       readonly "product-id": string;
@@ -104,4 +123,8 @@ export type HostAnalyticsSignal =
       /** Selected variant axes; flattened to `variant-<axis>` wire keys. */
       readonly variants: Readonly<Record<string, string>>;
     }
-  | { readonly type: "view-closed"; readonly "product-id": string };
+  | {
+      readonly type: "view-closed";
+      readonly "product-id": string;
+      readonly resultDisplayed?: boolean;
+    };

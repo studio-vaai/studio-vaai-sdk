@@ -3,1205 +3,1145 @@
   "sent": [
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "widget-opened",
           "data": {
-            "current-step": "intro",
-            "entry": "pdp-button",
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
-            "subentry": "hero"
-          },
-          "id": "parity-visitor",
-          "name": "entrypoint-clicked"
-        },
-        "type": "event"
+            "entry": "pdp-button"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "entrypoint-clicked",
           "data": {
-            "current-step": "intro",
-            "entry": "pdp-badge",
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "entrypoint-clicked"
-        },
-        "type": "event"
+            "entry": "pdp-button"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "widget-opened",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
+            "entry": "pdp-badge"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "entrypoint-clicked",
+          "data": {
+            "product-id": "shirt-1",
+            "entry": "pdp-badge"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "widget-opened",
+          "data": {
+            "product-id": "shirt-1"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "intro-opened",
+          "data": {
+            "product-id": "shirt-1",
             "source": "entry"
-          },
-          "id": "parity-visitor",
-          "name": "intro-opened"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "intro-opened",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "image-record"
-          },
-          "id": "parity-visitor",
-          "name": "intro-opened"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "height-step-opened",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "entry"
-          },
-          "id": "parity-visitor",
-          "name": "height-entered"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "height-step-opened",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "image-record"
-          },
-          "id": "parity-visitor",
-          "name": "height-entered"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "variant-selection-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "entry"
-          },
-          "id": "parity-visitor",
-          "name": "variant-selection-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "variant-selection-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "image-record"
-          },
-          "id": "parity-visitor",
-          "name": "variant-selection-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "consent-granted",
           "data": {
-            "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "consent-granted"
-        },
-        "type": "event"
+            "product-id": "shirt-1"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-record-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "intro"
-          },
-          "id": "parity-visitor",
-          "name": "image-record-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-record-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "intro"
-          },
-          "id": "parity-visitor",
-          "name": "image-record-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-record-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "intro"
-          },
-          "id": "parity-visitor",
-          "name": "image-record-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-record-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "image-rejection"
-          },
-          "id": "parity-visitor",
-          "name": "image-record-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-record-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "height"
-          },
-          "id": "parity-visitor",
-          "name": "image-record-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-record-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "variant-selection"
-          },
-          "id": "parity-visitor",
-          "name": "image-record-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-record-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "variant-selection"
-          },
-          "id": "parity-visitor",
-          "name": "image-record-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-record-aborted",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "intro"
-          },
-          "id": "parity-visitor",
-          "name": "image-record-aborted"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-record-aborted",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "height"
-          },
-          "id": "parity-visitor",
-          "name": "image-record-aborted"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-uploaded",
           "data": {
-            "image-source": "record-self-timer",
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "image-uploaded"
-        },
-        "type": "event"
+            "image-source": "record-self-timer"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "photo-rejected",
           "data": {
-            "current-step": "image-upload",
+            "product-id": "shirt-1",
+            "method": "camera"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "experience-operation-failed",
+          "data": {
+            "product-id": "shirt-1",
+            "work": "photo",
             "outcome": "failed",
-            "product-id": "shirt-1",
-            "reason": "unavailable",
-            "sdk-version": "parity-sdk@1",
-            "work": "photo"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
+            "current-step": "image-upload"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-upload-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "intro"
-          },
-          "id": "parity-visitor",
-          "name": "image-upload-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-upload-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "intro"
-          },
-          "id": "parity-visitor",
-          "name": "image-upload-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-upload-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "intro"
-          },
-          "id": "parity-visitor",
-          "name": "image-upload-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-upload-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "image-rejection"
-          },
-          "id": "parity-visitor",
-          "name": "image-upload-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-upload-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "height"
-          },
-          "id": "parity-visitor",
-          "name": "image-upload-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-upload-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "variant-selection"
-          },
-          "id": "parity-visitor",
-          "name": "image-upload-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-upload-initiated",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "variant-selection"
-          },
-          "id": "parity-visitor",
-          "name": "image-upload-initiated"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-upload-aborted",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "intro"
-          },
-          "id": "parity-visitor",
-          "name": "image-upload-aborted"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-upload-aborted",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
             "source": "height"
-          },
-          "id": "parity-visitor",
-          "name": "image-upload-aborted"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "image-uploaded",
           "data": {
-            "image-source": "select",
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "image-uploaded"
-        },
-        "type": "event"
+            "image-source": "select"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "photo-rejected",
           "data": {
-            "current-step": "image-upload",
+            "product-id": "shirt-1",
+            "method": "picker"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "experience-operation-failed",
+          "data": {
+            "product-id": "shirt-1",
+            "work": "photo",
             "outcome": "failed",
-            "product-id": "shirt-1",
-            "reason": "unavailable",
-            "sdk-version": "parity-sdk@1",
-            "work": "photo"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
+            "current-step": "image-upload"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "experience-operation-failed",
           "data": {
-            "current-step": "intro",
+            "product-id": "shirt-1",
+            "work": "session",
             "outcome": "failed",
-            "product-id": "shirt-1",
-            "reason": "internal",
-            "sdk-version": "parity-sdk@1",
-            "work": "session"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
+            "current-step": "intro"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "height-entered",
           "data": {
-            "current-step": "height",
+            "product-id": "shirt-1"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "experience-operation-failed",
+          "data": {
+            "product-id": "shirt-1",
+            "work": "height",
             "outcome": "failed",
-            "product-id": "shirt-1",
-            "reason": "invalid-request",
-            "sdk-version": "parity-sdk@1",
-            "work": "height"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
+            "current-step": "height"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "experience-operation-failed",
           "data": {
-            "current-step": "image-upload",
+            "product-id": "shirt-1",
+            "work": "photo",
             "outcome": "in_progress",
-            "product-id": "shirt-1",
-            "reason": "slow",
-            "sdk-version": "parity-sdk@1",
-            "work": "photo"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
-          "data": {
             "current-step": "image-upload",
-            "outcome": "failed",
-            "product-id": "shirt-1",
-            "reason": "deadline",
-            "sdk-version": "parity-sdk@1",
-            "work": "photo"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
+            "reason": "slow"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "experience-operation-failed",
           "data": {
-            "current-step": "try-on",
+            "product-id": "shirt-1",
+            "work": "photo",
+            "outcome": "failed",
+            "current-step": "image-upload",
+            "reason": "deadline"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "experience-operation-failed",
+          "data": {
+            "product-id": "shirt-1",
+            "work": "try-on",
             "outcome": "in_progress",
-            "product-id": "shirt-1",
-            "reason": "slow",
-            "sdk-version": "parity-sdk@1",
-            "work": "try-on"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
+            "current-step": "try-on",
+            "reason": "slow"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "experience-operation-failed",
           "data": {
-            "current-step": "try-on",
+            "product-id": "shirt-1",
+            "work": "try-on",
             "outcome": "failed",
-            "product-id": "shirt-1",
-            "reason": "deadline",
-            "sdk-version": "parity-sdk@1",
-            "work": "try-on"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
-          "data": {
             "current-step": "try-on",
-            "outcome": "uncertain",
-            "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
-            "work": "photo"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
+            "reason": "deadline"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "experience-operation-failed",
           "data": {
-            "current-step": "try-on",
-            "outcome": "uncertain",
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
-            "work": "height"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
+            "work": "photo",
+            "outcome": "uncertain",
+            "current-step": "try-on"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "experience-operation-failed",
           "data": {
-            "current-step": "try-on",
-            "outcome": "uncertain",
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
-            "work": "try-on"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
+            "work": "height",
+            "outcome": "uncertain",
+            "current-step": "try-on"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "experience-operation-failed",
           "data": {
+            "product-id": "shirt-1",
+            "work": "try-on",
+            "outcome": "uncertain",
+            "current-step": "try-on"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "experience-operation-failed",
+          "data": {
+            "product-id": "shirt-1",
+            "work": "picker",
+            "outcome": "failed",
+            "current-step": "intro"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "experience-operation-failed",
+          "data": {
+            "product-id": "shirt-1",
+            "work": "camera",
+            "outcome": "failed",
+            "current-step": "image-record"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "experience-operation-failed",
+          "data": {
+            "product-id": "shirt-1",
+            "work": "camera",
+            "outcome": "failed",
+            "current-step": "image-record"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "experience-operation-failed",
+          "data": {
+            "product-id": "shirt-1",
+            "work": "capture",
+            "outcome": "failed",
+            "current-step": "image-record"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "variant-changed",
+          "data": {
+            "product-id": "shirt-1",
+            "variant-id": "v-1"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "try-on-initiated",
+          "data": {
+            "product-id": "shirt-1",
+            "variant-id": "v-1",
+            "origin": "shopper"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "try-on-initiated",
+          "data": {
+            "product-id": "shirt-1",
+            "variant-id": "v-2",
+            "origin": "automatic"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "try-on-initiated",
+          "data": {
+            "product-id": "shirt-1",
+            "variant-id": "v-3",
+            "origin": "shopper"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "try-on-presented",
+          "data": {
+            "product-id": "shirt-1",
+            "variant-id": "v-1"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "experience-operation-failed",
+          "data": {
+            "product-id": "shirt-1",
+            "work": "try-on",
+            "outcome": "failed",
+            "current-step": "try-on"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "experience-operation-failed",
+          "data": {
+            "product-id": "shirt-1",
+            "work": "try-on",
+            "outcome": "failed",
+            "current-step": "try-on"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "experience-operation-failed",
+          "data": {
+            "product-id": "shirt-1",
+            "work": "try-on",
+            "outcome": "detached",
+            "current-step": "try-on"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "experience-operation-failed",
+          "data": {
+            "product-id": "shirt-1",
+            "work": "try-on",
+            "outcome": "detached",
+            "current-step": "try-on"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "experience-operation-failed",
+          "data": {
+            "product-id": "shirt-1",
+            "work": "try-on",
+            "outcome": "detached",
+            "current-step": "try-on"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "cart-requested",
+          "data": {
+            "product-id": "shirt-1",
+            "variant-id": "v-1"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "view-closed",
+          "data": {
+            "product-id": "shirt-1",
             "current-step": "intro",
-            "outcome": "failed",
-            "product-id": "shirt-1",
-            "reason": "permission-denied",
-            "sdk-version": "parity-sdk@1",
-            "work": "picker"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
+            "result-displayed": false
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "experience-summary",
           "data": {
+            "product-id": "shirt-1",
+            "reached-intro": true,
+            "granted-consent": true,
+            "accepted-photo": true,
+            "confirmed-height": true,
+            "reached-selection": true,
+            "requested-try-on": true,
+            "presented-result": true,
+            "requested-cart": true,
+            "try-on-count": 1,
+            "distinct-sizes": 1,
+            "distinct-colors": 1,
+            "distinct-waists": 0,
+            "distinct-lengths": 0,
+            "time-to-result": "lt-10s"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "view-closed",
+          "data": {
+            "product-id": "shirt-1",
             "current-step": "image-record",
-            "outcome": "failed",
-            "product-id": "shirt-1",
-            "reason": "unavailable",
-            "sdk-version": "parity-sdk@1",
-            "work": "camera"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
+            "result-displayed": false
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
-          "data": {
-            "current-step": "image-record",
-            "outcome": "failed",
-            "product-id": "shirt-1",
-            "reason": "interrupted",
-            "sdk-version": "parity-sdk@1",
-            "work": "camera"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
-          "data": {
-            "current-step": "image-record",
-            "outcome": "failed",
-            "product-id": "shirt-1",
-            "reason": "failed",
-            "sdk-version": "parity-sdk@1",
-            "work": "capture"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
+        "event": {
+          "name": "view-closed",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
-            "variant-colorway": "blue",
-            "variant-inseam": "32",
-            "variant-size": "M"
-          },
-          "id": "parity-visitor",
-          "name": "try-on-initiated"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
-          "data": {
-            "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
-            "variant-size": "L"
-          },
-          "id": "parity-visitor",
-          "name": "try-on-initiated"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
-          "data": {
-            "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
-            "variant-length": "34",
-            "variant-waist": "30"
-          },
-          "id": "parity-visitor",
-          "name": "try-on-initiated"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
-          "data": {
-            "current-step": "try-on",
-            "outcome": "failed",
-            "product-id": "shirt-1",
-            "reason": "inadmissible",
-            "sdk-version": "parity-sdk@1",
-            "work": "try-on"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
-          "data": {
-            "current-step": "try-on",
-            "outcome": "failed",
-            "product-id": "shirt-1",
-            "reason": "unavailable",
-            "sdk-version": "parity-sdk@1",
-            "work": "try-on"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
-          "data": {
-            "current-step": "try-on",
-            "outcome": "detached",
-            "product-id": "shirt-1",
-            "reason": "waiting",
-            "sdk-version": "parity-sdk@1",
-            "work": "try-on"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
-          "data": {
-            "current-step": "try-on",
-            "outcome": "detached",
-            "product-id": "shirt-1",
-            "reason": "rendering",
-            "sdk-version": "parity-sdk@1",
-            "work": "try-on"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
-          "data": {
-            "current-step": "try-on",
-            "outcome": "detached",
-            "product-id": "shirt-1",
-            "reason": "uncertain",
-            "sdk-version": "parity-sdk@1",
-            "work": "try-on"
-          },
-          "id": "parity-visitor",
-          "name": "experience-operation-failed"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
-          "data": {
-            "current-step": "intro",
-            "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "view-closed"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
-          "data": {
-            "current-step": "image-record",
-            "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "view-closed"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
-          "data": {
             "current-step": "image-upload",
-            "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "view-closed"
-        },
-        "type": "event"
+            "result-displayed": false
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "view-closed",
           "data": {
+            "product-id": "shirt-1",
             "current-step": "image-rejection",
-            "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "view-closed"
-        },
-        "type": "event"
+            "result-displayed": false
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "view-closed",
           "data": {
+            "product-id": "shirt-1",
             "current-step": "height",
-            "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "view-closed"
-        },
-        "type": "event"
+            "result-displayed": false
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "view-closed",
           "data": {
+            "product-id": "shirt-1",
             "current-step": "variant-selection",
-            "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "view-closed"
-        },
-        "type": "event"
+            "result-displayed": false
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "view-closed",
           "data": {
+            "product-id": "shirt-1",
             "current-step": "try-on",
-            "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "view-closed"
-        },
-        "type": "event"
+            "result-displayed": false
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "view-closed",
           "data": {
+            "product-id": "shirt-1",
             "current-step": "try-on",
-            "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "view-closed"
-        },
-        "type": "event"
+            "result-displayed": true
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
-          "data": {
-            "entry": "pdp-button",
-            "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "entrypoint-impression"
-        },
-        "type": "event"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/send",
-      "clientApiKey": "public-parity-key",
-      "body": {
-        "payload": {
+        "event": {
+          "name": "entrypoint-impression",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
-            "variant-colorway": "blue",
-            "variant-inseam": "32",
-            "variant-size": "M"
-          },
-          "id": "parity-visitor",
-          "name": "cart-item-added"
-        },
-        "type": "event"
+            "entry": "pdp-button"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "cart-item-added",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "cart-item-added"
-        },
-        "type": "event"
+            "variant-size": "M",
+            "variant-colorway": "blue"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "cart-item-added",
+          "data": {
+            "product-id": "shirt-1"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "order-placed",
           "data": {
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1",
-            "variant-colorway": "red",
-            "variant-fit": "slim"
-          },
-          "id": "parity-visitor",
-          "name": "order-placed"
-        },
-        "type": "event"
+            "variant-colorway": "red"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "experiment-assigned",
           "data": {
             "experiment": "try-on-enabled",
-            "sdk-version": "parity-sdk@1",
             "variant": "enabled"
-          },
-          "id": "parity-visitor",
-          "name": "experiment-assigned"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "experiment-assigned",
           "data": {
             "experiment": "try-on-enabled",
-            "sdk-version": "parity-sdk@1",
             "variant": "disabled"
-          },
-          "id": "parity-visitor",
-          "name": "experiment-assigned"
-        },
-        "type": "event"
+          }
+        }
       }
     },
     {
       "method": "POST",
-      "path": "/api/send",
+      "path": "/v2/events",
       "clientApiKey": "public-parity-key",
       "body": {
-        "payload": {
+        "event": {
+          "name": "entrypoint-impression",
           "data": {
-            "entry": "sent-again",
             "product-id": "shirt-1",
-            "sdk-version": "parity-sdk@1"
-          },
-          "id": "parity-visitor",
-          "name": "entrypoint-impression"
-        },
-        "type": "event"
+            "entry": "sent-again"
+          }
+        }
       }
     }
   ]

@@ -1,7 +1,5 @@
 {
   "comment": "The analytics parity check's inputs: the web's createTryOnAnalytics (sdks/core-rs/test/analytics-parity.test.ts) and the Flutter one (sdks/flutter/test/analytics_parity_test.dart) must both send expected.json's requests for them.",
-  "visitorId": "parity-visitor",
-  "sdkVersion": "parity-sdk@1",
   "clientApiKey": "public-parity-key",
   "baseUrl": "https://collector.example.test",
   "operations": [
