@@ -29,3 +29,28 @@ export function previewCropRect(
   const height = Math.min(frame.height, Math.round(frame.width / aspectRatio));
   return { x: 0, y: Math.floor((frame.height - height) / 2), width: frame.width, height };
 }
+
+/** The narrowest preview frame, `width / height`: a phone camera's 9:16. */
+const NARROWEST_PREVIEW_ASPECT_RATIO = 9 / 16;
+
+/**
+ * Shape of the live preview frame for a camera delivering `camera`-sized frames.
+ *
+ * A camera whose frame is narrower than the baseline — a phone held upright, a webcam turned on
+ * its side — already frames a standing person, so the preview takes the camera's own shape and
+ * shows all of it. Cutting it to the baseline threw away the top and bottom of the frame, which
+ * is where the head and the feet are. A wider camera keeps the baseline and loses its sides.
+ */
+export function previewAspectRatioForCamera(
+  camera: { width: number; height: number } | null,
+  baselineAspectRatio: number,
+): number {
+  if (camera === null || camera.width <= 0 || camera.height <= 0) {
+    return baselineAspectRatio;
+  }
+  const cameraAspect = camera.width / camera.height;
+  if (cameraAspect >= baselineAspectRatio) {
+    return baselineAspectRatio;
+  }
+  return Math.max(cameraAspect, NARROWEST_PREVIEW_ASPECT_RATIO);
+}

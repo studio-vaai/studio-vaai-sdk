@@ -3,7 +3,7 @@
 import type { FrameLock } from "@studio-vaai/js-machine";
 import type { RefObject, ReactNode } from "react";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useStudioVaaiUi } from "../studio-vaai-ui-provider.js";
 import { Text } from "../typography/text.js";
@@ -14,12 +14,17 @@ import { IconAlertCircle, IconCamera, IconInfo, IconSwitchCamera } from "../ui/i
 import { flowMediaColumnClassName, ResponsiveSplit } from "../ui/responsive-split.js";
 import { SheetShell } from "../ui/sheet.js";
 import { Spinner } from "../ui/spinner.js";
+import { previewAspectRatioForCamera } from "./capture-crop.js";
 import {
   NaturalAspectPreviewFrame,
   useNaturalAspectPreviewFrame,
 } from "./natural-aspect-preview-frame.js";
 import { useCanvasMediaPreview } from "./use-canvas-media-preview.js";
-import { usePreviewBaselineAspect } from "./use-preview-baseline-aspect.js";
+import {
+  BASELINE_PREVIEW_ASPECT_RATIO_BOTTOM_SHEET,
+  BASELINE_PREVIEW_ASPECT_RATIO_MODAL,
+  usePreviewBaselineAspect,
+} from "./use-preview-baseline-aspect.js";
 
 /**
  * Operational status driven by the host (which owns the {@link MediaStream}).
@@ -82,7 +87,8 @@ interface PhotoCaptureScreenProps {
    * (the frame is fixed-shape across those states so layout doesn't reflow).
    *
    * Defaults to `3 / 4` — portrait, the shape of a standing person — on both the
-   * bottom sheet and the modal.
+   * bottom sheet and the modal. In the modal a camera whose frame is narrower than
+   * that is shown whole, in its own shape (down to `9 / 16`).
    */
   previewAspectRatio?: number;
   /**
@@ -205,15 +211,52 @@ export function PhotoCaptureScreen({
   const internalVideoRef = useRef<HTMLVideoElement | null>(null);
   const videoRef = externalVideoRef ?? internalVideoRef;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // The camera's own frame size, once it delivers one. It decides the preview's shape below.
+  const [cameraFrame, setCameraFrame] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const el = videoRef.current;
+    if (el === null || status !== "live") {
+      setCameraFrame(null);
+      return;
+    }
+    const read = (): void => {
+      const { videoWidth: width, videoHeight: height } = el;
+      if (width > 0 && height > 0) {
+        setCameraFrame((prev) =>
+          prev !== null && prev.width === width && prev.height === height
+            ? prev
+            : { width, height },
+        );
+      }
+    };
+    read();
+    // `resize` fires when the frame size changes mid-stream: a phone turned, a camera switched.
+    el.addEventListener("loadedmetadata", read);
+    el.addEventListener("resize", read);
+    return () => {
+      el.removeEventListener("loadedmetadata", read);
+      el.removeEventListener("resize", read);
+    };
+  }, [status, stream, videoRef]);
+
+  const baselineAspect =
+    responsive.layout === "bottomSheet"
+      ? BASELINE_PREVIEW_ASPECT_RATIO_BOTTOM_SHEET
+      : BASELINE_PREVIEW_ASPECT_RATIO_MODAL;
   // Modal: the frame also fits the body's height, like the photo on the steps that follow. At
   // the column's full width a portrait frame is taller than a short dialog's body, and this
-  // shell does not scroll.
+  // shell does not scroll. That fit is also what lets the frame follow a narrower camera there;
+  // the sheet's frame is sized from its width alone, so it keeps the baseline.
   const {
     aspectRatio: liveFrameAspect,
     frameRef: previewFrameRef,
     frameFitClass: previewFrameFitClass,
     frameStyle: previewFrameStyle,
-  } = usePreviewBaselineAspect(previewAspectRatio, { scrollAware: isModal, minShrinkScale: 0 });
+  } = usePreviewBaselineAspect(
+    previewAspectRatio ??
+      (isModal ? previewAspectRatioForCamera(cameraFrame, baselineAspect) : baselineAspect),
+    { scrollAware: isModal, minShrinkScale: 0 },
+  );
 
   // Surface the live frame's aspect to the host: at shutter time it cuts the camera frame to
   // this shape, so the photo is the part of the frame the preview showed.

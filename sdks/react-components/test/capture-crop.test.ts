@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { previewCropRect } from "../src/batteries/capture-crop.js";
+import { previewAspectRatioForCamera, previewCropRect } from "../src/batteries/capture-crop.js";
 
 describe("previewCropRect", () => {
   it("keeps the centred portrait cut of a laptop camera's landscape frame", () => {
@@ -49,5 +49,31 @@ describe("previewCropRect", () => {
     expect(previewCropRect({ width: 1280, height: 720 }, null)).toEqual(whole);
     expect(previewCropRect({ width: 1280, height: 720 }, 0)).toEqual(whole);
     expect(previewCropRect({ width: 1280, height: 720 }, Number.NaN)).toEqual(whole);
+  });
+});
+
+describe("previewAspectRatioForCamera", () => {
+  it("keeps the baseline for a landscape camera", () => {
+    expect(previewAspectRatioForCamera({ width: 1920, height: 1080 }, 3 / 4)).toBe(3 / 4);
+  });
+
+  it("takes an upright camera's own shape, so none of its frame is cut", () => {
+    const aspect = previewAspectRatioForCamera({ width: 1080, height: 1920 }, 3 / 4);
+    expect(aspect).toBe(9 / 16);
+    expect(previewCropRect({ width: 1080, height: 1920 }, aspect)).toEqual({
+      x: 0,
+      y: 0,
+      width: 1080,
+      height: 1920,
+    });
+  });
+
+  it("does not go narrower than 9:16", () => {
+    expect(previewAspectRatioForCamera({ width: 720, height: 1600 }, 3 / 4)).toBe(9 / 16);
+  });
+
+  it("keeps the baseline until the camera has delivered a frame", () => {
+    expect(previewAspectRatioForCamera(null, 3 / 4)).toBe(3 / 4);
+    expect(previewAspectRatioForCamera({ width: 0, height: 0 }, 3 / 4)).toBe(3 / 4);
   });
 });
