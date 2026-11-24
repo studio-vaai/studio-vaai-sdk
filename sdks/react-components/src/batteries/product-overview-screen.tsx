@@ -205,7 +205,7 @@ export function ProductOverviewScreen({
   // view (its toggle sits beside the tried-variant pills), and the selection already carries a
   // style — the host's default, or the one the shopper last flipped to — so this step only
   // picks the size and colour.
-  // Ready: name the variant, in the try-on screen's exact wording ("Faded Blue in 32 anprobieren")
+  // Ready: name the variant, in the try-on screen's exact wording ("32 in Faded Blue anprobieren")
   // — this CTA and the try-on's are the same promise one step apart, so they say the same thing.
   // Not ready: state what is missing instead, on a muted bar (below), as the reference draws it.
   const selectedSizeLabel = tryOnSizeLabelForAttribute(product, selection["size"]) ?? "";

@@ -508,7 +508,7 @@ describe("Rust-aligned stateless try-on view", () => {
     await screen.updateComplete;
     expect(shell.heading).toBe("Caller product");
     expect(text(shell.description)).toBe("Größe M · Farbe White · KI-generiert");
-    expect(text(primary.textContent)).toBe("Blue in S anprobieren");
+    expect(text(primary.textContent)).toBe("S in Blue anprobieren");
     expect(text(secondary.textContent)).toBe("M in den Warenkorb (CHF 89.50)");
     expect(text(score.label)).toBe("Fit-Score für M");
 
@@ -530,7 +530,7 @@ describe("Rust-aligned stateless try-on view", () => {
     };
     await screen.updateComplete;
     expect(text(shell.description)).toBe("Größe M · Farbe Weiß · KI-generiert");
-    expect(text(primary.textContent)).toBe("Blau in S anprobieren");
+    expect(text(primary.textContent)).toBe("S in Blau anprobieren");
     expect(screen.selection.variantId).toBe("v2");
     detach();
   });

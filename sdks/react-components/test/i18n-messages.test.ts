@@ -96,6 +96,16 @@ describe("studioVaaiUiMessagesForLocale", () => {
     expect(plainText(ui.productOverview.garmentTooSmallNote("3XL", "L"))).toContain("zu klein");
     expect(plainText(ui.productOverview.garmentTooLargeNote("3XL", "L"))).toContain("zu groß");
   });
+
+  it("names the size first, then the colour, on the try-on CTA", () => {
+    // A host's own entry button borrows this wording, so it and the flow's CTAs read alike.
+    const en = studioVaaiUiMessagesForLocale("en").tryOnView;
+    expect(plainText(en.tryOnVariantCta("XS", "Blue"))).toBe("Try on XS in Blue");
+    expect(plainText(en.tryOnVariantCta("XS"))).toBe("Try on size XS");
+    const de = studioVaaiUiMessagesForLocale("de").tryOnView;
+    expect(plainText(de.tryOnVariantCta("XS", "Blau"))).toBe("XS in Blau anprobieren");
+    expect(plainText(de.tryOnVariantCta("XS"))).toBe("Größe XS anprobieren");
+  });
 });
 
 describe("locale tags", () => {

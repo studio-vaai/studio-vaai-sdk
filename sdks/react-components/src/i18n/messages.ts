@@ -1453,7 +1453,7 @@ yes {{Größe: {$sizeLabel}}}
     variantUnavailableSr: "in dieser Kombination nicht erhältlich",
     tryOnVariantCta: `.input {$hasColor :string}
 .match $hasColor
-yes {{{$colorLabel} in {$sizeLabel} anprobieren}}
+yes {{{$sizeLabel} in {$colorLabel} anprobieren}}
 * {{Größe {$sizeLabel} anprobieren}}`,
     aiGeneratedLabel: "KI-generiert",
     downloadImage: "Bild herunterladen",
