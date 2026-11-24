@@ -797,6 +797,23 @@
       "clientApiKey": "public-parity-key",
       "body": {
         "event": {
+          "name": "size-compared",
+          "data": {
+            "product-id": "shirt-1",
+            "measure": "tried",
+            "observed-size": "M",
+            "recommended-size": "M",
+            "recommended-length": "32"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
           "name": "try-on-presented",
           "data": {
             "product-id": "shirt-1",
@@ -1066,11 +1083,44 @@
       "clientApiKey": "public-parity-key",
       "body": {
         "event": {
+          "name": "size-compared",
+          "data": {
+            "product-id": "shirt-1",
+            "measure": "cart",
+            "observed-size": "M",
+            "recommended-size": "M",
+            "recommended-length": "32"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
           "name": "cart-item-added",
           "data": {
             "product-id": "shirt-1",
             "variant-size": "M",
             "variant-colorway": "blue"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v2/events",
+      "clientApiKey": "public-parity-key",
+      "body": {
+        "event": {
+          "name": "size-compared",
+          "data": {
+            "product-id": "shirt-1",
+            "measure": "cart",
+            "recommended-size": "M",
+            "recommended-length": "32"
           }
         }
       }

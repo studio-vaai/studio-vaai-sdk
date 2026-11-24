@@ -731,7 +731,7 @@ export class TryOnExperience {
       }
     }
     for (const fact of batch.experienceEvents) {
-      const event = experienceEvent(fact);
+      const event = experienceEvent(fact, this.#view);
       if (event !== undefined) {
         this.#publishEvent(event);
       }
@@ -940,7 +940,7 @@ export class TryOnExperience {
     let added = false;
     try {
       if (handler !== undefined) {
-        await handler(cartDetail(request, step));
+        await handler(cartDetail(request, step, view));
         added = true;
       }
     } catch {

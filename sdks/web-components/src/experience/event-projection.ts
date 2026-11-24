@@ -1,4 +1,4 @@
-import type { CartRequest, ExperienceEvent } from "@studio-vaai/core";
+import type { CartRequest, ExperienceEvent, FlowView } from "@studio-vaai/core";
 
 import {
   DetachedStage,
@@ -8,6 +8,7 @@ import {
   DeviceRecoveryEvent,
   ExperienceFact,
   JourneyEvent,
+  ScreenView,
   PhotoEvent,
   PhotoRejection,
   PhotoSource,
@@ -74,19 +75,34 @@ function photoSource(source: PhotoSource): "camera" | "library" {
   return source === PhotoSource.Camera ? "camera" : "library";
 }
 
+function recommendation(view: FlowView | undefined, productId: string) {
+  if (!view || view.domain.product?.id !== productId || !ScreenView.TryOn.instanceOf(view.screen)) {
+    return {};
+  }
+  const id = view.screen.inner.selection.recommendedVariantId;
+  const variant = view.domain.product.variants.find((v) => v.id === id);
+  return { recommendedForeignIds: Object.freeze(Object.fromEntries(variant?.foreignIds ?? [])) };
+}
+
 export function cartDetail(
   request: CartRequest,
   step: TryOnExperienceStep,
+  view?: FlowView,
 ): TryOnExperienceEventMap["sv-try-on-add-to-cart-requested"] {
   return {
     step,
     productId: request.productId,
+    ...recommendation(view, request.productId),
     variantId: request.variantId,
     foreignIds: Object.freeze(Object.fromEntries(request.foreignIds)),
   };
 }
 
-function journeyEvent(journey: JourneyEvent, context: EventContext): TryOnExperienceEvent {
+function journeyEvent(
+  journey: JourneyEvent,
+  context: EventContext,
+  view?: FlowView,
+): TryOnExperienceEvent {
   if (JourneyEvent.Opened.instanceOf(journey)) {
     const { entry, subentry } = journey.inner.entry;
     return {
@@ -149,7 +165,19 @@ function journeyEvent(journey: JourneyEvent, context: EventContext): TryOnExperi
       },
     };
   }
-  return { type: "sv-try-on-presented", detail: { ...context, ...journey.inner.result } };
+  const product = view?.domain.product;
+  const actual =
+    product?.id === context.productId
+      ? product.variants.find((v) => v.id === journey.inner.result.variantId)
+      : undefined;
+  return {
+    type: "sv-try-on-presented",
+    detail: {
+      ...context,
+      ...journey.inner.result,
+      ...(actual && { foreignIds: Object.freeze(Object.fromEntries(actual.foreignIds)) }),
+    },
+  };
 }
 
 function deviceEvent(
@@ -177,14 +205,13 @@ function deviceEvent(
 }
 
 /** Translate a complete Rust fact into the existing DOM event contract. */
-export function experienceEvent({
-  productId,
-  step,
-  fact,
-}: ExperienceEvent): TryOnExperienceEvent | undefined {
+export function experienceEvent(
+  { productId, step, fact }: ExperienceEvent,
+  view?: FlowView,
+): TryOnExperienceEvent | undefined {
   const context = { productId, step: journeyStep(step) };
   if (ExperienceFact.Journey.instanceOf(fact)) {
-    return journeyEvent(fact.inner.event, context);
+    return journeyEvent(fact.inner.event, context, view);
   }
   if (ExperienceFact.ConsentGranted.instanceOf(fact)) {
     return { type: "sv-try-on-consent-granted", detail: context };
@@ -237,6 +264,7 @@ export function experienceEvent({
       detail: {
         ...context,
         ...request,
+        ...recommendation(view, productId),
         origin: origin === TryOnRequestOrigin.Shopper ? "shopper" : "automatic",
         foreignIds: Object.freeze(Object.fromEntries(foreignIds)),
       },
@@ -279,6 +307,6 @@ export function experienceEvent({
   }
   return {
     type: "sv-try-on-add-to-cart-requested",
-    detail: cartDetail(fact.inner.request, context.step),
+    detail: cartDetail(fact.inner.request, context.step, view),
   };
 }

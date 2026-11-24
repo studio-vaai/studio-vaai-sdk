@@ -11,6 +11,8 @@ export interface TryOnRequestInput extends JsMachineInput {
   productId: ProductId;
   /** `id` of the variant to try on. */
   variantId: string;
+  recommendedAxes?: Readonly<Record<string, string>> | undefined;
+  observedAxes?: Readonly<Record<string, string>> | undefined;
 }
 
 export interface TryOnRequestContext {
@@ -19,6 +21,8 @@ export interface TryOnRequestContext {
   bodyId: BodyId;
   productId: ProductId;
   variantId: string;
+  recommendedAxes?: Readonly<Record<string, string>> | undefined;
+  observedAxes?: Readonly<Record<string, string>> | undefined;
   tryOnId?: TryOnId | undefined;
   /** Set when {@link tryOnRequestMachine} completes successfully. */
   result?: TryOnResult | undefined;

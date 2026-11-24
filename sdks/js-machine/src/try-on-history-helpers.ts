@@ -32,6 +32,7 @@ export type TryOnHistoryFailureReason = "garment_too_small" | "garment_too_large
 export interface TryOnHistoryEntry {
   imageUrl: string;
   attributes: Readonly<Record<string, string>>;
+  recommendedAxes?: Readonly<Record<string, string>>;
   status: TryOnHistoryEntryStatus;
   /**
    * Set when `status === "completed"`: the server's try-on id, so a cached-replay

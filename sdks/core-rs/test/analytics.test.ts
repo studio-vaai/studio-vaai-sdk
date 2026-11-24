@@ -28,8 +28,13 @@ describe("collector analytics", () => {
       ...variant,
       requestId: "private-request",
       origin: "shopper",
+      recommendedForeignIds: { size: "26", style: "32" },
     } as const;
-    const displayed = { tryOnId: "private-result", variantId: "v" };
+    const displayed = {
+      tryOnId: "private-result",
+      variantId: "v",
+      foreignIds: { ...variant.foreignIds, size: "30" },
+    };
     const facts: TryOnExperienceEvent[] = [
       { type: "sv-try-on-opened", detail: { ...product, step: "intro", entry: "pdp" } },
       {
@@ -42,6 +47,10 @@ describe("collector analytics", () => {
       { type: "sv-try-on-rendered", detail: { ...product, ...displayed } },
       { type: "sv-try-on-presented", detail: { ...product, ...displayed } },
       { type: "sv-try-on-presented", detail: { ...product, ...displayed } },
+      {
+        type: "sv-try-on-request-resolved",
+        detail: { ...product, ...displayed, requestId: requested.requestId },
+      },
       { type: "sv-try-on-add-to-cart-requested", detail: { ...product, ...variant } },
       { type: "sv-try-on-closed", detail: { ...product, displayed } },
     ];
@@ -77,10 +86,23 @@ describe("collector analytics", () => {
       "variant-changed",
       "try-on-initiated",
       "try-on-presented",
+      "size-compared",
       "cart-requested",
       "view-closed",
       "experience-summary",
     ]);
+    expect(bodies.filter((b) => b.event.name === "size-compared").map((b) => b.event.data)).toEqual(
+      [
+        {
+          "product-id": "shirt",
+          measure: "tried",
+          "recommended-size": "26",
+          "observed-size": "30",
+          "recommended-length": "32",
+          "observed-length": "32",
+        },
+      ],
+    );
     expect(bodies.at(-1)?.event.data).toMatchObject({
       "reached-intro": true,
       "confirmed-height": true,

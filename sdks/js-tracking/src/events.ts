@@ -1,4 +1,5 @@
 import type { ImageFlowSource } from "./image-flow-source.js";
+import type { SizeComparisonData } from "./size-comparison.js";
 import type { Step } from "./steps.js";
 
 /**
@@ -190,6 +191,10 @@ interface ExperimentAssignedEvent extends TrackingEventBase {
  * sites get full autocomplete + type-checking on `name` and `data`.
  */
 export type TrackingEvent =
+  | {
+      readonly name: "size-compared";
+      readonly data: SizeComparisonData;
+    }
   | EntrypointImpressionEvent
   | EntrypointClickedEvent
   | IntroOpenedEvent

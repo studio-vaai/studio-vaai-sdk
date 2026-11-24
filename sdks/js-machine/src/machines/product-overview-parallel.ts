@@ -42,6 +42,24 @@ export function effectiveRecommendedSize(recommended: RecommendedSizeData): stri
   return ranked.length > 0 ? "" : (recommended.recommendedSize ?? "");
 }
 
+export function recommendedAxes(
+  recommendation?: RecommendedSizeData,
+): Readonly<Record<string, string>> {
+  if (!recommendation) {
+    return {};
+  }
+  const size = effectiveRecommendedSize(recommendation);
+  if (!size) {
+    return {};
+  }
+  return (
+    recommendation.recommendations?.find((r) => r.size === size)?.options ??
+    (size === recommendation.recommendedSize ? recommendation.recommendedOptions : undefined) ?? {
+      size,
+    }
+  );
+}
+
 /**
  * The pre-pivot for a gated selection: when the currently-selected size is one the try-on hard
  * gate would reject, this is the size the try-on should run in INSTEAD — the gate-aware effective

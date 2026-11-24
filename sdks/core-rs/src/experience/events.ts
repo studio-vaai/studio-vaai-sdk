@@ -46,6 +46,9 @@ interface Variant {
   readonly variantId: VariantId;
   readonly foreignIds: Readonly<Record<string, string>>;
 }
+interface Recommendation {
+  readonly recommendedForeignIds?: Readonly<Record<string, string>>;
+}
 interface Request {
   readonly requestId: TryOnRequestId;
   readonly variantId: VariantId;
@@ -85,14 +88,16 @@ interface Details {
   };
   "sv-try-on-capture-failed": { readonly reason: DeviceFailure };
   "sv-try-on-variant-changed": Variant;
-  "sv-try-on-requested": Request & Variant & { readonly origin: "shopper" | "automatic" };
+  "sv-try-on-requested": Request &
+    Variant &
+    Recommendation & { readonly origin: "shopper" | "automatic" };
   "sv-try-on-request-resolved": Request & Result;
   "sv-try-on-rendered": Result;
-  "sv-try-on-presented": Result;
+  "sv-try-on-presented": Result & { readonly foreignIds?: Readonly<Record<string, string>> };
   "sv-try-on-refused": Request & { readonly reason: SizeRefusal };
   "sv-try-on-failed": Request & { readonly reason: BackendFailure | "inadmissible" };
   "sv-try-on-detached": Request & { readonly stage: "waiting" | "rendering" | "uncertain" };
-  "sv-try-on-add-to-cart-requested": Variant;
+  "sv-try-on-add-to-cart-requested": Variant & Recommendation;
 }
 
 export type TryOnExperienceEventMap = {

@@ -6,7 +6,11 @@ import type { TryOnRequestContext, TryOnRequestInput } from "../context/index.js
 
 import { createTryOnActor } from "../actors.js";
 
-export type TryOnRequestOutput = { result: TryOnResult };
+export type TryOnRequestOutput = {
+  result: TryOnResult;
+  recommendedAxes?: Readonly<Record<string, string>>;
+  observedAxes?: Readonly<Record<string, string>>;
+};
 
 export const tryOnRequestMachine = setup({
   types: {
@@ -27,6 +31,8 @@ export const tryOnRequestMachine = setup({
     bodyId: input.bodyId,
     productId: input.productId,
     variantId: input.variantId,
+    recommendedAxes: input.recommendedAxes,
+    observedAxes: input.observedAxes,
     tryOnId: undefined,
   }),
   states: {
@@ -59,5 +65,7 @@ export const tryOnRequestMachine = setup({
   },
   output: ({ context }): TryOnRequestOutput => ({
     result: context.result!,
+    ...(context.recommendedAxes && { recommendedAxes: context.recommendedAxes }),
+    ...(context.observedAxes && { observedAxes: context.observedAxes }),
   }),
 });

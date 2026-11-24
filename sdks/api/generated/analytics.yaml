@@ -107,6 +107,7 @@ components:
         - $ref: '#/components/schemas/ViewClosed'
         - $ref: '#/components/schemas/ExperienceOperationFailed'
         - $ref: '#/components/schemas/ExperienceSummary'
+        - $ref: '#/components/schemas/SizeCompared'
         - $ref: '#/components/schemas/CartRequested'
         - $ref: '#/components/schemas/CartItemAdded'
         - $ref: '#/components/schemas/OrderPlaced'
@@ -680,6 +681,41 @@ components:
             - method
       description: Photo processing rejects the photo.
       x-event-group: Setup
+    SizeCompared:
+      type: object
+      required:
+        - name
+        - data
+      properties:
+        name:
+          type: string
+          enum:
+            - size-compared
+        data:
+          type: object
+          properties:
+            product-id:
+              allOf:
+                - $ref: '#/components/schemas/CatalogKey'
+              description: Catalog product associated with this event.
+            measure:
+              type: string
+              enum:
+                - tried
+                - cart
+            recommended-size:
+              $ref: '#/components/schemas/CatalogKey'
+            observed-size:
+              $ref: '#/components/schemas/CatalogKey'
+            recommended-length:
+              $ref: '#/components/schemas/CatalogKey'
+            observed-length:
+              $ref: '#/components/schemas/CatalogKey'
+          required:
+            - product-id
+            - measure
+      description: One distinct recommended and presented size pair in an open product experience, or a confirmed cart addition. Axis values are shop catalog identifiers. Omitted axes remain unobserved.
+      x-event-group: Try-on
     TryOnInitiated:
       type: object
       required:

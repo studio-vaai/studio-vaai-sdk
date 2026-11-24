@@ -13,11 +13,17 @@ const defaultAnalyticsBaseUrl = 'https://a.studio-vaai.com';
 /// A product added to the cart or ordered, by the shop's product ID and the
 /// variant's foreign IDs by axis (`size`, `colorway`, and any other axis).
 final class CommerceAnalyticsEvent {
-  const CommerceAnalyticsEvent({required this.productId, required this.foreignIds, this.variantId});
+  const CommerceAnalyticsEvent({
+    required this.productId,
+    required this.foreignIds,
+    this.recommendedForeignIds,
+    this.variantId,
+  });
 
   final String productId;
   final String? variantId;
   final Map<String, String> foreignIds;
+  final Map<String, String>? recommendedForeignIds;
 }
 
 /// studio vaai analytics for the try-on, the counterpart of the web SDK's
@@ -110,6 +116,20 @@ Map<String, Object> _variantData(
 Map<String, String> _foreignIds(Map<String, Object?> detail) =>
     (detail['foreignIds'] as Map?)?.cast<String, String>() ?? const {};
 
+final _catalogKey = RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$');
+Map<String, String> _comparison(Map<String, String> observed, Map<String, String> recommended) {
+  final values = {
+    'observed-size': observed['size'] ?? observed['waist'],
+    'recommended-size': recommended['size'] ?? recommended['waist'],
+    'observed-length': observed['length'] ?? observed['style'],
+    'recommended-length': recommended['length'] ?? recommended['style'],
+  };
+  return {
+    for (final entry in values.entries)
+      if (entry.value case final String value when _catalogKey.hasMatch(value)) entry.key: value,
+  };
+}
+
 String _step(String step) => switch (step) {
   'camera' => 'image-record',
   'photo-upload' => 'image-upload',
@@ -133,6 +153,10 @@ String _timeBucket(int seconds) => switch (seconds) {
 };
 
 final class _Summary {
+  final requests = <String, Map<String, String>>{};
+  final results = <String, Map<String, String>>{};
+  final comparisons = <String>{};
+  final awaitingResolution = <String, Map<String, String>>{};
   _Summary(this.productId, this.entry);
   final String productId;
   final String? entry;
@@ -280,6 +304,14 @@ final class _TryOnAnalytics implements TryOnAnalytics {
             if (reason != null) 'reason': reason,
           });
 
+      void reportTried(Map<String, String> pair) {
+        if (scope != null &&
+            scope.comparisons.length < _limit &&
+            scope.comparisons.add(jsonEncode(pair))) {
+          _send('size-compared', {...data, 'measure': 'tried', ...pair});
+        }
+      }
+
       switch (event.type) {
         case 'sv-try-on-opened':
           final entry = detail['entry'] as String?;
@@ -336,6 +368,10 @@ final class _TryOnAnalytics implements TryOnAnalytics {
           scope?.requested = true;
           if (variantId != null) scope?.rememberVariant(variantId, foreignIds);
           final requestId = detail['requestId'] as String;
+          final recommended = detail['recommendedForeignIds'];
+          if (scope != null && recommended is Map && scope.requests.length < _limit) {
+            scope.requests[requestId] = _comparison({}, recommended.cast<String, String>());
+          }
           final origin = detail['origin'] as String;
           if (origin == 'shopper') {
             if (shopperRequests.length >= _limit) {
@@ -348,8 +384,17 @@ final class _TryOnAnalytics implements TryOnAnalytics {
             'origin': origin,
           });
         case 'sv-try-on-presented':
+          if (variantId != null && detail['foreignIds'] is Map)
+            scope?.rememberVariant(variantId, _foreignIds(detail));
           if (variantId != null &&
               (scope?.present(detail['tryOnId'] as String, variantId) ?? true)) {
+            final actual = _comparison(scope?.variants[variantId] ?? {}, {});
+            final recommendation = scope?.results[detail['tryOnId']];
+            if (recommendation != null) {
+              reportTried({...recommendation, ...actual});
+            } else if (scope != null && scope.awaitingResolution.length < _limit) {
+              scope.awaitingResolution[detail['tryOnId'] as String] = actual;
+            }
             _send('try-on-presented', {...data, 'variant-id': variantId});
           }
         case 'sv-try-on-closed':
@@ -358,7 +403,12 @@ final class _TryOnAnalytics implements TryOnAnalytics {
             'current-step': step,
             'result-displayed': detail['displayed'] != null,
           });
-          if (scope != null) _send('experience-summary', scope.toData());
+          if (scope != null) {
+            for (final pair in scope.awaitingResolution.values) {
+              reportTried(pair);
+            }
+            _send('experience-summary', scope.toData());
+          }
           summary = null;
           shopperRequests.clear();
         case 'sv-try-on-add-to-cart-requested':
@@ -383,16 +433,29 @@ final class _TryOnAnalytics implements TryOnAnalytics {
         case 'sv-try-on-photo-failed':
           operation('photo', 'failed');
         case 'sv-try-on-failed':
+          scope?.requests.remove(detail['requestId']);
           shopperRequests.remove(detail['requestId']);
           operation('try-on', 'failed');
         case 'sv-try-on-detached':
+          scope?.requests.remove(detail['requestId']);
           shopperRequests.remove(detail['requestId']);
           operation('try-on', 'detached');
         case 'sv-try-on-refused':
+          scope?.requests.remove(detail['requestId']);
           if (shopperRequests.remove(detail['requestId']) == productId) {
             _send('gated-size-selected', data);
           }
         case 'sv-try-on-request-resolved':
+          final pair = scope?.requests.remove(detail['requestId']);
+          if (scope != null && pair != null) {
+            final result = detail['tryOnId'] as String;
+            final actual = scope.awaitingResolution.remove(result);
+            if (actual != null) {
+              reportTried({...pair, ...actual});
+            } else if (scope.results.length < _limit) {
+              scope.results[result] = pair;
+            }
+          }
           shopperRequests.remove(detail['requestId']);
       }
     });
@@ -403,8 +466,14 @@ final class _TryOnAnalytics implements TryOnAnalytics {
       _send('entrypoint-impression', {'product-id': productId, 'entry': entry});
 
   @override
-  void cartItemAdded(CommerceAnalyticsEvent event) =>
-      _send('cart-item-added', _variantData(event.productId, event.variantId, event.foreignIds));
+  void cartItemAdded(CommerceAnalyticsEvent event) {
+    _send('size-compared', {
+      'product-id': event.productId,
+      'measure': 'cart',
+      ..._comparison(event.foreignIds, event.recommendedForeignIds ?? {}),
+    });
+    _send('cart-item-added', _variantData(event.productId, event.variantId, event.foreignIds));
+  }
 
   @override
   void orderPlaced(CommerceAnalyticsEvent event) =>

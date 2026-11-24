@@ -3065,6 +3065,91 @@ impl crate::runtime::WireModel for ExperienceSummary {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum SizeComparedDataMeasure {
+    /// `tried`
+    Tried,
+    /// `cart`
+    Cart,
+    /// A value this client does not know yet.
+    Unknown { value: String },
+}
+
+impl SizeComparedDataMeasure {
+    /// The value on the wire.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Tried => "tried",
+            Self::Cart => "cart",
+            Self::Unknown { value } => value,
+        }
+    }
+
+    pub(crate) const KNOWN: &'static [&'static str] = &["tried", "cart"];
+
+    pub fn from_wire(value: &str) -> Self {
+        match value {
+            "tried" => Self::Tried,
+            "cart" => Self::Cart,
+            other => Self::Unknown { value: other.to_owned() },
+        }
+    }
+}
+
+impl serde::Serialize for SizeComparedDataMeasure {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for SizeComparedDataMeasure {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = <std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
+        Ok(Self::from_wire(&value))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct SizeComparedData {
+    /// Catalog product associated with this event.
+    #[serde(rename = "product-id")]
+    pub product_id: String,
+    #[serde(rename = "measure")]
+    pub measure: SizeComparedDataMeasure,
+    #[serde(rename = "recommended-size", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub recommended_size: Option<String>,
+    #[serde(rename = "observed-size", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub observed_size: Option<String>,
+    #[serde(rename = "recommended-length", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub recommended_length: Option<String>,
+    #[serde(rename = "observed-length", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub observed_length: Option<String>,
+}
+
+impl crate::runtime::WireModel for SizeComparedData {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[("measure", SizeComparedDataMeasure::KNOWN)];
+}
+
+/// One distinct recommended and presented size pair in an open product experience, or a confirmed cart addition. Axis values are shop catalog identifiers. Omitted axes remain unobserved.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct SizeCompared {
+    #[serde(rename = "data")]
+    pub data: SizeComparedData,
+}
+
+impl crate::runtime::WireModel for SizeCompared {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("name", "size-compared")];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
 /// The widget hands a cart request to the host.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -3198,6 +3283,7 @@ pub enum AnalyticsEvent {
     ViewClosed { event: ViewClosed },
     ExperienceOperationFailed { event: ExperienceOperationFailed },
     ExperienceSummary { event: ExperienceSummary },
+    SizeCompared { event: SizeCompared },
     CartRequested { event: CartRequested },
     CartItemAdded { event: CartItemAdded },
     OrderPlaced { event: OrderPlaced },
@@ -3228,6 +3314,7 @@ impl serde::Serialize for AnalyticsEvent {
             Self::ViewClosed { event } => runtime::wire_value(event),
             Self::ExperienceOperationFailed { event } => runtime::wire_value(event),
             Self::ExperienceSummary { event } => runtime::wire_value(event),
+            Self::SizeCompared { event } => runtime::wire_value(event),
             Self::CartRequested { event } => runtime::wire_value(event),
             Self::CartItemAdded { event } => runtime::wire_value(event),
             Self::OrderPlaced { event } => runtime::wire_value(event),
@@ -3262,6 +3349,7 @@ impl<'de> serde::Deserialize<'de> for AnalyticsEvent {
             Some("view-closed") => serde_json::from_value(value).map(|event| Self::ViewClosed { event }).map_err(serde::de::Error::custom),
             Some("experience-operation-failed") => serde_json::from_value(value).map(|event| Self::ExperienceOperationFailed { event }).map_err(serde::de::Error::custom),
             Some("experience-summary") => serde_json::from_value(value).map(|event| Self::ExperienceSummary { event }).map_err(serde::de::Error::custom),
+            Some("size-compared") => serde_json::from_value(value).map(|event| Self::SizeCompared { event }).map_err(serde::de::Error::custom),
             Some("cart-requested") => serde_json::from_value(value).map(|event| Self::CartRequested { event }).map_err(serde::de::Error::custom),
             Some("cart-item-added") => serde_json::from_value(value).map(|event| Self::CartItemAdded { event }).map_err(serde::de::Error::custom),
             Some("order-placed") => serde_json::from_value(value).map(|event| Self::OrderPlaced { event }).map_err(serde::de::Error::custom),

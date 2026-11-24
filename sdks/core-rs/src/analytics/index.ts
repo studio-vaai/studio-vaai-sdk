@@ -54,6 +54,7 @@ type EventData = Record<string, string | number | boolean>;
 export interface CommerceAnalyticsEvent {
   productId: string;
   variantId?: string;
+  recommendedForeignIds?: Readonly<Record<string, string>>;
   foreignIds: Readonly<Record<string, string>>;
 }
 
@@ -71,6 +72,24 @@ function variantData({ productId, variantId, foreignIds }: CommerceAnalyticsEven
     data["variant-id"] = variantId;
   }
   return data;
+}
+
+const catalogKey = (value: string | undefined): value is string =>
+  value !== undefined && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/u.test(value);
+function comparison(
+  observed: Readonly<Record<string, string>>,
+  recommended: Readonly<Record<string, string>>,
+) {
+  const size = observed["size"] ?? observed["waist"];
+  const rec = recommended["size"] ?? recommended["waist"];
+  const length = observed["length"] ?? observed["style"];
+  const recLength = recommended["length"] ?? recommended["style"];
+  return {
+    ...(catalogKey(size) && { "observed-size": size }),
+    ...(catalogKey(rec) && { "recommended-size": rec }),
+    ...(catalogKey(length) && { "observed-length": length }),
+    ...(catalogKey(recLength) && { "recommended-length": recLength }),
+  };
 }
 
 function timeBucket(seconds: number): string {
@@ -102,6 +121,10 @@ function startSummary(productId: string, entry?: string) {
     missingVariant: false,
     variants: new Map<string, Readonly<Record<string, string>>>(),
     displayed: new Set<string>(),
+    requests: new Map<string, EventData>(),
+    results: new Map<string, EventData>(),
+    comparisons: new Set<string>(),
+    awaitingResolution: new Map<string, EventData>(),
     axes: {
       size: new Set<string>(),
       colorway: new Set<string>(),
@@ -169,6 +192,17 @@ export function createTryOnAnalytics(options: AnalyticsOptions): TryOnAnalytics 
           "current-step": step,
           ...(reason === undefined ? {} : { reason }),
         });
+      }
+
+      function reportTried(pair: EventData) {
+        if (!scope || scope.comparisons.size >= limit) {
+          return;
+        }
+        const key = JSON.stringify(pair);
+        if (!scope.comparisons.has(key)) {
+          scope.comparisons.add(key);
+          send("size-compared", { ...data, measure: "tried", ...pair });
+        }
       }
 
       // oxlint-disable-next-line eslint/default-case -- The lifecycle event union is exhaustive.
@@ -258,6 +292,12 @@ export function createTryOnAnalytics(options: AnalyticsOptions): TryOnAnalytics 
         case "sv-try-on-requested": {
           if (scope !== undefined) {
             scope.requested = true;
+            if (scope.requests.size < limit && event.detail.recommendedForeignIds !== undefined) {
+              scope.requests.set(
+                event.detail.requestId,
+                comparison({}, event.detail.recommendedForeignIds),
+              );
+            }
             if (scope.variants.size < limit || scope.variants.has(event.detail.variantId)) {
               scope.variants.set(event.detail.variantId, event.detail.foreignIds);
             }
@@ -281,8 +321,15 @@ export function createTryOnAnalytics(options: AnalyticsOptions): TryOnAnalytics 
           }
           if (scope !== undefined) {
             scope.displayed.add(tryOnId);
+            const selected = event.detail.foreignIds ?? scope.variants.get(variantId);
+            const actual = comparison(selected ?? {}, {});
+            const recommendation = scope.results.get(tryOnId);
+            if (recommendation) {
+              reportTried({ ...recommendation, ...actual });
+            } else if (scope.awaitingResolution.size < limit) {
+              scope.awaitingResolution.set(tryOnId, actual);
+            }
             scope.timeToResult ??= timeBucket((performance.now() - scope.startedAt) / 1000);
-            const selected = scope.variants.get(variantId);
             scope.missingVariant ||= selected === undefined;
             for (const axis of axes) {
               const value = selected?.[axis];
@@ -301,6 +348,9 @@ export function createTryOnAnalytics(options: AnalyticsOptions): TryOnAnalytics 
             "result-displayed": event.detail.displayed !== undefined,
           });
           if (scope !== undefined) {
+            for (const pair of scope.awaitingResolution.values()) {
+              reportTried(pair);
+            }
             send("experience-summary", {
               ...data,
               ...(scope.entry === undefined ? {} : { entry: scope.entry }),
@@ -372,16 +422,19 @@ export function createTryOnAnalytics(options: AnalyticsOptions): TryOnAnalytics 
           break;
         }
         case "sv-try-on-failed": {
+          scope?.requests.delete(event.detail.requestId);
           shopperRequests.delete(event.detail.requestId);
           operationStatus("try-on", "failed");
           break;
         }
         case "sv-try-on-detached": {
+          scope?.requests.delete(event.detail.requestId);
           shopperRequests.delete(event.detail.requestId);
           operationStatus("try-on", "detached");
           break;
         }
         case "sv-try-on-refused": {
+          scope?.requests.delete(event.detail.requestId);
           if (shopperRequests.get(event.detail.requestId) === productId) {
             send("gated-size-selected", data);
           }
@@ -389,6 +442,17 @@ export function createTryOnAnalytics(options: AnalyticsOptions): TryOnAnalytics 
           break;
         }
         case "sv-try-on-request-resolved": {
+          const pair = scope?.requests.get(event.detail.requestId);
+          if (scope && pair) {
+            const actual = scope.awaitingResolution.get(event.detail.tryOnId);
+            if (actual) {
+              reportTried({ ...pair, ...actual });
+              scope.awaitingResolution.delete(event.detail.tryOnId);
+            } else if (scope.results.size < limit) {
+              scope.results.set(event.detail.tryOnId, pair);
+            }
+          }
+          scope?.requests.delete(event.detail.requestId);
           shopperRequests.delete(event.detail.requestId);
           break;
         }
@@ -406,6 +470,11 @@ export function createTryOnAnalytics(options: AnalyticsOptions): TryOnAnalytics 
       send("entrypoint-impression", { "product-id": productId, entry });
     },
     cartItemAdded(event) {
+      send("size-compared", {
+        "product-id": event.productId,
+        measure: "cart",
+        ...comparison(event.foreignIds, event.recommendedForeignIds ?? {}),
+      });
       send("cart-item-added", variantData(event));
     },
     orderPlaced(event) {

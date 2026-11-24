@@ -168,7 +168,7 @@ final class TryOnExperience extends ChangeNotifier {
 
   void _publish(ExperienceEvent event) {
     _events.add(event);
-    final projected = tryOnExperienceEventOf(event);
+    final projected = tryOnExperienceEventOf(event, _view);
     if (projected != null) _tryOnEvents.add(projected);
   }
 

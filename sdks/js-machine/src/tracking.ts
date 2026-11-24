@@ -1,6 +1,8 @@
 import type { Step, TrackingClient, TrackingEvent } from "@studio-vaai/js-tracking";
 import type { ActorRefFrom, AnyActorRef, SnapshotFrom } from "xstate";
 
+import { sizeComparison } from "@studio-vaai/js-tracking";
+
 import type { AnalyticsSignal, HostAnalyticsSignal } from "./analytics-signal.js";
 import type { defaultRootMachine } from "./default-root.js";
 
@@ -334,6 +336,7 @@ function startSummary(productId: string, entry?: string) {
     startedAt: performance.now(),
     flags: new Set<FunnelFlag>(),
     results: new Set<string>(),
+    comparisons: new Set<string>(),
     sizes: new Set<string>(),
     colors: new Set<string>(),
     waists: new Set<string>(),
@@ -448,6 +451,17 @@ export function createTrackingSubscriber(
           return;
         }
         summary.results.add(signal.resultKey);
+        const pair = sizeComparison(
+          summary.productId,
+          "tried",
+          signal.variants,
+          signal.recommendedAxes,
+        );
+        const key = JSON.stringify(pair);
+        if (summary.comparisons.size < 32 && !summary.comparisons.has(key)) {
+          summary.comparisons.add(key);
+          tracking.trackEvent({ name: "size-compared", data: pair });
+        }
         summary.timeToResult ??= timeBucket((performance.now() - summary.startedAt) / 1000);
         for (const [axis, counts] of [
           ["size", summary.sizes],
@@ -460,6 +474,17 @@ export function createTrackingSubscriber(
             counts.add(value);
           }
         }
+      }
+      if (signal.type === "cart-item-added") {
+        tracking.trackEvent({
+          name: "size-compared",
+          data: sizeComparison(
+            signal["product-id"],
+            "cart",
+            signal.variants,
+            signal.recommendedAxes,
+          ),
+        });
       }
       observe(enrichHostSignal(signal, lastObservedStep));
       if (signal.type === "view-closed" && summary !== undefined) {

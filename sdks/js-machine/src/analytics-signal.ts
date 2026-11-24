@@ -85,6 +85,7 @@ export type HostAnalyticsSignal =
       readonly type: "try-on-presented";
       readonly "product-id": string;
       /** Local deduplication key. The tracking bridge never includes it in the event. */
+      readonly recommendedAxes?: Readonly<Record<string, string>>;
       readonly resultKey: string;
       readonly variants: Readonly<Record<string, string>>;
     }
@@ -113,6 +114,7 @@ export type HostAnalyticsSignal =
     }
   | {
       readonly type: "cart-item-added";
+      readonly recommendedAxes?: Readonly<Record<string, string>>;
       readonly "product-id": string;
       /** Selected variant axes; flattened to `variant-<axis>` wire keys. */
       readonly variants: Readonly<Record<string, string>>;

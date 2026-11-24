@@ -231,6 +231,7 @@ export const createTryOnActor = fromPromise(
  * the reason a shopper sees an error screen.
  */
 export interface CompanionTryOnOutcome {
+  recommendedAxes?: Readonly<Record<string, string>>;
   attributes: Readonly<Record<string, string>>;
   result: TryOnResult;
 }
@@ -252,6 +253,7 @@ export const tryOnCompanionsActor = fromPromise(
       session: SessionHandle;
       bodyId: BodyId;
       productId: ProductId;
+      recommendedAxes?: Readonly<Record<string, string>>;
       selections: readonly {
         attributes: Readonly<Record<string, string>>;
         variantId: string;
@@ -273,7 +275,11 @@ export const tryOnCompanionsActor = fromPromise(
           // oxlint-disable-next-line typescript-eslint/no-unsafe-call -- ApiFailureError is a concrete subclass of Error from js-client
           throw new ApiFailureError(result.error);
         }
-        return { attributes, result: result.data };
+        return {
+          attributes,
+          result: result.data,
+          ...(input.recommendedAxes && { recommendedAxes: input.recommendedAxes }),
+        };
       }),
     );
     const outcomes: CompanionTryOnOutcome[] = [];

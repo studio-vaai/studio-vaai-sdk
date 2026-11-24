@@ -109,3 +109,5 @@ export {
 export type { AnalyticsSignal, HostAnalyticsSignal } from "./analytics-signal.js";
 export type { ImageFlowSource } from "@studio-vaai/js-tracking";
 export { createTrackingSubscriber, stepFromSnapshot, type TrackingSubscriber } from "./tracking.js";
+
+export { recommendedAxes } from "./machines/product-overview-parallel.js";

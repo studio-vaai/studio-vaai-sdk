@@ -80,10 +80,21 @@ Map<String, Object?> _variant(String variantId, Map<String, String> foreignIds) 
 
 /// The web's projection of one core fact (`experienceEvent`); `null` for
 /// facts the web does not publish (a cancelled picker, background work).
-TryOnExperienceEvent? tryOnExperienceEventOf(ExperienceEvent event) {
+TryOnExperienceEvent? tryOnExperienceEventOf(ExperienceEvent event, [FlowView? view]) {
   final context = {'productId': event.productId, 'step': tryOnStep(event.step)};
   TryOnExperienceEvent of(String type, [Map<String, Object?> detail = const {}]) =>
       TryOnExperienceEvent(type, Map.unmodifiable({...context, ...detail}));
+  Map<String, Object?> recommendation() {
+    final product = view?.domain.product;
+    final screen = view?.screen;
+    if (screen is! TryOnScreenView || product == null || product.id != event.productId) return {};
+    final id = screen.selection.recommendedVariantId;
+    for (final variant in product.variants) {
+      if (variant.id == id) return {'recommendedForeignIds': variant.foreignIds};
+    }
+    return {'recommendedForeignIds': <String, String>{}};
+  }
+
   switch (event.fact) {
     case JourneyExperienceFact(event: final journey):
       switch (journey) {
@@ -116,7 +127,12 @@ TryOnExperienceEvent? tryOnExperienceEventOf(ExperienceEvent event) {
         case VariantChangedJourneyEvent(:final variantId, :final foreignIds):
           return of('sv-try-on-variant-changed', _variant(variantId, foreignIds));
         case ImagePresentedJourneyEvent(:final result):
+          final product = view?.domain.product;
+          final actual = product?.id == event.productId
+              ? product?.variants.where((v) => v.id == result.variantId).firstOrNull
+              : null;
           return of('sv-try-on-presented', {
+            if (actual != null) 'foreignIds': actual.foreignIds,
             'tryOnId': result.tryOnId,
             'variantId': result.variantId,
           });
@@ -184,6 +200,7 @@ TryOnExperienceEvent? tryOnExperienceEventOf(ExperienceEvent event) {
       :final foreignIds,
     ):
       return of('sv-try-on-requested', {
+        ...recommendation(),
         'requestId': requestId,
         ..._variant(variantId, foreignIds),
         'origin': origin == TryOnRequestOrigin.shopper ? 'shopper' : 'automatic',
@@ -222,6 +239,7 @@ TryOnExperienceEvent? tryOnExperienceEventOf(ExperienceEvent event) {
       });
     case AddToCartRequestedExperienceFact(:final request):
       return of('sv-try-on-add-to-cart-requested', {
+        ...recommendation(),
         'productId': request.productId,
         ..._variant(request.variantId, request.foreignIds),
       });

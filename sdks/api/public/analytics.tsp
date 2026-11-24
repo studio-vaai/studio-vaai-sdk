@@ -203,6 +203,20 @@ namespace StudioVaaiAnalytics {
     };
   }
 
+  /** One distinct recommended and presented size pair in an open product experience, or a confirmed cart addition. Axis values are shop catalog identifiers. Omitted axes remain unobserved. */
+  @extension("x-event-group", "Try-on")
+  model SizeCompared {
+    name: "size-compared";
+    data: {
+      ...AnalyticsProductData;
+      measure: "tried" | "cart";
+      `recommended-size`?: CatalogKey;
+      `observed-size`?: CatalogKey;
+      `recommended-length`?: CatalogKey;
+      `observed-length`?: CatalogKey;
+    };
+  }
+
   /** The widget hands a cart request to the host. */
   @extension("x-event-group", "Commerce")
   model CartRequested {
@@ -237,7 +251,7 @@ namespace StudioVaaiAnalytics {
     ImageRecordInitiated, ImageRecordAborted, ImageUploadInitiated, ImageUploadAborted,
     ImageUploaded, PhotoRejected, HeightEntered, HeightStepOpened, VariantSelectionInitiated,
     VariantChanged, TryOnInitiated, GatedSizeSelected, TryOnPresented, ViewClosed,
-    ExperienceOperationFailed, ExperienceSummary, CartRequested, CartItemAdded, OrderPlaced,
+    ExperienceOperationFailed, ExperienceSummary, SizeCompared, CartRequested, CartItemAdded, OrderPlaced,
     ExperimentAssigned,
   }
 

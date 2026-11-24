@@ -12,7 +12,11 @@ import type { DefaultRootSnapshot } from "@studio-vaai/react-headless";
 import type { AnyActorRef } from "xstate";
 
 import { convertHeicToJpeg } from "@studio-vaai/js-client";
-import { selectProductTryOnHistory, stepFromSnapshot } from "@studio-vaai/js-machine";
+import {
+  recommendedAxes,
+  selectProductTryOnHistory,
+  stepFromSnapshot,
+} from "@studio-vaai/js-machine";
 import {
   buildDefaultRootViewModel,
   useStudioVaaiActor,
@@ -145,6 +149,7 @@ function tryOnHistorySlides(
       // Callout anchors ride on the slide so the fit panel can draw the visible
       // slide's image↔card leader lines.
       const anchors = {
+        ...(e.recommendedAxes && { recommendedAxes: e.recommendedAxes }),
         ...(e.fitAnchors === undefined ? {} : { fitAnchors: e.fitAnchors }),
         // Lets a host overlay (e.g. a provenance label) name the render on show.
         ...(e.tryOnId === undefined ? {} : { tryOnId: e.tryOnId }),
@@ -968,12 +973,15 @@ function StudioVaaiDefaultFlowInner({
   };
 
   const handleAddToCart = (attributes: VariantAttributes): void => {
+    const { product: cartProduct, recommendation } = stateRef.current.context;
+    const input = tryOnVariantInput(cartProduct, attributes);
+    // Keyed by the shop's variant IDs, as `try-on-presented` is, so both group alike.
     trackHostEvent({
       type: "cart-requested",
-      "product-id": String(stateRef.current.context.product.id),
-      variants: { ...attributes },
+      "product-id": String(cartProduct.id),
+      variants: input.foreignVariantIds,
     });
-    onAddToCart?.(tryOnVariantInput(stateRef.current.context.product, attributes));
+    onAddToCart?.({ ...input, recommendedAxes: recommendedAxes(recommendation) });
     closeSheet({ skipTryOnClose: true });
   };
 
@@ -1192,8 +1200,10 @@ function StudioVaaiDefaultFlowInner({
             trackHostEvent({
               type: "try-on-presented",
               "product-id": String(stateRef.current.context.product.id),
+              ...(slide.recommendedAxes && { recommendedAxes: slide.recommendedAxes }),
               resultKey: slide.tryOnId ?? slide.src,
-              variants: slide.attributes,
+              variants: tryOnVariantInput(stateRef.current.context.product, slide.attributes)
+                .foreignVariantIds,
             });
           }}
           onSelectVariant={onTryOnSelectVariant}

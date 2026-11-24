@@ -17,7 +17,12 @@ const parity = resolve(import.meta.dirname, "../../flutter/test/analytics_parity
 type Operation =
   | { op: "event"; event: TryOnExperienceEvent }
   | { op: "entrypointImpression"; productId: string; entry: string }
-  | { op: "cartItemAdded" | "orderPlaced"; productId: string; foreignIds: Record<string, string> }
+  | {
+      op: "cartItemAdded" | "orderPlaced";
+      productId: string;
+      foreignIds: Record<string, string>;
+      recommendedForeignIds?: Record<string, string>;
+    }
   | { op: "experimentAssigned"; enabled: boolean }
   | { op: "enabled"; value: boolean };
 
@@ -87,6 +92,9 @@ describe("analytics parity with the Flutter SDK", () => {
           analytics[operation.op]({
             productId: operation.productId,
             foreignIds: operation.foreignIds,
+            ...(operation.recommendedForeignIds && {
+              recommendedForeignIds: operation.recommendedForeignIds,
+            }),
           });
           break;
         }

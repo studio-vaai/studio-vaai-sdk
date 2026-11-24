@@ -95,6 +95,10 @@ function eventForCollector(event: TrackingEvent): { name: string; data: WireData
       copy("current-step", "result-displayed");
       break;
     }
+    case "size-compared": {
+      copy("measure", "observed-size", "recommended-size", "observed-length", "recommended-length");
+      break;
+    }
     case "experience-summary": {
       copy(
         "entry",

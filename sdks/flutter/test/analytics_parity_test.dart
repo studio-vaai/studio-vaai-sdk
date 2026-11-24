@@ -61,6 +61,7 @@ void main() {
           final event = CommerceAnalyticsEvent(
             productId: operation['productId']! as String,
             foreignIds: (operation['foreignIds']! as Map).cast(),
+            recommendedForeignIds: (operation['recommendedForeignIds'] as Map?)?.cast(),
           );
           operation['op'] == 'cartItemAdded'
               ? analytics.cartItemAdded(event)

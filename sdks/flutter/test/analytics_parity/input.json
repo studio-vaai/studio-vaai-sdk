@@ -686,7 +686,11 @@
             "colorway": "blue",
             "inseam": "32"
           },
-          "origin": "shopper"
+          "origin": "shopper",
+          "recommendedForeignIds": {
+            "size": "M",
+            "length": "32"
+          }
         }
       }
     },
@@ -702,7 +706,11 @@
           "foreignIds": {
             "size": "L"
           },
-          "origin": "automatic"
+          "origin": "automatic",
+          "recommendedForeignIds": {
+            "size": "M",
+            "length": "32"
+          }
         }
       }
     },
@@ -719,7 +727,11 @@
             "waist": "30",
             "length": "34"
           },
-          "origin": "shopper"
+          "origin": "shopper",
+          "recommendedForeignIds": {
+            "size": "M",
+            "length": "32"
+          }
         }
       }
     },
@@ -950,12 +962,20 @@
         "size": "M",
         "colorway": "blue",
         "inseam": "32"
+      },
+      "recommendedForeignIds": {
+        "size": "M",
+        "length": "32"
       }
     },
     {
       "op": "cartItemAdded",
       "productId": "shirt-1",
-      "foreignIds": {}
+      "foreignIds": {},
+      "recommendedForeignIds": {
+        "size": "M",
+        "length": "32"
+      }
     },
     {
       "op": "orderPlaced",

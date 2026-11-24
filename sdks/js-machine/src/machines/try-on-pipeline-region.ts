@@ -4,10 +4,11 @@ import { and, assign, emit, enqueueActions, raise, stateIn } from "xstate";
 
 import type { DefaultRootContext, VariantAttributes } from "../context/index.js";
 import type { TryOnHistoryEntry } from "../try-on-history-helpers.js";
+import type { TryOnRequestOutput } from "./try-on-request.js";
 
 import { type CompanionTryOnOutcome, isSessionExpiredError } from "../actors.js";
 import { companionStyleSelections, findVariantByAttributes } from "../context/shared.js";
-import { gatePrePivotSize } from "./product-overview-parallel.js";
+import { gatePrePivotSize, recommendedAxes } from "./product-overview-parallel.js";
 
 type ProductPipelineCtx = DefaultRootContext;
 
@@ -135,7 +136,11 @@ function appendHistoryEntryFromEvent({
   context: ProductPipelineCtx;
   event: unknown;
 }): ProductPipelineCtx["tryOnHistoryByProduct"] {
-  const result = (event as { output: { result: TryOnResult } }).output.result;
+  const {
+    result,
+    recommendedAxes: recommendation,
+    observedAxes,
+  } = (event as { output: TryOnRequestOutput }).output;
   const prev = context.tryOnHistoryByProduct[context.product.id] ?? {
     entries: [],
     cursor: -1,
@@ -155,7 +160,8 @@ function appendHistoryEntryFromEvent({
           scene: result.scene,
           ...(result.fitAnchors === undefined ? {} : { fitAnchors: result.fitAnchors }),
           ...(result.provenance === undefined ? {} : { provenance: result.provenance }),
-          attributes: { ...context.selection },
+          attributes: observedAxes ?? { ...context.selection },
+          ...(recommendation && { recommendedAxes: recommendation }),
           status: "completed" as const,
           ...revisionSnapshot,
         }
@@ -209,7 +215,7 @@ function appendCompanionEntries({
   const revisionSnapshot: Pick<TryOnHistoryEntry, "bodyRevisionIndex"> =
     revisions.length === 0 ? {} : { bodyRevisionIndex: revisions.length - 1 };
   const entries = [...prev.entries];
-  for (const { attributes, result } of output.outcomes) {
+  for (const { attributes, result, recommendedAxes: recommendation } of output.outcomes) {
     const duplicate = entries.some(
       (e) =>
         e.status === "completed" &&
@@ -228,6 +234,7 @@ function appendCompanionEntries({
             ...(result.fitAnchors === undefined ? {} : { fitAnchors: result.fitAnchors }),
             ...(result.provenance === undefined ? {} : { provenance: result.provenance }),
             attributes: { ...attributes },
+            ...(recommendation && { recommendedAxes: recommendation }),
             status: "completed" as const,
             ...revisionSnapshot,
           }
@@ -270,6 +277,7 @@ const spawnCompanionRenders = enqueueActions(({ context, enqueue }) => {
       session: ctx.session!,
       bodyId: ctx.bodyId!,
       productId: ctx.product.id,
+      recommendedAxes: recommendedAxes(ctx.recommendation),
       selections,
     },
   });
@@ -447,6 +455,8 @@ export const tryOnPipelineRegion = {
             bodyId: context.bodyId!,
             productId: context.product.id,
             variantId: variant.id,
+            recommendedAxes: recommendedAxes(context.recommendation),
+            observedAxes: { ...context.selection },
           };
         },
         onDone: [

@@ -591,6 +591,58 @@ describe("createTrackingSubscriber — machine-driven events", () => {
 });
 
 describe("createTrackingSubscriber — host events via trackHostEvent", () => {
+  it("counts distinct size pairs within an open and uses the confirmed cart size", () => {
+    const actor = startActor();
+    const { tracking, events } = makeRecordingTracking();
+    const subscriber = createTrackingSubscriber(actor, tracking);
+    const product = { "product-id": testProduct.id };
+    const recommendedAxes = { size: "30", style: "32" };
+    subscriber.trackHostEvent({ type: "widget-opened", ...product });
+    for (const [resultKey, colorway] of [
+      ["first", "blue"],
+      ["second", "black"],
+    ] as const) {
+      subscriber.trackHostEvent({
+        type: "try-on-presented",
+        ...product,
+        resultKey,
+        recommendedAxes,
+        variants: { size: "32", style: "30", colorway },
+      });
+    }
+    subscriber.trackHostEvent({
+      type: "cart-requested",
+      ...product,
+      variants: { size: "32", style: "30" },
+    });
+    subscriber.trackHostEvent({ type: "view-closed", ...product });
+    subscriber.trackHostEvent({
+      type: "cart-item-added",
+      ...product,
+      recommendedAxes,
+      variants: { size: "28", style: "32" },
+    });
+    expect(events.filter((e) => e.name === "size-compared").map((e) => e.data)).toEqual([
+      {
+        ...product,
+        measure: "tried",
+        "recommended-size": "30",
+        "recommended-length": "32",
+        "observed-size": "32",
+        "observed-length": "30",
+      },
+      {
+        ...product,
+        measure: "cart",
+        "recommended-size": "30",
+        "recommended-length": "32",
+        "observed-size": "28",
+        "observed-length": "32",
+      },
+    ]);
+    subscriber.unsubscribe();
+  });
+
   it("forwards entrypoint-impression unchanged (no current-step needed)", async () => {
     const actor = startActor();
     const { tracking, events } = makeRecordingTracking();

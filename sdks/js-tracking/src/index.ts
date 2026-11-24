@@ -18,3 +18,5 @@ export {
   createFetchTrackingClient,
   DEFAULT_COLLECTOR_BASE_URL,
 } from "./impl/fetch-tracking-client.js";
+
+export { sizeComparison } from "./size-comparison.js";

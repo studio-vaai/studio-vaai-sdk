@@ -8,6 +8,8 @@ import { findVariantByAttributes, variantForeignIds } from "@studio-vaai/js-mach
  */
 export interface StudioVaaiTryOnVariantInput {
   product: TryOnFlowProduct;
+  /** The effective recommendation when the cart action began. */
+  recommendedAxes?: Readonly<Record<string, string>>;
   /** The selection: `{ colorway, size, template? }`, with `size` the size key (`27 / 30`). */
   attributes: VariantAttributes;
   /** `id` of the matched variant. Absent only when the product no longer sells these attributes. */

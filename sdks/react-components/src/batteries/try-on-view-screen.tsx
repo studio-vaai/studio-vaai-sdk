@@ -79,6 +79,7 @@ function NullImageOverlay(): null {
  * in sync with whichever slide the user is on, independent of the live PDP `selection`.
  */
 export interface TryOnViewCarouselSlide {
+  recommendedAxes?: Readonly<Record<string, string>>;
   src: string;
   attributes: Readonly<Record<string, string>>;
   /**
