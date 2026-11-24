@@ -1408,8 +1408,10 @@ yes {{Größe und Farbe auswählen}}
     sheetSubtitle: "Wähle Größe und Farbe für deine Anprobe",
     getRecommendation: "Größe empfehlen lassen",
     recommendedSizeNote: "Deine empfohlene Größe: {$sizeLabel}",
-    garmentTooSmallNote: "Größe {$requestedSize} ist dir zu klein.",
-    garmentTooLargeNote: "Größe {$requestedSize} ist dir zu groß.",
+    garmentTooSmallNote:
+      "Größe {$requestedSize} ist dir zu klein. Unsere Empfehlung: {$recommendedSize}",
+    garmentTooLargeNote:
+      "Größe {$requestedSize} ist dir zu groß. Unsere Empfehlung: {$recommendedSize}",
     garmentTooSmallNoAlternativeNote:
       "Größe {$requestedSize} ist für deine Maße zu klein. Größer gibt es dieses Modell nicht, deshalb können wir diese Anprobe leider nicht erstellen.",
     garmentTooLargeNoAlternativeNote:
@@ -1461,8 +1463,10 @@ yes {{{$sizeLabel} in {$colorLabel} anprobieren}}
     sizeLine: "Größe {$sizeLabel}",
     recommendedHere: "Deine empfohlene Größe",
     recommendedOther: "Deine empfohlene Größe ist {$sizeLabel}",
-    gateInspectTooSmallNote: "Größe {$sizeLabel} ist dir zu klein.",
-    gateInspectTooLargeNote: "Größe {$sizeLabel} ist dir zu groß.",
+    gateInspectTooSmallNote:
+      "Größe {$sizeLabel} ist dir zu klein. Unsere Empfehlung: {$recommendedSize}",
+    gateInspectTooLargeNote:
+      "Größe {$sizeLabel} ist dir zu groß. Unsere Empfehlung: {$recommendedSize}",
     fitVerdicts: {
       tooSmall: "zu eng, passt nicht",
       runsTight: "etwas eng",
@@ -1675,8 +1679,10 @@ yes {{Select size and color}}
     sheetSubtitle: "Pick the size and color to try on",
     getRecommendation: "Get recommendation",
     recommendedSizeNote: "Your recommended size: {$sizeLabel}",
-    garmentTooSmallNote: "Size {$requestedSize} is too small for you.",
-    garmentTooLargeNote: "Size {$requestedSize} is too large for you.",
+    garmentTooSmallNote:
+      "Size {$requestedSize} is too small. We recommend size {$recommendedSize}.",
+    garmentTooLargeNote:
+      "Size {$requestedSize} is too large. We recommend size {$recommendedSize}.",
     garmentTooSmallNoAlternativeNote:
       "Size {$requestedSize} is too small for your measurements, and this style doesn't come any larger. We can't create a try-on for it.",
     garmentTooLargeNoAlternativeNote:
@@ -1727,8 +1733,10 @@ yes {{Try on {$sizeLabel} in {$colorLabel}}}
     sizeLine: "Size {$sizeLabel}",
     recommendedHere: "Your recommended size",
     recommendedOther: "Your recommended size is {$sizeLabel}",
-    gateInspectTooSmallNote: "Size {$sizeLabel} is too small for you.",
-    gateInspectTooLargeNote: "Size {$sizeLabel} is too big for you.",
+    gateInspectTooSmallNote:
+      "Size {$sizeLabel} is too small. We recommend size {$recommendedSize}.",
+    gateInspectTooLargeNote:
+      "Size {$sizeLabel} is too large. We recommend size {$recommendedSize}.",
     fitVerdicts: {
       tooSmall: "too tight, won't fit",
       runsTight: "slightly snug",

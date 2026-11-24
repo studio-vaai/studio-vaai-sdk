@@ -181,3 +181,26 @@ export function resolveGateAlternative(
       : sizes.slice(0, index === -1 ? sizes.length : index).toReversed();
   return candidates.find((slug) => viable(slug));
 }
+
+/**
+ * The size the try-on button offers in place of a refused one: the NEXT size along the ladder
+ * that can actually be tried on — not the best-fitting one. A shopper who picked a size that
+ * will not close moves one step, to the nearest size that does, which keeps the answer close to
+ * what they asked for; the recommendation stays what the recommendation pill is for.
+ *
+ * Sold-out sizes are skipped as well: the picker refuses them, so the button must not offer one.
+ * `undefined` when nothing in that direction can be tried on.
+ */
+export function nextTryableSize(
+  sizes: readonly string[],
+  gates: ReadonlyMap<string, SizeGate>,
+  refusedSize: string,
+  gate: SizeGate,
+  soldOut?: ReadonlySet<string>,
+): string | undefined {
+  const ladder =
+    soldOut === undefined
+      ? sizes
+      : sizes.filter((slug) => slug === refusedSize || !soldOut.has(slug));
+  return resolveGateAlternative(ladder, gates, refusedSize, gate);
+}

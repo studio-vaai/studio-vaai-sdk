@@ -97,7 +97,7 @@ describe("try-on gate failure note", () => {
   // about a failed try-on — a shopper on the plain flow gets the same dead end and needs the
   // same explanation.
   for (const fitIntelligence of [true, false]) {
-    it(`shows only the size warning when the server suggests nothing usable (fitUi ${fitIntelligence ? "on" : "off"})`, () => {
+    it(`names the next size up when the server suggests nothing usable (fitUi ${fitIntelligence ? "on" : "off"})`, () => {
       renderOverview({
         fitIntelligence,
         // `recommendedSize === requestedSize` is the server declining to name an alternative,
@@ -107,8 +107,7 @@ describe("try-on gate failure note", () => {
 
       const el = note();
       expect(el).not.toBeNull();
-      expect(el?.textContent).toMatch(/too small for you/i);
-      expect(el?.textContent).toBe("Size S is too small for you.");
+      expect(el?.textContent).toBe("Size S is too small. We recommend size M.");
       expect(el?.textContent).not.toMatch(/doesn't come any larger/i);
       // Announced, not silently painted — it answers a tap the shopper just made.
       expect(el?.getAttribute("role")).toBe("status");
@@ -121,13 +120,12 @@ describe("try-on gate failure note", () => {
     });
   }
 
-  it("shows only the size warning when a too-large refusal names nothing", () => {
+  it("names the next size down when a too-large refusal names nothing", () => {
     renderOverview({
       lastTryOnFailure: { reason: "garment_too_large", requestedSize: "s", recommendedSize: "" },
     });
     const text = note()?.textContent ?? "";
-    expect(text).toMatch(/too large for you/i);
-    expect(text).toBe("Size S is too large for you.");
+    expect(text).toBe("Size S is too large. We recommend size XS.");
     expect(text).not.toMatch(/doesn't come any smaller/i);
   });
 
@@ -148,19 +146,53 @@ describe("try-on gate failure note", () => {
   });
 
   for (const fitIntelligence of [true, false]) {
-    it(`temporarily hides the recommendation when the gate names one (fitUi ${fitIntelligence ? "on" : "off"})`, () => {
+    it(`points at the next size that can be tried on, not the best-fitting one (fitUi ${fitIntelligence ? "on" : "off"})`, () => {
       renderOverview({
         fitIntelligence,
-        lastTryOnFailure: { reason: "garment_too_small", requestedSize: "s", recommendedSize: "m" },
+        // The server's own pick is L; the next size the shopper can try on is M.
+        lastTryOnFailure: { reason: "garment_too_small", requestedSize: "s", recommendedSize: "l" },
       });
 
-      const el = note();
-      expect(el?.textContent).toMatch(/too small/i);
-      expect(el?.textContent).toBe("Size S is too small for you.");
-      // Everything below the refused size remains struck while recommendations are hidden.
+      expect(note()?.textContent).toBe("Size S is too small. We recommend size M.");
       expect(document.querySelector('[data-sv-value="xs"]')?.className).toContain("line-through");
     });
   }
+
+  it("offers the next size on the button and tries it on when pressed", () => {
+    const calls: string[] = [];
+    renderOverview({
+      lastTryOnFailure: { reason: "garment_too_small", requestedSize: "s", recommendedSize: "" },
+      onSelectVariant: (selection) => {
+        calls.push(`select:${selection.size ?? ""}`);
+      },
+      onStartTryOn: () => {
+        calls.push("start");
+      },
+    });
+
+    const cta = [...document.querySelectorAll("button")].find((b) =>
+      /^Try on M\b/.test(b.textContent ?? ""),
+    );
+    expect(cta).toBeDefined();
+    expect(cta?.hasAttribute("disabled")).toBe(false);
+    cta?.click();
+    // The selection moves first: the flow starts whatever is selected, and refuses a size it
+    // knows does not fit.
+    expect(calls).toEqual(["select:m", "start"]);
+  });
+
+  it("closes the button when no size is left to offer", () => {
+    renderOverview({
+      selection: { colorway: "black", size: "xl" },
+      lastTryOnFailure: { reason: "garment_too_small", requestedSize: "xl", recommendedSize: "" },
+    });
+    const cta = document.querySelector<HTMLButtonElement>(
+      '[data-studio-vaai="try-on-pipeline-actions"] button',
+    );
+    expect(cta?.textContent).toMatch(/XL/);
+    // `Button` keeps a blocked control focusable, so it says so through ARIA.
+    expect(cta?.matches('[disabled], [aria-disabled="true"]')).toBe(true);
+  });
 
   it("says nothing when no try-on was rejected", () => {
     renderOverview();

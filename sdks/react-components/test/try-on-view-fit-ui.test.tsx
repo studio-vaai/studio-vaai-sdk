@@ -233,7 +233,7 @@ describe("TryOnViewScreen (fit intelligence, bottom sheet)", () => {
     expect(onSelectVariant).toHaveBeenCalledWith({ colorway: "black", size: "xl" });
   });
 
-  it("marks gate-rejected sizes for assistive tech and blocks committing them", () => {
+  it("marks gate-rejected sizes for assistive tech and offers the next size that fits", () => {
     const onSelectVariant = vi.fn<(attributes: Record<string, string>) => void>();
     renderFitUi({
       onSelectVariant,
@@ -254,12 +254,16 @@ describe("TryOnViewScreen (fit intelligence, bottom sheet)", () => {
       fireEvent.click(gated);
     });
 
-    const cta = screen.getByRole("button", { name: "Try on XL in Schwarz" });
-    expect(cta.hasAttribute("disabled")).toBe(true);
+    // XL stays the picked chip and is never requested: the button names the next size down
+    // that can be tried on, and pressing it asks for that size.
+    expect(screen.queryByRole("button", { name: "Try on XL in Schwarz" })).toBeNull();
+    expect(screen.getByText("Size XL is too large. We recommend size L.")).toBeTruthy();
+    const cta = screen.getByRole("button", { name: "Try on L in Schwarz" });
+    expect(cta.hasAttribute("disabled")).toBe(false);
     act(() => {
       fireEvent.click(cta);
     });
-    expect(onSelectVariant).not.toHaveBeenCalled();
+    expect(onSelectVariant).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ size: "l" }));
   });
 
   it("releases a staged gated size when the shopper taps back to the size on screen", () => {
@@ -279,7 +283,7 @@ describe("TryOnViewScreen (fit intelligence, bottom sheet)", () => {
     act(() => {
       fireEvent.click(screen.getByRole("button", { name: "XL (likely too large)" }));
     });
-    expect(screen.getByRole("button", { name: "Try on XL in Schwarz" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try on L in Schwarz" })).toBeTruthy();
 
     // Back to the size the visible render already shows. That combination HAS a slide, so it
     // moves the carousel rather than staging — and because the target is the slide already on
@@ -292,7 +296,7 @@ describe("TryOnViewScreen (fit intelligence, bottom sheet)", () => {
       fireEvent.click(onScreen!);
     });
 
-    expect(screen.queryByRole("button", { name: "Try on XL in Schwarz" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try on L in Schwarz" })).toBeNull();
   });
 
   it("lets every size be selected, in any order, gated or not", () => {

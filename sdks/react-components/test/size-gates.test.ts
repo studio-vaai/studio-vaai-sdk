@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildSizeGates, resolveGateAlternative } from "../src/batteries/size-gates.js";
+import {
+  buildSizeGates,
+  nextTryableSize,
+  resolveGateAlternative,
+} from "../src/batteries/size-gates.js";
 
 const LADDER = ["xs", "s", "m", "l", "xl"] as const;
 
@@ -158,6 +162,32 @@ describe("resolveGateAlternative", () => {
       reason: "garment_too_small",
     });
     expect(resolveGateAlternative(RUN, gates, "s", "too_small", "4xl")).toBe("m");
+  });
+});
+
+describe("nextTryableSize", () => {
+  const RUN = ["xs", "s", "m", "l", "xl"] as const;
+
+  it("takes the adjacent size that can be tried on, one step in the helpful direction", () => {
+    const gates = buildSizeGates(RUN, [
+      { size: "xs", gate: "too_small" },
+      { size: "s", gate: "too_small" },
+      { size: "m" },
+      { size: "l" },
+      { size: "xl", gate: "too_large" },
+    ]);
+    expect(nextTryableSize(RUN, gates, "xs", "too_small")).toBe("m");
+    expect(nextTryableSize(RUN, gates, "xl", "too_large")).toBe("l");
+  });
+
+  it("skips a sold-out size", () => {
+    const gates = buildSizeGates(RUN, [{ size: "s", gate: "too_small" }, { size: "m" }]);
+    expect(nextTryableSize(RUN, gates, "s", "too_small", new Set(["m"]))).toBe("l");
+  });
+
+  it("has nothing to offer when every remaining size is sold out", () => {
+    const gates = buildSizeGates(RUN, [{ size: "l", gate: "too_small" }]);
+    expect(nextTryableSize(RUN, gates, "l", "too_small", new Set(["xl"]))).toBeUndefined();
   });
 });
 

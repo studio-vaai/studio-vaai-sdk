@@ -30,6 +30,7 @@ export {
 // only 3XL struck in the try-on, one tap apart, off identical data.
 export {
   buildSizeGates,
+  nextTryableSize,
   resolveGateAlternative,
   type SizeGate,
   type SizeGateFailure,

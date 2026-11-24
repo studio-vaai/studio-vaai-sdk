@@ -106,6 +106,23 @@ describe("studioVaaiUiMessagesForLocale", () => {
     expect(plainText(de.tryOnVariantCta("XS", "Blau"))).toBe("XS in Blau anprobieren");
     expect(plainText(de.tryOnVariantCta("XS"))).toBe("Größe XS anprobieren");
   });
+
+  it("names the size to try instead when a size does not fit", () => {
+    const en = studioVaaiUiMessagesForLocale("en");
+    expect(plainText(en.productOverview.garmentTooLargeNote("31", "30"))).toBe(
+      "Size 31 is too large. We recommend size 30.",
+    );
+    expect(plainText(en.tryOnView.gateInspectTooSmallNote("XS", "S"))).toBe(
+      "Size XS is too small. We recommend size S.",
+    );
+    const de = studioVaaiUiMessagesForLocale("de");
+    expect(plainText(de.productOverview.garmentTooLargeNote("31", "30"))).toBe(
+      "Größe 31 ist dir zu groß. Unsere Empfehlung: 30",
+    );
+    expect(plainText(de.tryOnView.gateInspectTooSmallNote("XS", "S"))).toBe(
+      "Größe XS ist dir zu klein. Unsere Empfehlung: S",
+    );
+  });
 });
 
 describe("locale tags", () => {

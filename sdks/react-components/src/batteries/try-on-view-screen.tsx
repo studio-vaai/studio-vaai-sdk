@@ -40,7 +40,7 @@ import { StyleToggle } from "../ui/style-toggle.js";
 import { VStack } from "../ui/v-stack.js";
 import { VariantPicker, type VariantPickerOption } from "../ui/variant-picker.js";
 import { useFitUiFlag } from "../utils/use-fit-ui-flag.js";
-import { buildSizeGates, resolveGateAlternative } from "./size-gates.js";
+import { buildSizeGates, nextTryableSize } from "./size-gates.js";
 import { usePreviewBaselineAspect } from "./use-preview-baseline-aspect.js";
 import { recommendedLengthHint, splitSizeAxis } from "./variant-axes-picker.js";
 
@@ -815,13 +815,36 @@ export function TryOnViewScreen({
   const gateNoteAlternative =
     draftGate === undefined
       ? undefined
-      : resolveGateAlternative(
+      : nextTryableSize(
           product.attributeMetadata.sizes.map((size) => size.slug),
           gateBySize,
           draftSize,
           draftGate,
-          recommendedSlug,
+          soldOutBySize,
         );
+  // A refused size is not a dead end: the button offers the next size that can be tried on, and
+  // pressing it moves the pick there. Same resolution as `commitDraft`, for that size.
+  const commitGateAlternative = (): void => {
+    if (gateNoteAlternative === undefined) {
+      return;
+    }
+    setLastPickedSize(gateNoteAlternative);
+    const existing = slideIndexFor(gateNoteAlternative, draftColor, activeStyle);
+    if (existing === -1) {
+      setDraft({ size: gateNoteAlternative, color: draftColor });
+      requestVariant?.({ ...draftAttributes, size: gateNoteAlternative });
+    } else {
+      setDraft(null);
+      setSlide(existing);
+    }
+    if (!isModal) {
+      setPickerOpen(false);
+    }
+  };
+  const ctaSizeLabel =
+    gateNoteAlternative === undefined
+      ? draftSizeLabel
+      : (tryOnSizeLabelForAttribute(product, gateNoteAlternative) ?? gateNoteAlternative);
   if (draftGate !== undefined && gateNoteAlternative !== undefined) {
     const recommended =
       tryOnSizeLabelForAttribute(product, gateNoteAlternative) ?? gateNoteAlternative;
@@ -1228,23 +1251,24 @@ export function TryOnViewScreen({
           // no-op by construction. A CTA that greys out on the resting modal reads as a broken
           // screen — the shopper cannot tell it apart from a disabled control they must fix.
           //
-          // A gated size still blocks: that is a deliberate fit verdict, not a no-op. The
-          // button is only half the defence though — it can only grey out once the
-          // recommendation has landed, so the machine refuses a gated `START_TRY_ON`
-          // outright (see `tryOnPipelineRegion`). That covers the fast tap and the
-          // auto-start path, neither of which passes through this control.
-          disabled={busy || draftGate !== undefined}
+          // A gated size is never requested: the button offers the next size that can be
+          // tried on instead, and greys out only when there is none. It is only half the
+          // defence though — it can only react once the recommendation has landed, so the
+          // machine refuses a gated `START_TRY_ON` outright (see `tryOnPipelineRegion`). That
+          // covers the fast tap and the auto-start path, neither of which passes through
+          // this control.
+          disabled={busy || (draftGate !== undefined && gateNoteAlternative === undefined)}
           aria-busy={busy}
-          onClick={commitDraft}
+          onClick={gateNoteAlternative === undefined ? commitDraft : commitGateAlternative}
         >
           {/* Keyed on the label so React remounts the span and the fade replays: the CTA
               swaps meaning as the picker opens, and a hard text change under a moving panel
               read as a glitch. `motion-reduce` opts out. */}
           <span
-            key={`commit-${draftSizeLabel}-${draftColorMeta?.label ?? ""}`}
+            key={`commit-${ctaSizeLabel}-${draftColorMeta?.label ?? ""}`}
             className="sv:motion-safe:animate-[sv-cta-label_200ms_ease-out]"
           >
-            {tv.tryOnVariantCta(draftSizeLabel, draftColorMeta?.label)}
+            {tv.tryOnVariantCta(ctaSizeLabel, draftColorMeta?.label)}
           </span>
         </Button>
       ) : (

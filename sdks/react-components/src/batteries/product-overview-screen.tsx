@@ -33,7 +33,7 @@ import {
   NaturalAspectPreviewFrame,
   useNaturalAspectPreviewFrame,
 } from "./natural-aspect-preview-frame.js";
-import { buildSizeGates, resolveGateAlternative } from "./size-gates.js";
+import { buildSizeGates, nextTryableSize } from "./size-gates.js";
 import { recommendedLengthHint, splitSizeAxis } from "./variant-axes-picker.js";
 
 interface ProductOverviewScreenProps {
@@ -160,6 +160,14 @@ export function ProductOverviewScreen({
   );
 
   const sizeLadder = product.attributeMetadata.sizes.map((size) => size.slug);
+  // Failure mode: the shopper tapped an out-of-stock chip. The pick is refused and the axis
+  // row says why, replacing the recommendation pill until they pick again.
+  const [soldOutPick, setSoldOutPick] = useState<string | null>(null);
+  const soldOutBySize = useMemo(
+    () =>
+      new Set(product.attributeMetadata.sizes.filter((s) => s.soldOut === true).map((s) => s.slug)),
+    [product],
+  );
   // The fit-gate note under the picker — always a STATEMENT (the ask-first question is
   // retired): past-tense when the machine already pivoted the render ("we tried X on you"),
   // present-tense when a rejection landed without a pivot ("X should fit" — the selection has
@@ -178,12 +186,12 @@ export function ProductOverviewScreen({
       tryOnSizeLabelForAttribute(product, lastTryOnFailure.requestedSize) ??
       lastTryOnFailure.requestedSize;
     const tooLarge = lastTryOnFailure.reason === "garment_too_large";
-    const alternativeSlug = resolveGateAlternative(
+    const alternativeSlug = nextTryableSize(
       sizeLadder,
       gateBySize,
       lastTryOnFailure.requestedSize,
       tooLarge ? "too_large" : "too_small",
-      lastTryOnFailure.recommendedSize,
+      soldOutBySize,
     );
     const alternative =
       alternativeSlug === undefined
@@ -209,9 +217,6 @@ export function ProductOverviewScreen({
   // — this CTA and the try-on's are the same promise one step apart, so they say the same thing.
   // Not ready: state what is missing instead, on a muted bar (below), as the reference draws it.
   const selectedSizeLabel = tryOnSizeLabelForAttribute(product, selection["size"]) ?? "";
-  const tryOnCtaLabel = vm.canStartTryOn
-    ? tv.tryOnVariantCta(selectedSizeLabel, colorMeta?.label)
-    : po.selectVariantCta(hasColorAxis);
   const previewFrame = useNaturalAspectPreviewFrame(heroImageSrc, heroFrameLock, {
     placeholderAspectRatio: 3 / 4,
     // Same value the try-on hero uses: let the frame shrink all the way rather than ever
@@ -238,31 +243,28 @@ export function ProductOverviewScreen({
   // `recommendation` region auto-fetches when the host marked the size as a default and seeds
   // `selection.size` on arrival) — this component only renders the outcome.
 
-  // Failure mode: the shopper tapped an out-of-stock chip. The pick is refused and the axis
-  // row says why, replacing the recommendation pill until they pick again.
-  const [soldOutPick, setSoldOutPick] = useState<string | null>(null);
-  const soldOutBySize = useMemo(
-    () =>
-      new Set(product.attributeMetadata.sizes.filter((s) => s.soldOut === true).map((s) => s.slug)),
-    [product],
-  );
   // The verdict for the size the shopper has actually picked. This is the whole point of the
   // screen: it is where they choose, so it is where a refusal has to be said — not after a
   // request comes back rejected.
   const selectedSizeGate = gateBySize.get(selection["size"] ?? "");
+  // Where the button sends a shopper whose picked size is refused: the next size that can be
+  // tried on. Without it the refusal was a dead end — a note and a greyed-out button, with the
+  // way forward left for the shopper to work out from the struck-through chips.
+  let gateAlternativeSlug: string | undefined;
   // Say it the moment the size is picked, ahead of any request. `gateFailureNote` above only
   // exists once a rejection has come BACK — by then the shopper has watched a render that was
   // never going to happen. Same copy either way, so the two paths read identically; this one
   // simply arrives before the round-trip instead of after it.
   if (selectedSizeGate !== undefined) {
     const requested = tryOnSizeLabelForAttribute(product, selection["size"] ?? "") ?? "";
-    const alternative = resolveGateAlternative(
+    const alternative = nextTryableSize(
       sizeLadder,
       gateBySize,
       selection["size"] ?? "",
       selectedSizeGate,
-      recommendedSlug.length > 0 ? recommendedSlug : lastTryOnFailure?.recommendedSize,
+      soldOutBySize,
     );
+    gateAlternativeSlug = alternative;
     const alternativeLabel =
       alternative === undefined
         ? ""
@@ -281,6 +283,25 @@ export function ProductOverviewScreen({
         : po.garmentTooSmallNote(requested, alternativeLabel);
     }
   }
+
+  // The button names what it will try on. For a refused size that is the alternative, not the
+  // pick: the chip stays where the shopper put it (the note explains it), and pressing the
+  // button moves the selection to the alternative and tries that on.
+  const ctaSizeLabel =
+    gateAlternativeSlug === undefined
+      ? selectedSizeLabel
+      : (tryOnSizeLabelForAttribute(product, gateAlternativeSlug) ?? gateAlternativeSlug);
+  const tryOnCtaLabel = vm.canStartTryOn
+    ? tv.tryOnVariantCta(ctaSizeLabel, colorMeta?.label)
+    : po.selectVariantCta(hasColorAxis);
+  const startTryOn = (): void => {
+    if (gateAlternativeSlug !== undefined) {
+      // Selection first, then the start: the machine reads the selection when it starts, and
+      // refuses a start on a size it knows is gated.
+      onSelectVariant({ ...selection, size: gateAlternativeSlug });
+    }
+    onStartTryOn();
+  };
 
   const sizeOptions: readonly VariantPickerOption[] = useMemo(
     () =>
@@ -445,12 +466,14 @@ export function ProductOverviewScreen({
           !vm.canStartTryOn &&
             "sv:bg-[var(--sv-color-muted)] sv:text-[var(--sv-color-muted-foreground)] sv:hover:bg-[var(--sv-color-muted)]",
         )}
-        // A gated size cannot render, so the CTA is closed rather than left live to fail. It
-        // was keyed only on "is a variant fully chosen", which is true of a refused size too.
-        disabled={!vm.canStartTryOn || selectedSizeGate !== undefined}
+        // A gated size cannot render, so the CTA offers the next size that can. Only a refusal
+        // with nowhere to go closes it, rather than leaving it live to fail.
+        disabled={
+          !vm.canStartTryOn || (selectedSizeGate !== undefined && gateAlternativeSlug === undefined)
+        }
         busy={busy}
         busyLabel={po.busyTryOnSr}
-        onClick={onStartTryOn}
+        onClick={startTryOn}
         onClickDisabled={onSelectionRequired}
       >
         {tryOnCtaLabel}
