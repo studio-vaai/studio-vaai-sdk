@@ -1,6 +1,6 @@
 {
   "name": "@studio-vaai/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The shared Rust SDK's API client, experience model, MF2 formatter and shipped catalogs for the web",
   "license": "MIT AND MPL-2.0 AND Unicode-3.0",
   "repository": {

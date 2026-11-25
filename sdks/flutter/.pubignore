@@ -7,6 +7,8 @@ build/
 pubspec.lock
 # Release tooling: it builds from the SDK repository's sources.
 /tool/
+# How to build, test and release the package: for its maintainers, not its users.
+/DEVELOPING.md
 # The widget goldens: the package's own visual regression tests, rendered on
 # macOS; the other tests ship and run on the published package.
 /test/goldens/

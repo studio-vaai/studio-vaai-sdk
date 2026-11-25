@@ -26,7 +26,7 @@ name: Flutter
 #     publishing (GitHub OIDC; no secret). It runs only when the repository
 #     variable PUB_DEV_AUTOMATED_PUBLISHING is "true": pub.dev enables automated
 #     publishing only for a package that exists, so its first version is
-#     published by hand from the release's archive (sdks/flutter/README.md).
+#     published by hand from the release's archive (sdks/flutter/DEVELOPING.md).
 #
 # A release is never replaced: the job fails if the tag's release exists. To
 # retry a failed publication, re-run the failed jobs of the same run.

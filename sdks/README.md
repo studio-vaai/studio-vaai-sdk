@@ -60,3 +60,4 @@ build hook bundles the core as a native asset, prebuilt per target and verified 
 apps build without Rust. It runs a headless try-on journey; see its README.
 
 Moving from the retired `@studio-vaai/js-client` packages? See the [migration guide](MIGRATION.md).
+The [changelog](CHANGELOG.md) lists the changes in each web SDK release.

@@ -1,20 +1,54 @@
+## 0.2.0
+
+In lockstep with the web SDK's 0.2.0 packages.
+
+### Behaviour changes
+
+- The fit score is now off by default. Set `fitScore: true` on `StudioVaaiTryOn` to show it on
+  each result, with the intended fit and the fit callouts. The size recommendation and the note
+  for a size that does not fit work either way.
+  **Migration:** to keep the fit score, add `fitScore: true` to `StudioVaaiTryOn`.
+- The size your product page shows (an axis in `chosenAxes`) stays the shopper's choice: the
+  try-on opens on it, and the size recommendation no longer replaces it. Only a size that does
+  not fit moves, to the next size that does.
+- Analytics no longer send a visitor ID, device context or the SDK version. The `visitorId`,
+  `context` and `sdkVersion` parameters of `createTryOnAnalytics` are ignored, and
+  `analyticsVisitorId()` is deprecated.
+
+### New
+
+- Earlier try-ons come back when the app is relaunched, with their results. A launch without a
+  connection keeps them for the next one. The device keeps only their IDs, never an image.
+- The variant picker labels the size and colour rows when your catalogue names no axis.
+- The picker marks the variants the shopper has already tried with a check mark, and choosing
+  one shows its result at once.
+- When a size does not fit, a note on the size row names the next size that fits, and the
+  button offers to try it on.
+- `TryOnTokens.buttonRadius` shapes the buttons alone, for example as pills with
+  `TryOnTokens.radiusFull`. It follows `radius` until you set it.
+- `CommerceAnalyticsEvent` accepts an optional `variantId` and `recommendedForeignIds`.
+- `ScriptedApi` scripts the fit gate (`fitGate`) and a body whose photo is no longer stored
+  (`storesPhoto: false`), and returns its try-ons for a relaunch.
+
+### Improvements and fixes
+
+- Uploading a photo no longer opens a separate processing screen. The screen the photo was
+  chosen from shows the progress, and the try-on moves on when the photo is accepted.
+- A restored session shows the shopper's cut-out from their photo. If the photo is no longer
+  stored, the try-on asks for a new one instead of showing an error.
+- A try-on whose response was lost, for example to a dropped connection, can be retried and
+  keeps the shopper's photo. A retry never creates a second try-on.
+- A session the API no longer accepts (401) now ends cleanly, and the shopper starts a new one.
+- Fit callouts: one per measurement, with readable names, placed beside the person and anchored
+  on the garment. The length is marked with a tick across the hem.
+- In wide windows the layout matches the web's dialog.
+- The buttons stay in place at the bottom of every screen, and the content above them scrolls.
+- Titles and subtitles wrap to a second line instead of being cut off.
+
 ## 0.1.1
 
-The first version on pub.dev: pub.dev refused 0.1.0, so 0.1.0 was never published there (its
-GitHub release exists). The same package as 0.1.0, laid out the way pub.dev accepts.
-
-- Fix: `hook/` holds only the build hook's entry point (`hook/build.dart`), the one Dart file
-  pub.dev allows there besides `hook/link.dart`. The prebuilt core's download moved to
-  `lib/src/native/`, its manifest to `lib/src/native/prebuilt.json`; no public library imports
-  them, so apps never compile them. The core still comes from `core_library`, the sources in
-  `../core-rs` or the release's prebuilt library, with the same user-defines, checks and cache.
-- A failed download no longer leaves an empty folder in the cache, and its error no longer ends
-  in the build hook's stack trace.
-
-## 0.1.0
-
-First release, in lockstep with the web SDK's 0.1.0 packages. 0.x: the API can change between
-minor versions, like the web SDK.
+Initial release. While the version is 0.x, a minor version can change the API, as in the studio
+vaai web SDK.
 
 - Ready-made widgets (`package:studio_vaai/widgets.dart`): `StudioVaaiTryOn` presents the default
   try-on experience (consent, library photo or camera self-timer, height, variant selection,
@@ -29,11 +63,10 @@ minor versions, like the web SDK.
   (`keepSession`, `sessionStore`).
 - HEIC photos are uploaded as JPEG, decoded by the platform, or refused; the API's JPEG XL photos
   are decoded by the core where the platform cannot (`TryOnNetworkImage`).
-- studio vaai analytics (`createTryOnAnalytics`, `package:studio_vaai/analytics.dart`): the web
-  SDK's mapping of the try-on's events to the analytics catalogue, request for request (checked
-  against the web's mapper), with `StudioVaaiTryOn(analytics: …)` and the shop's own events
-  (entry point impression, cart item, order, experiment). `TryOnExperience.tryOnEvents` delivers
-  the web's `sv-try-on-*` events.
+- studio vaai analytics (`createTryOnAnalytics`, `package:studio_vaai/analytics.dart`): the same
+  requests as the web SDK for the try-on's events, with `StudioVaaiTryOn(analytics: …)` and the
+  shop's own events (entry point impression, cart item, order, experiment).
+  `TryOnExperience.tryOnEvents` delivers the web's `sv-try-on-*` events.
 - A headless try-on journey (`StudioVaai`, `TryOnJourney`): product, consent, photo, height and
   try-on, driven by the shared Rust SDK core through UniFFI-generated Dart bindings.
 - `IoHttpTransport` sends the requests the core builds with `dart:io`; `ScriptedApi`

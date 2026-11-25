@@ -36,7 +36,7 @@ Each package's version comes from its `package.json`.
 
 The `Flutter` workflow builds the Flutter package and its prebuilt core libraries on every change.
 A tag `studio_vaai-v<version>` releases them: a GitHub release with the libraries, then pub.dev.
-See [`sdks/flutter/README.md`](sdks/flutter/README.md#releases).
+See [`sdks/flutter/DEVELOPING.md`](sdks/flutter/DEVELOPING.md#releases).
 
 ## License
 
