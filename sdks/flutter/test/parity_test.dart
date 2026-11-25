@@ -82,7 +82,7 @@ void main() {
       final screen = tryOnScreen();
       expect(screen.selection.variantId, ScriptedApi.variantL, reason: 'moved to L');
       final note = sizeNote('sizeAndStyleSelection.garmentTooSmallNote', 'M', 'L');
-      expect(note, 'Size M is too small. We recommend size L.');
+      expect(note, 'Size M is too small. Try size L.');
       await settleFor(tester, text(note));
       // The note takes the recommendation's place, in its slot of fixed height.
       expect(textContaining('Recommended'), findsNothing);

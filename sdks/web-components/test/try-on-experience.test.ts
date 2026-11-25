@@ -4353,7 +4353,7 @@ describe("next size that fits", () => {
     });
     try {
       expect(experience.view.screen).toBeDefined();
-      expect(note(element)).toContain("Size S is too small. We recommend size M.");
+      expect(note(element)).toContain("Size S is too small. Try size M.");
       const button = await primary(screen);
       expect(button.disabled).toBe(false);
       expect(plain(button.textContent)).toMatch(/Try on M\b/u);
@@ -4378,7 +4378,7 @@ describe("next size that fits", () => {
     try {
       const view = experience.view.screen as InstanceType<typeof ScreenView.TryOn>;
       expect(view.inner.selection.variantId).toBe(bySize("M").id);
-      expect(note(element)).toContain("Size S is too small. We recommend size M.");
+      expect(note(element)).toContain("Size S is too small. Try size M.");
       const button = await primary(screen);
       expect(plain(button.textContent)).toMatch(/^Try on M\b/u);
       // The shopper did not ask for M: nothing runs until they press the button.
@@ -4394,7 +4394,7 @@ describe("next size that fits", () => {
       M: RefusalReason.GarmentTooLarge,
     });
     try {
-      expect(note(element)).toContain("Size L is too large. We recommend size S.");
+      expect(note(element)).toContain("Size L is too large. Try size S.");
       const button = await primary(screen);
       expect(plain(button.textContent)).toMatch(/Try on S\b/u);
     } finally {

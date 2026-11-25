@@ -398,14 +398,14 @@ describe("sv-variant-picker", () => {
     const slot = () => el.shadowRoot!.querySelector(".heading.badged .badge-slot");
     expect(slot()?.querySelector("button.recommendation")).toBeInstanceOf(Element);
     expect(slot()?.querySelector(".note")).toBeNull();
-    el.sizeNote = "Size M is too small. We recommend size L.";
+    el.sizeNote = "Size M is too small. Try size L.";
     await el.updateComplete;
     // One slot, either the badge or the note: the row keeps its height and the chips stay put.
     expect(el.shadowRoot!.querySelectorAll(".badge-slot")).toHaveLength(1);
     expect(slot()?.querySelector("button.recommendation")).toBeNull();
     const note = slot()?.querySelector<HTMLElement>(".note");
-    expect(note?.textContent?.trim()).toBe("Size M is too small. We recommend size L.");
-    expect(note?.title).toBe("Size M is too small. We recommend size L.");
+    expect(note?.textContent?.trim()).toBe("Size M is too small. Try size L.");
+    expect(note?.title).toBe("Size M is too small. Try size L.");
     // Not an error: no message element, no alert.
     expect(el.shadowRoot!.querySelector("sv-message, [role=alert]")).toBeNull();
   });

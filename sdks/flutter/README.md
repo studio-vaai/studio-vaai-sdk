@@ -88,7 +88,7 @@ StudioVaaiTryOn(
 - The page's size, default or picked, is the shopper's choice when its axis is in `chosenAxes`:
   the try-on opens on it, and the size recommendation leaves it be. Only the fit gate moves it:
   a size the gate refuses gives way to the next size along the run that fits, with a note on
-  the size row ("Size XS is too small. We recommend size M.") and "Try on M in …" on the button.
+  the size row ("Size XS is too small. Try size M.") and "Try on M in …" on the button.
   A size the shopper picks in the try-on stays when refused; the note and the button offer the
   next size instead.
 - The fit score (its percentage, the intended fit and the callouts on the image) is off by
