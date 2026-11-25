@@ -31,6 +31,12 @@ impl Operations {
 
     /// Registers an operation: running at once, or queued until the engine
     /// starts it.
+    /// An identifier for work the host did before this runtime, such as a
+    /// restored try-on: no operation is registered under it.
+    pub fn next_id(&mut self) -> Result<OperationId, Rejection> {
+        self.ids.next()
+    }
+
     pub fn register(
         &mut self,
         job: Job,

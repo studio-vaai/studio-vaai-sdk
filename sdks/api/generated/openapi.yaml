@@ -938,13 +938,19 @@ paths:
     post:
       operationId: createTryOn
       summary: Generate a try-on
-      description: Generate a try-on for a body and a published product variant. This request waits for completion. Success returns 201 with the image. A size rejection returns a 422 problem response with a reason and a suggested alternative size. Use `getProductDetails` to discover the product's variants.
+      description: Generate a try-on for a body and a published product variant. This request waits for completion. Success returns 201 with the image. A size rejection returns a 422 problem response with a reason and a suggested alternative size. Use `getProductDetails` to discover the product's variants. Send an `Idempotency-Key` so a retry after a lost response cannot create, and bill, a second try-on.
       parameters:
         - $ref: '#/components/parameters/ApiVersionHeader'
         - $ref: '#/components/parameters/ClientApiKeyHeader'
         - name: productId
           in: path
           required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: "Makes the request safe to retry: 1 to 255 printable ASCII characters, unique per try-on request, such as a UUID. A repeat with the same key and the same body, body revision, product and variant answers with the try-on the key already names, as 201 or 422 like the first answer, without rendering or billing another; while that try-on is still rendering, after waiting it returns 503 and can be retried. The key of a try-on that failed can be used again. Reusing the key for a different request returns 409. Keys are scoped to the session's shopper and shop and kept as long as the try-on (at most 60 days)."
           schema:
             type: string
         - name: bodyId
@@ -1033,6 +1039,19 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/TryOnNotFoundProblem'
+        '409':
+          description: The `Idempotency-Key` was already used for a different try-on request.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/TryOnIdempotencyConflictProblem'
         '422':
           description: The requested garment size was rejected. Use reason to choose a localized message; title and detail provide fallback text.
           headers:
@@ -1061,6 +1080,19 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/InternalServerErrorProblem'
+        '503':
+          description: The service is temporarily unavailable.
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-store
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ServiceUnavailableProblem'
       tags:
         - try-on
       requestBody:
@@ -2187,11 +2219,11 @@ components:
           description: Initial height estimate from the source image, in centimetres.
         sourceImageUrl:
           type: string
-          description: Temporary signed URL for the image used to create the body. Use it before `sourceImageUrlExpiresAt`; call `listBodies` for a fresh URL after expiry.
+          description: Temporary signed URL for the shopper's cut-out from the photo, the image try-ons are rendered from (JPEG XL with transparency around the person), while it is stored. The uploaded photo itself is not kept, and the cut-out is deleted with the session's data; then this is empty, and clients must handle a body without a photo. Use a URL before `sourceImageUrlExpiresAt`; call `listBodies` for a fresh URL after expiry.
         sourceImageUrlExpiresAt:
           type: string
           format: date-time
-          description: When `sourceImageUrl` expires (UTC). Each `createBody` or `listBodies` response includes a valid URL and its expiry.
+          description: When `sourceImageUrl` expires (UTC). Each `createBody` or `listBodies` response signs the image again while it is stored; with an empty `sourceImageUrl`, the time of the response.
       description: A newly created body, with its initial height estimate and source image.
     InternalServerErrorProblem:
       type: object
@@ -2779,6 +2811,31 @@ components:
       allOf:
         - $ref: '#/components/schemas/ProblemDetails'
       description: A size recommendation could not be calculated for this product and body.
+    SubjectBand:
+      type: object
+      required:
+        - top
+        - bottom
+        - left
+        - right
+      properties:
+        top:
+          type: number
+          format: double
+          description: Normalized top edge of the band.
+        bottom:
+          type: number
+          format: double
+          description: Normalized bottom edge of the band.
+        left:
+          type: number
+          format: double
+          description: Normalized x of the person's leftmost point within the band.
+        right:
+          type: number
+          format: double
+          description: Normalized x of the person's rightmost point within the band.
+      description: One horizontal band of the person's outline in the try-on image, garment included. Coordinates range from 0 to 1 relative to the complete image.
     TryOnBadRequestProblem:
       type: object
       required:
@@ -2799,6 +2856,7 @@ components:
             - invalid-product-id
             - invalid-try-on-id
             - invalid-variant-id
+            - invalid-idempotency-key
       allOf:
         - $ref: '#/components/schemas/ProblemDetails'
       description: Some request fields are missing, invalid, or conflicting.
@@ -2828,6 +2886,18 @@ components:
       allOf:
         - $ref: '#/components/schemas/TryOnSizeRejectionProblem'
       description: The selected size is too small for this body. Choose another size.
+    TryOnIdempotencyConflictProblem:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - idempotency-key-reused
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+      description: 'The `Idempotency-Key` already names a try-on of a different request: another body, body revision, product or variant. Send a new key for a new request.'
     TryOnNotFoundProblem:
       type: object
       required:
@@ -2951,6 +3021,11 @@ components:
           items:
             $ref: '#/components/schemas/FitAnchor'
           description: Optional positions for fit annotations in the try-on image. Omitted when no annotations are available.
+        subjectBands:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubjectBand'
+          description: Optional outline of the person in the try-on image, as horizontal bands from top to bottom. Bands without the person are omitted. Place fit annotations in the free space beside these bands so they do not cover the person.
         provenance:
           allOf:
             - $ref: '#/components/schemas/TryOnProvenance'

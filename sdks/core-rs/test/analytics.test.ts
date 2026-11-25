@@ -118,6 +118,48 @@ describe("collector analytics", () => {
     expect(JSON.stringify(bodies)).not.toMatch(/private-(visitor|request|result)/);
   });
 
+  it("reports a fit-gate refusal as the gate event, never as a failed operation", async () => {
+    const requests: Request[] = [];
+    const publisher = createTryOnAnalytics({
+      clientApiKey: "key",
+      baseUrl: "https://collector.example.test",
+      enabled: () => true,
+      fetch: async (input, init) => {
+        requests.push(new Request(input, init));
+        return await Promise.resolve(new Response(null, { status: 204 }));
+      },
+    });
+    const product = { productId: "shirt", step: "try-on" } as const;
+    const variant = { variantId: "xs", foreignIds: { size: "XS" } };
+    const request = (requestId: string, origin: "shopper" | "automatic") =>
+      ({
+        type: "sv-try-on-requested",
+        detail: { ...product, ...variant, requestId, origin },
+      }) as const;
+    const facts: TryOnExperienceEvent[] = [
+      { type: "sv-try-on-opened", detail: { ...product, step: "intro" } },
+      // The shopper tries a size the API refuses (422 try-on-size-rejected).
+      request("shopper-1", "shopper"),
+      {
+        type: "sv-try-on-refused",
+        detail: { ...product, requestId: "shopper-1", reason: "garment-too-small" },
+      },
+    ];
+    publisher.observe((listener) => {
+      for (const fact of facts) {
+        listener(fact);
+      }
+      return () => {
+        // The fixture sends its events synchronously.
+      };
+    });
+    const names = await Promise.all(
+      requests.map(async (sent) => ((await sent.json()) as { event: { name: string } }).event.name),
+    );
+    expect(names).toContain("gated-size-selected");
+    expect(names).not.toContain("experience-operation-failed");
+  });
+
   it("honors the enabled callback and disposal before sending", () => {
     let enabled = false;
     const fetch = vi

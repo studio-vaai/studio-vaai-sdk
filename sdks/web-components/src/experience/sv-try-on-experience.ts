@@ -30,6 +30,7 @@ import {
   classifyDownloadFailure,
   Modal,
   NavigationAction,
+  NewPhotoStatus,
   PhotoAction,
   PhotoRejection,
   PhotoSource,
@@ -94,6 +95,11 @@ export interface SvTryOnExperienceProps {
   prices?: Readonly<Record<VariantId, string>> | undefined;
   /** Framing applied to the generated result image. */
   resultFraming?: SvImageFraming | undefined;
+  /**
+   * Shows the fit score, its intended-fit detail and the fit callouts on the result. Off by
+   * default; the size recommendation and the fit gate work either way.
+   */
+  fitScore?: boolean | undefined;
   /** Adds the requested variant to the host cart. The dialog closes after this succeeds. */
   addToCart?:
     | ((detail: TryOnExperienceEventMap["sv-try-on-add-to-cart-requested"]) => void | Promise<void>)
@@ -144,6 +150,9 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     .picker-note p {
       margin: 0;
     }
+    .picker-note:has(> *) {
+      margin-block-start: 0.625rem;
+    }
 
     .confirmation {
       display: grid;
@@ -162,6 +171,7 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     productName: { attribute: "product-name" },
     prices: { attribute: false },
     resultFraming: { attribute: false },
+    fitScore: { type: Boolean, attribute: "fit-score" },
     addToCart: { attribute: false, noAccessor: true },
   };
 
@@ -186,6 +196,8 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
 
   declare resultFraming: SvImageFraming | undefined;
 
+  declare fitScore: boolean | undefined;
+
   declare prices: SvTryOnExperienceProps["prices"];
   #addToCart: SvTryOnExperienceProps["addToCart"];
 
@@ -205,6 +217,7 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
   #unsubscribeEvents: (() => void) | undefined;
   #renderer: TryOnRenderer | undefined;
   #bound: TryOnExperience | undefined;
+  #dialogOpen = false;
   #dialogContent: TemplateResult | undefined;
   #view: FlowView | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
@@ -244,6 +257,7 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     this.#renderer = undefined;
     this.#bound = this.experience;
     this.#view = undefined;
+    this.#dialogOpen = false;
     this.#dialogContent = undefined;
     this.#imageAssets.clear();
     this.#observedImages.clear();
@@ -292,6 +306,9 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     const view =
       this.#renderer !== undefined && next?.renderer === this.#renderer.token ? next : undefined;
     this.#view = view;
+    // Defer a new opening in the background, but keep an open dialog in the top layer.
+    this.#dialogOpen =
+      view?.presence.open === true && (view.presence.foreground || this.#dialogOpen);
     const screen = view?.screen;
     const oldScreen = previous?.screen;
     if (screen?.tag !== oldScreen?.tag || view?.presence.open !== previous?.presence.open) {
@@ -777,6 +794,22 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
       : nothing;
   }
 
+  /**
+   * A calm request for a new photo once the shopper's earlier one is gone (the API deletes it with
+   * the session's data). No error: nothing went wrong.
+   */
+  #addPhoto(id?: MediaId) {
+    const gone =
+      id === undefined
+        ? this.experience?.adapters.photoGone?.() === true
+        : this.experience?.adapters.getPhoto(id)?.gone === true;
+    return gone
+      ? html`<sv-message variant="neutral"
+          >${this.ui.text("experience.addPhotoToTryOn")}</sv-message
+        >`
+      : nothing;
+  }
+
   #photo(id: string | undefined) {
     if (id === undefined) {
       return;
@@ -858,6 +891,7 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     const staged = change?.photo;
     const photo = this.#photo(staged?.media);
     const busy = phase === PhotoUploadPhase.Pending;
+    const uploading = busy && NewPhotoStatus.Processing.instanceOf(change?.status);
     const canRetry = phase === PhotoUploadPhase.RetryableFailure;
     const choosePhoto = () => {
       this.#dispatch(new FlowAction.Photo({ action: new PhotoAction.Replace() }));
@@ -894,6 +928,7 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
       .statusMessage=${busy ? this.ui.text("experience.processingPhoto") : ""}
       stage-layout="centered"
     >
+      ${uploading ? html`<sv-spinner slot="description" size="sm" aria-hidden="true"></sv-spinner>` : nothing}
       <sv-image
         slot="stage"
         .src=${photo?.src}
@@ -1020,10 +1055,9 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     } else if (issue !== undefined && Issue.SessionExpired.instanceOf(issue)) {
       error = "experience.sessionExpired";
     }
-    const busy =
-      view.modal !== undefined ||
-      domain.session === SessionPhase.Restoring ||
-      domain.session === SessionPhase.Creating;
+    // An open picker, or the session it creates, is not yet an upload: the
+    // picker can still be cancelled, and the photo is only sent once chosen.
+    const busy = domain.session === SessionPhase.Restoring || this.#uploadingPhoto();
     return html`<sv-session-intro-screen
       .navigation=${this.#navigation(view)}
       .recoveryOnly=${restoringFailed}
@@ -1049,7 +1083,7 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
             )}`
           : nothing
       }
-      ${this.#recovery(view)}
+      ${this.#recovery(view, html`${restoringFailed ? nothing : this.#addPhoto()}`)}
     </sv-session-intro-screen>`;
   }
 
@@ -1108,12 +1142,13 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     }
     return html`<sv-try-on-view-screen
       .navigation=${this.#navigation(view)}
+      .sizeNote=${state.fitGate === undefined ? undefined : this.ui.text(state.fitGate.id, state.fitGate.values)}
       .state=${phase}
       .statusMessage=${status}
       .requestPending=${state.progress !== undefined}
       .retryVariantId=${state.retryVariantId}
       .error=${error}
-      .busy=${view.modal !== undefined}
+      .busy=${view.modal !== undefined || this.#uploadingPhoto()}
       .cartPending=${actions?.cart.pending}
       .cartAvailable=${actions?.cart.available === true}
       .downloadAvailable=${actions?.download.available === true}
@@ -1135,7 +1170,11 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
       .resultFraming=${this.resultFraming}
       .flowControlled=${true}
       .stockNotice=${view.issue !== undefined && Issue.StockUnavailable.instanceOf(view.issue) ? view.issue.inner : undefined}
-      .fit=${state.displayed === undefined ? undefined : this.#fit(state.displayed, view)}
+      .fit=${
+        this.fitScore === true && state.displayed !== undefined
+          ? this.#fit(state.displayed, view)
+          : undefined
+      }
       .fitDetailsOpen=${this.#fitDetailsOpen}
       .activeCalloutKey=${this.#activeCalloutKey}
       @sv-try-on-view-change=${this.#tryOnChange}
@@ -1157,7 +1196,7 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
         html`
           ${this.#message(warning)}
           ${this.#message(actions?.cart.failed === true ? "experience.cartFailed" : undefined)}
-          ${shown === undefined ? this.#sourceImageRecovery(photoId) : nothing}
+          ${shown === undefined ? html`${this.#sourceImageRecovery(photoId)} ${this.#addPhoto(photoId)}` : nothing}
           ${this.#message(actions?.download.failed === true ? "experience.downloadFailed" : undefined)}
           ${this.#message(resultState === "error" ? "experience.resultImageFailed" : undefined)}
           ${progress === undefined ? nothing : html`<p aria-hidden="true">${progress}</p>`}
@@ -1188,11 +1227,25 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     </sv-try-on-view-screen>`;
   }
 
+  /**
+   * Whether a chosen photo is being sent and processed. The screen it was chosen from stays,
+   * its primary button spinning, and the flow moves on once the photo is processed: there is
+   * no processing screen. A photo that failed still shows on its own screen with its recovery.
+   */
+  #uploadingPhoto(): boolean {
+    const screenState = this.experience?.screen;
+    return (
+      screenState?.step === "photo-upload" &&
+      !screenState.showCamera &&
+      screenState.phase === PhotoUploadPhase.Pending
+    );
+  }
+
   #renderScreen(view: FlowView) {
     const { screen, issue, domain } = view;
     const screenState = this.experience?.screen;
-    const selectingPhoto = view.modal !== undefined && Modal.Picker.instanceOf(view.modal);
-    if (screenState?.step === "photo-upload" && !screenState.showCamera) {
+    const uploading = this.#uploadingPhoto();
+    if (screenState?.step === "photo-upload" && !screenState.showCamera && !uploading) {
       return this.#renderStagedPhoto(view, screenState.phase);
     }
     if (ScreenView.Introduction.instanceOf(screen)) {
@@ -1204,13 +1257,12 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     if (ScreenView.PhotoRejected.instanceOf(screen)) {
       const photo = this.#photo(screen.inner.photo.media);
       return html`<sv-photo-upload-rejected-screen
+        .busy=${uploading}
         .navigation=${this.#navigation(view)}
         .photoSrc=${photo?.src}
         .photoLoadKey=${photo?.loadKey}
         .photoCrop=${photo?.crop}
         .photoFraming=${photo?.framing}
-        .busy=${selectingPhoto}
-        .statusMessage=${selectingPhoto ? this.ui.text("experience.choosingPhoto") : ""}
         .error=${this.ui.text(PHOTO_REJECTION_MESSAGES[screen.inner.reason])}
         @sv-photo-upload-rejected-action=${this.#rejectedAction}
         @sv-image-state=${(event: ImageStateEvent) => {
@@ -1230,8 +1282,8 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
       const uncertain = uncertainBodyMessage(view);
       const savingHeight = heightPending(view);
       let statusMessage = "";
-      if (selectingPhoto) {
-        statusMessage = this.ui.text("experience.choosingPhoto");
+      if (uploading) {
+        statusMessage = this.ui.text("experience.processingPhoto");
       } else if (savingHeight) {
         statusMessage = this.ui.text("experience.savingHeight");
       }
@@ -1255,7 +1307,7 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
         .photoCrop=${photo?.crop}
         .photoFraming=${photo?.framing}
         .heightCm=${screen.inner.draft}
-        .busy=${selectingPhoto}
+        .busy=${uploading}
         .statusMessage=${statusMessage}
         .confirmDisabled=${!view.canConfirmHeight}
         .error=${error === undefined ? undefined : this.ui.text(error)}
@@ -1268,7 +1320,8 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
           view,
           html`
             ${this.#message(uncertain)} ${this.#sourceImageRecovery(domain.photo?.media)}
-            ${savingHeight && !selectingPhoto ? html`<p>${statusMessage}</p>` : nothing}
+            ${domain.photo === undefined ? nothing : this.#addPhoto(domain.photo.media)}
+            ${savingHeight ? html`<p>${statusMessage}</p>` : nothing}
           `,
         )}</sv-height-setting-screen
       >`;
@@ -1296,9 +1349,9 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
         </div>
       </sv-dialog>`;
     }
-    const visible = view.presence.open && view.presence.foreground;
+    const open = this.#dialogOpen;
     // The machine releases render media on close. Keep the last frame until the native exit ends.
-    if (visible || this.renderRoot.querySelector("sv-dialog")?.showing !== true) {
+    if (open || this.renderRoot.querySelector("sv-dialog")?.showing !== true) {
       this.#dialogContent = this.#renderScreen(view);
     }
     const cancelModal = () => {
@@ -1311,7 +1364,7 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
         (ScreenView.Height.instanceOf(view.screen) || ScreenView.TryOn.instanceOf(view.screen));
       photoModal = confirmingRetake
         ? html`<sv-photo-retake-dialog
-            .open=${visible}
+            .open=${open}
             @sv-photo-retake-action=${(event: HTMLElementEventMap["sv-photo-retake-action"]) => {
               if (event.detail.action === "retake") {
                 this.#beginPhoto(PhotoSource.Camera);
@@ -1322,7 +1375,7 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
           ></sv-photo-retake-dialog>`
         : html`<sv-dialog
             data-photo-source
-            .open=${visible}
+            .open=${open}
             .label=${this.ui.text("experience.choosePhoto")}
             @sv-dismiss=${cancelModal}
           >
@@ -1344,7 +1397,8 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     }
     return html`
       <sv-dialog
-        .open=${visible}
+        full-height
+        .open=${open}
         .label=${this.productName ?? this.ui.text("sessionIntro.sheetTitle")}
         @sv-back=${this.#back}
         @sv-dismiss=${this.#close}

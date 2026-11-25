@@ -38,6 +38,11 @@ export interface SvTryOnViewScreenProps {
   navigation?: SvScreenNavigation | undefined;
   /** Localized host product name. */
   productName?: string | undefined;
+  /**
+   * Said about the selected size on the picker's size row, in place of the recommendation:
+   * e.g. why the fit gate refuses it and which size to try.
+   */
+  sizeNote?: string | undefined;
   /** The product's variant identities and foreign IDs from the domain. */
   product?: Product | undefined;
   /** Current selection and projected rows, directly from the Rust experience. */

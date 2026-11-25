@@ -4,7 +4,7 @@ import { styleMap } from "lit/directives/style-map.js";
 import type { OptionMark } from "../../internal/option-group/option-mark.js";
 
 import { optionMarkStyles, renderOptionMark } from "../../internal/option-group/option-mark.js";
-import { contrast, isHex, readableOn } from "../../internal/theme/color.js";
+import { contrast, isHex } from "../../internal/theme/color.js";
 import { SvElement } from "../../internal/ui-element.js";
 import { svBase } from "../../styles/base.js";
 import { svTokens } from "../../styles/tokens.js";
@@ -15,7 +15,7 @@ export type SvChipStatus = (typeof SV_CHIP_STATUSES)[number];
 export interface SvChipProps {
   /** Shown as chosen. Wins over `status` in how it looks. */
   selected?: boolean | undefined;
-  /** Optional check for a tried-on option or the current size. */
+  /** Optional check for a completed try-on. */
   mark?: OptionMark | undefined;
   /**
    * How the value stands for this shopper. Unset is a plain, available value. Every status
@@ -29,10 +29,7 @@ export interface SvChipProps {
   status?: SvChipStatus | undefined;
   /** A color swatch instead of a text chip: the color as `#rrggbb`. */
   color?: string | undefined;
-  /**
-   * A fabric photo for the swatch, over `color`, which shows while it loads and if it fails.
-   * Selected, an image swatch shows only the ring, no check.
-   */
+  /** A fabric photo for the swatch, over `color`, which shows while it loads and if it fails. */
   image?: string | undefined;
   /** The accessible name. A swatch needs it (it shows no text); a text chip defaults to its text. */
   label?: string | undefined;
@@ -117,9 +114,12 @@ export class SvChip extends SvElement implements SvChipProps {
         box-shadow: inset 0 0 0 2px
           color-mix(in oklab, var(--_sv-positive) 50%, var(--_sv-background));
       }
+      /* Refused and sold-out sizes keep the same bubble as every other size; only their text is
+         muted. The picker panel is itself the muted color, so a muted chip on it read as bare
+         text and the row looked uneven. */
       :host([status="refused"]) .chip,
       :host([status="sold-out"]) .chip {
-        background: var(--_sv-muted);
+        background: var(--_sv-control);
         color: var(--_sv-muted-foreground);
       }
       /* Struck through only for the fit gate: a verdict about the body, not about stock. */
@@ -143,11 +143,11 @@ export class SvChip extends SvElement implements SvChipProps {
       /* ---------- Swatch ---------- */
       .chip.swatch {
         inline-size: calc(var(--_sv-spacing) * 11);
-        overflow: hidden;
       }
-      .chip.swatch.light {
-        box-shadow: inset 0 0 0 1px
-          color-mix(in srgb, var(--_sv-foreground) 16%, var(--_sv-background));
+      /* A light swatch keeps an outline of the input border on its disc, which paints over the
+         chip's own edge: on a pale panel a white swatch would otherwise vanish. */
+      .chip.swatch.light .disc {
+        box-shadow: inset 0 0 0 1px var(--_sv-input);
       }
       .disc {
         position: absolute;
@@ -167,19 +167,14 @@ export class SvChip extends SvElement implements SvChipProps {
       :host([status="sold-out"]:not([selected])) .disc {
         opacity: 0.4;
       }
-      /* Selected: a 2px primary ring at the edge, a 2px gap of paper, then the color, so the
+      /* Selected: a 2px neutral ring at the edge, a 2px gap of paper, then the color, so the
          swatch never grows past its box. */
       :host([selected]) .chip.swatch {
         background: var(--_sv-control);
-        box-shadow: inset 0 0 0 2px var(--_sv-primary);
+        box-shadow: inset 0 0 0 2px var(--_sv-foreground);
       }
       :host([selected]) .disc {
         inset: calc(var(--_sv-spacing) * 1);
-      }
-      .check {
-        position: relative;
-        --_sv-icon-size: calc(var(--_sv-spacing) * 3.5);
-        --_sv-icon-stroke: 2.5;
       }
     `,
   ];
@@ -235,8 +230,6 @@ export class SvChip extends SvElement implements SvChipProps {
       image === undefined &&
       color !== undefined &&
       contrast(color, "#ffffff") < LIGHT_SWATCH_CONTRAST;
-    const check =
-      this.mark === undefined && this.selected && image === undefined && color !== undefined;
     return html`<button
         part="chip"
         class="chip swatch ${light ? "light" : ""}"
@@ -261,15 +254,6 @@ export class SvChip extends SvElement implements SvChipProps {
           }
         </span>
         ${renderOptionMark(this.mark)}
-        ${
-          check
-            ? html`<sv-icon
-                class="check"
-                name="check"
-                style=${styleMap({ color: readableOn(color ?? "#000000") })}
-              ></sv-icon>`
-            : nothing
-        }
       </button>
       ${description.length > 0 ? html`<span id="description" hidden>${description}</span>` : nothing}`;
   }

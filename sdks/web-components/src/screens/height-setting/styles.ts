@@ -22,9 +22,6 @@ export const heightSettingStyles = css`
     line-height: 1.5;
     color: var(--_sv-muted-foreground);
   }
-  .error {
-    margin-block-end: calc(var(--_sv-spacing) * 2);
-  }
   @container sv-height-setting (min-width: 40rem) {
     .height-label {
       font-size: var(--_sv-text-base);

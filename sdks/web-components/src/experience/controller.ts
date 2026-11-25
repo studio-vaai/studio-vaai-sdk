@@ -11,6 +11,7 @@ import type {
   Outcome,
   TryOnId,
   TryOnAsset,
+  RestoredTryOn,
   InteractionToken,
   ImageView,
   CartRequest,
@@ -91,6 +92,8 @@ export interface TryOnExperiencePhoto {
   src: string;
   /** Signed source metadata to report to the flow. */
   signed?: { asset: InteractionToken; expiresAt: number };
+  /** A restored photo the API deleted while it was shown: nothing of it is held any more. */
+  gone?: boolean;
   crop?: SvImageCrop | undefined;
   framing?: SvImageFraming | undefined;
 }
@@ -108,6 +111,7 @@ export interface TryOnExperienceAdapters {
   bindSession?(
     session: TryOnSession,
     replaceImage: (expected: TryOnAsset, imageUrl: string) => void,
+    restoreTryOns?: (tryOns: RestoredTryOn[]) => void,
   ): void;
   /** Runs the job using the inputs captured by Rust. */
   runJob(
@@ -125,6 +129,8 @@ export interface TryOnExperienceAdapters {
     capture?: CameraCapture,
   ): DeviceEvent | undefined | Promise<DeviceEvent | undefined>;
   getPhoto(id: MediaId): TryOnExperiencePhoto | undefined;
+  /** Whether the shopper's earlier photo is gone, so the page asks for a new one. */
+  photoGone?(): boolean;
   getCamera(id: LeaseId): TryOnExperienceCamera | undefined;
   getProductDetails?(productId: string, signal?: AbortSignal): Promise<ProductDetails>;
   getProductByForeignId?(foreignId: string, signal?: AbortSignal): Promise<ProductDetails>;
@@ -229,17 +235,30 @@ export class TryOnExperience {
     }
     this.#driver = driver;
     this.#view = this.#flow.view();
-    adapters.bindSession?.(this.#session, (expected, imageUrl) => {
-      if (!this.#disposed) {
-        this.#commit(() =>
-          this.#session.command(
-            new DomainCommand.TryOn({
-              command: new TryOnCommand.ReplaceImage({ expected, imageUrl }),
+    adapters.bindSession?.(
+      this.#session,
+      (expected, imageUrl) => {
+        if (!this.#disposed) {
+          this.#commit(() =>
+            this.#session.command(
+              new DomainCommand.TryOn({
+                command: new TryOnCommand.ReplaceImage({ expected, imageUrl }),
+              }),
+            ),
+          );
+        }
+      },
+      (tryOns) => {
+        if (!this.#disposed && tryOns.length > 0) {
+          // Through the flow, which shows one of the selected variant at once.
+          this.dispatch(
+            new FlowAction.Presentation({
+              action: new PresentationAction.RestoreTryOns({ tryOns }),
             }),
-          ),
-        );
-      }
-    });
+          );
+        }
+      },
+    );
     this.#unsubscribeResults = adapters.subscribeResults?.(() => {
       if (this.#draining) {
         this.#resourcesChanged = true;

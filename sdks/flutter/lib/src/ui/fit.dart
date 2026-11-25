@@ -58,9 +58,23 @@ const _verdicts = {
   Fit.tooLoose: ('tooLoose', FitCalloutVariant.caution),
 };
 
+/// The catalog's name of each measurement: shoppers see these, never the
+/// garment's own point-of-measure name.
+const _axisNames = {
+  FitAxis.chest: 'chest',
+  FitAxis.waist: 'waist',
+  FitAxis.hip: 'hip',
+  FitAxis.bottom: 'bottom',
+  FitAxis.totalLength: 'totalLength',
+  FitAxis.sleeveLength: 'sleeveLength',
+  FitAxis.shoulderWidth: 'shoulderWidth',
+  FitAxis.inseam: 'inseam',
+  FitAxis.other: 'other',
+};
+
 /// The result's fit from its try-on record, as the web's `fitForResult`: the
 /// core's score and its callouts (`resultFitCallouts`), with the catalog's
-/// verdicts.
+/// names and verdicts.
 FitView? fitForResult(TryOn result, bool retryable, String Function(String key) text) {
   switch (result.fit) {
     case PendingResultFit():
@@ -74,7 +88,7 @@ FitView? fitForResult(TryOn result, bool retryable, String Function(String key) 
             key: c.key,
             x: c.x,
             y: c.y,
-            label: c.label,
+            label: text('tryOnView.fitAxisNames.${_axisNames[c.axis]!}'),
             variant: _verdicts[c.fit]!.$2,
             description: text(
               'tryOnView.${c.isLength ? 'lengthVerdicts' : 'fitVerdicts'}.${_verdicts[c.fit]!.$1}',

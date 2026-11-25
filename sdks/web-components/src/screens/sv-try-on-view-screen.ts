@@ -93,6 +93,7 @@ export class SvTryOnViewScreen extends SvElement implements SvTryOnViewScreenPro
     state: {},
     pickerOpen: { type: Boolean, attribute: "picker-open" },
     fitDetailsOpen: { type: Boolean, attribute: "fit-details-open" },
+    sizeNote: { attribute: false },
     activeCalloutKey: { attribute: "active-callout-key" },
     busy: { type: Boolean },
     error: {},
@@ -116,6 +117,7 @@ export class SvTryOnViewScreen extends SvElement implements SvTryOnViewScreenPro
   declare state: SvTryOnViewState;
   declare pickerOpen: boolean;
   declare fitDetailsOpen: boolean;
+  declare sizeNote: string | undefined;
   declare activeCalloutKey: string | undefined;
   declare busy: boolean;
   declare error: string | undefined;
@@ -418,6 +420,7 @@ export class SvTryOnViewScreen extends SvElement implements SvTryOnViewScreenPro
           </h3>
           <div class="picker-body" id="variant-picker-body">
             <sv-variant-picker
+              .sizeNote=${this.sizeNote}
               .selection=${view.pickerSelection}
               .triedItems=${view.triedItems}
               .recommendedSize=${view.recommendedSize}
@@ -453,6 +456,7 @@ export class SvTryOnViewScreen extends SvElement implements SvTryOnViewScreenPro
     return html`<div slot="overlay" class="image-overlay">
       ${renderFitOverlay({
         items: view.fit?.state === "ready" ? (view.fit.callouts ?? []) : [],
+        subject: view.fit?.state === "ready" ? view.fit.subject : undefined,
         open: this.fitDetailsOpen && !pickerOpen,
         activeKey: this.activeCalloutKey,
         onSelect: (value) => {
@@ -461,7 +465,7 @@ export class SvTryOnViewScreen extends SvElement implements SvTryOnViewScreenPro
       })}
       <sv-button
         class="download"
-        variant="ghost"
+        variant="icon"
         .disabled=${this.#locked || !this.#imageReady || this.downloadAvailable === false}
         .busy=${this.downloadPending === true}
         @click=${() => {
@@ -498,6 +502,7 @@ export class SvTryOnViewScreen extends SvElement implements SvTryOnViewScreenPro
     hasPicker: boolean,
     overlay: TemplateResult | typeof nothing,
     pending: boolean,
+    pickerOpen = false,
   ) {
     const framing =
       view.shown === undefined
@@ -508,7 +513,12 @@ export class SvTryOnViewScreen extends SvElement implements SvTryOnViewScreenPro
       if (view.shown === undefined && hasPicker) {
         imageFraming = backdropImageFraming(framing);
       } else if (framing !== undefined) {
-        imageFraming = { ...framing, blockAlign: "end" };
+        // Use the stage width in both picker states and keep the open result top-aligned.
+        imageFraming = {
+          ...framing,
+          margin: framing.margin ?? 0,
+          blockAlign: pickerOpen ? "start" : undefined,
+        };
       }
     }
     return html`<sv-image
@@ -577,12 +587,14 @@ export class SvTryOnViewScreen extends SvElement implements SvTryOnViewScreenPro
       .description=${copy.subtitle}
       .busy=${this.#locked}
       .statusMessage=${copy.status}
+      .panelAlign=${this.#layout.wide ? "center" : undefined}
       panel-mode="overlay"
+      .alignPhoto=${"baseline"}
     >
       ${repeat(
         pending ? [visible, image] : [visible],
         ({ key }) => key,
-        (stage) => this.#stageImage(stage, copy, hasPicker, overlay, stage !== visible),
+        (stage) => this.#stageImage(stage, copy, hasPicker, overlay, stage !== visible, pickerOpen),
       )}
       <div class="panel">
         ${
@@ -603,7 +615,7 @@ export class SvTryOnViewScreen extends SvElement implements SvTryOnViewScreenPro
       </div>
       <div slot="before-actions">
         <slot name="recovery"></slot>
-        ${copy.error !== "" && !pickerOpen ? html`<sv-message class="error">${copy.error}</sv-message>` : nothing}
+        ${copy.error !== "" && !pickerOpen ? html`<sv-message>${copy.error}</sv-message>` : nothing}
         ${!view.selecting && view.shownCommerce?.inStock === false ? html`<p class="sold-out" role="status">${copy.soldOut}</p>` : nothing}
       </div>
       ${this.#primary(copy, view, hasPicker && !pickerOpen)}

@@ -136,6 +136,51 @@ describe("sv-camera", () => {
     expect(part(el, ".switch")).not.toBeNull();
   });
 
+  it("reports the camera picture's shape once it shows", async () => {
+    const el = await mount({});
+    expect(el.pictureAspect).toBeUndefined();
+    const video = el.shadowRoot!.querySelector("video")!;
+    Object.defineProperties(video, { videoWidth: { value: 1080 }, videoHeight: { value: 1920 } });
+    expect(el.pictureAspect).toBe(1080 / 1920);
+  });
+
+  it.each([
+    [true, [555, 0, 810, 1080, -810, 0, 810, 1080]],
+    [false, [555, 0, 810, 1080, 0, 0, 810, 1080]],
+  ] as const)(
+    "captures only the part of the picture the frame shows (mirrored %s)",
+    async (mirrored, cut) => {
+      const el = await mount({ mirrored });
+      const video = el.shadowRoot!.querySelector("video")!;
+      Object.defineProperties(video, {
+        videoWidth: { value: 1920 },
+        videoHeight: { value: 1080 },
+        readyState: { value: HTMLMediaElement.HAVE_CURRENT_DATA },
+      });
+      // An upright 3:4 frame over a 16:9 camera: it shows the middle 810 x 1080.
+      vi.spyOn(el.shadowRoot!.querySelector(".frame")!, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(0, 0, 300, 400),
+      );
+      const drawImage = vi.fn<(...args: unknown[]) => void>();
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+        drawImage,
+        scale: vi.fn<CanvasRenderingContext2D["scale"]>(),
+      } as unknown as CanvasRenderingContext2D);
+      // oxlint-disable-next-line promise/prefer-await-to-callbacks -- toBlob is callback-based.
+      vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((encoded) => {
+        // oxlint-disable-next-line promise/prefer-await-to-callbacks -- toBlob is callback-based.
+        encoded(new Blob(["jpeg"], { type: "image/jpeg" }));
+      });
+      const shot = await el.capture();
+      expect(drawImage).toHaveBeenCalledExactlyOnceWith(video, ...cut);
+      expect(shot).toMatchObject({
+        width: 810,
+        height: 1080,
+        crop: { cx: 0.5, cy: 0.5, width: 1, height: 1 },
+      });
+    },
+  );
+
   it("refuses to capture before there is a picture", async () => {
     const el = await mount({});
     await expect(el.capture()).rejects.toThrow(/no picture/);

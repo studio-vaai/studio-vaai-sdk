@@ -162,10 +162,10 @@ namespace StudioVaai {
     @doc("Initial height estimate from the source image, in centimetres.")
     estimatedHeightCm: float32;
 
-    @doc("Temporary signed URL for the image used to create the body. Use it before `sourceImageUrlExpiresAt`; call `listBodies` for a fresh URL after expiry.")
+    @doc("Temporary signed URL for the shopper's cut-out from the photo, the image try-ons are rendered from (JPEG XL with transparency around the person), while it is stored. The uploaded photo itself is not kept, and the cut-out is deleted with the session's data; then this is empty, and clients must handle a body without a photo. Use a URL before `sourceImageUrlExpiresAt`; call `listBodies` for a fresh URL after expiry.")
     sourceImageUrl: string;
 
-    @doc("When `sourceImageUrl` expires (UTC). Each `createBody` or `listBodies` response includes a valid URL and its expiry.")
+    @doc("When `sourceImageUrl` expires (UTC). Each `createBody` or `listBodies` response signs the image again while it is stored; with an empty `sourceImageUrl`, the time of the response.")
     sourceImageUrlExpiresAt: utcDateTime;
   }
 

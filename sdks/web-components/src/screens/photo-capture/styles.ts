@@ -20,9 +20,14 @@ export const photoCaptureStyles = css`
     --_sv-capture-aspect: 0.75;
   }
   .frame {
+    /* The layout's shape, or a narrower camera picture's own down to 9:16 (see #frameStyle). */
+    --_sv-frame-aspect: min(
+      var(--_sv-capture-aspect),
+      max(var(--_sv-camera-aspect, var(--_sv-capture-aspect)), 0.5625)
+    );
     position: relative;
-    inline-size: min(100cqi, 100cqb * var(--_sv-capture-aspect));
-    aspect-ratio: var(--_sv-capture-aspect);
+    inline-size: min(100cqi, 100cqb * var(--_sv-frame-aspect));
+    aspect-ratio: var(--_sv-frame-aspect);
     min-block-size: 0;
     overflow: hidden;
     border-radius: var(--_sv-radius-xl);

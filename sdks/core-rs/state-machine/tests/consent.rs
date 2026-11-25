@@ -54,6 +54,25 @@ fn begin_library(flow: &DefaultTryOnFlow) -> Result<FlowUpdate, TryOnError> {
     )
 }
 
+fn open_picker(flow: &DefaultTryOnFlow) -> InteractionToken {
+    match begin_library(flow).unwrap().view.modal {
+        Some(Modal::Picker { token }) => token,
+        other => panic!("no picker: {other:?}"),
+    }
+}
+
+fn pick_photo(flow: &DefaultTryOnFlow) {
+    let token = open_picker(flow);
+    flow.complete_device(
+        PickerEvent::Selected {
+            token,
+            media: id("picked-photo"),
+        }
+        .into(),
+    )
+    .unwrap();
+}
+
 fn consent(flow: &DefaultTryOnFlow, accepted: bool) -> Result<FlowUpdate, TryOnError> {
     flow.dispatch(SessionAction::SetConsent { accepted }.into())
 }
@@ -70,7 +89,7 @@ fn creating() -> SessionJob {
 }
 
 #[test]
-fn creating_a_session_attests_the_flows_consent() {
+fn cancelling_the_picker_keeps_intro_consent_until_a_photo_is_selected() {
     let (_session, driver, flow) = opened(false);
     assert!(!flow.view().unwrap().consent_given());
     assert_eq!(
@@ -80,7 +99,18 @@ fn creating_a_session_attests_the_flows_consent() {
     // Consenting creates nothing yet: the flow keeps the answer.
     assert!(consent(&flow, true).unwrap().view.consent_given());
     assert!(session_jobs(&drain(&driver)).is_empty());
-    begin_library(&flow).unwrap();
+    let token = open_picker(&flow);
+    assert!(session_jobs(&drain(&driver)).is_empty());
+    let view = flow
+        .complete_device(PickerEvent::Cancelled { token }.into())
+        .unwrap()
+        .view;
+    assert!(matches!(view.screen, ScreenView::Introduction { .. }));
+    assert!(view.consent_given());
+    assert_eq!(view.domain.session, SessionPhase::Absent);
+    assert_eq!(view.modal, None);
+    assert!(session_jobs(&drain(&driver)).is_empty());
+    pick_photo(&flow);
     let jobs: Vec<_> = session_jobs(&drain(&driver))
         .into_iter()
         .map(|(_, job)| job)
@@ -117,7 +147,7 @@ fn a_restored_session_implies_consent() {
 fn declining_drops_a_session_being_created() {
     let (session, driver, flow) = opened(false);
     consent(&flow, true).unwrap();
-    begin_library(&flow).unwrap();
+    pick_photo(&flow);
     let [(operation, _)] = session_jobs(&drain(&driver))[..] else {
         panic!("no creation");
     };
@@ -138,7 +168,7 @@ fn declining_drops_a_session_being_created() {
 fn a_failed_creation_is_created_again_from_a_photo_source() {
     let (session, driver, flow) = opened(false);
     consent(&flow, true).unwrap();
-    begin_library(&flow).unwrap();
+    pick_photo(&flow);
     let [(operation, _)] = session_jobs(&drain(&driver))[..] else {
         panic!("no creation");
     };
@@ -155,7 +185,7 @@ fn a_failed_creation_is_created_again_from_a_photo_source() {
         session.snapshot().unwrap().session,
         SessionPhase::CreateFailed
     );
-    begin_library(&flow).unwrap();
+    pick_photo(&flow);
     let jobs: Vec<_> = session_jobs(&drain(&driver))
         .into_iter()
         .map(|(_, job)| job)
@@ -167,7 +197,7 @@ fn a_failed_creation_is_created_again_from_a_photo_source() {
 fn an_unconfirmed_creation_fails_and_is_created_again() {
     let (session, driver, flow) = opened(false);
     consent(&flow, true).unwrap();
-    begin_library(&flow).unwrap();
+    pick_photo(&flow);
     let [(operation, _)] = session_jobs(&drain(&driver))[..] else {
         panic!("no creation");
     };
@@ -201,7 +231,7 @@ fn an_unconfirmed_creation_fails_and_is_created_again() {
         session.snapshot().unwrap().session,
         SessionPhase::CreateFailed
     );
-    begin_library(&flow).unwrap();
+    pick_photo(&flow);
     let jobs: Vec<_> = session_jobs(&drain(&driver))
         .into_iter()
         .map(|(_, job)| job)
@@ -213,7 +243,7 @@ fn an_unconfirmed_creation_fails_and_is_created_again() {
 fn retry_after_a_failed_creation_is_refused() {
     let (session, driver, flow) = opened(false);
     consent(&flow, true).unwrap();
-    begin_library(&flow).unwrap();
+    pick_photo(&flow);
     let [(operation, _)] = session_jobs(&drain(&driver))[..] else {
         panic!("no creation");
     };
@@ -277,21 +307,10 @@ fn the_camera_waiting_for_the_session_opens_after_a_suspension() {
 fn a_photo_picked_before_the_session_is_sent_after_closing() {
     let (session, driver, flow) = opened(false);
     consent(&flow, true).unwrap();
-    let token = match begin_library(&flow).unwrap().view.modal {
-        Some(Modal::Picker { token }) => token,
-        other => panic!("no picker: {other:?}"),
-    };
+    pick_photo(&flow);
     let [(create, _)] = session_jobs(&drain(&driver))[..] else {
         panic!("no session created");
     };
-    flow.complete_device(
-        PickerEvent::Selected {
-            token,
-            media: id("early"),
-        }
-        .into(),
-    )
-    .unwrap();
     flow.dispatch(PresenceAction::Close.into()).unwrap();
     session
         .complete(Completion {
@@ -309,7 +328,7 @@ fn a_photo_picked_before_the_session_is_sent_after_closing() {
                     },
                     ..
                 }
-            } if photo.media == id::<MediaId>("early")
+            } if photo.media == id::<MediaId>("picked-photo")
         )
     });
     assert!(sent, "the photo waited for the session, not for the flow");

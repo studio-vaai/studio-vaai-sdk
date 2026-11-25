@@ -9,24 +9,6 @@
       "path": "./sdks/core-rs"
     },
     {
-      "path": "./sdks/js-client"
-    },
-    {
-      "path": "./sdks/js-machine"
-    },
-    {
-      "path": "./sdks/react-headless"
-    },
-    {
-      "path": "./sdks/react-components"
-    },
-    {
-      "path": "./sdks/js-debugger"
-    },
-    {
-      "path": "./sdks/js-tracking"
-    },
-    {
       "path": "./sdks/web-components"
     },
     {

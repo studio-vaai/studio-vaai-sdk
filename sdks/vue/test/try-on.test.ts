@@ -127,6 +127,7 @@ describe("StudioVaaiTryOn", () => {
     const inStock = ref(false);
     const config = shallowRef({ baseUrl: "https://api.example.test", clientApiKey: "key" });
     const active = ref(true);
+    const fitScore = ref<boolean>();
     const tryOn = shallowRef<StudioVaaiTryOnHandle>();
     const presentProduct: StudioVaaiTryOnProps["presentProduct"] = () => ({
       axes: [],
@@ -153,6 +154,7 @@ describe("StudioVaaiTryOn", () => {
             foreignId: foreignId.value,
             productName: "Shirt",
             active: active.value,
+            ...(fitScore.value !== globalThis.undefined && { fitScore: fitScore.value }),
             commerce: { variant: { inStock: inStock.value, price: price.value } },
             presentProduct,
             selection: selection.value,
@@ -188,6 +190,12 @@ describe("StudioVaaiTryOn", () => {
         expect(ready).toHaveBeenLastCalledWith(true);
       });
       expect(root.querySelector<SvTryOnExperience>("#fixture-dialog")?.experience).toBe(owner);
+      // The fit score stays hidden unless the shop opts in.
+      const element = root.querySelector<SvTryOnExperience>("#fixture-dialog");
+      expect(element?.fitScore).toBe(false);
+      fitScore.value = true;
+      await nextTick();
+      expect(element?.fitScore).toBe(true);
       expect(owner.setSelection).toHaveBeenLastCalledWith({ size: "M" });
       selection.value = { size: "L" };
       await nextTick();

@@ -185,6 +185,8 @@ sv-button {
   (default `1`) that scales padding and gaps. Spacing is root × 0.25 × density times Tailwind's
   numbers, and a button's height is its label's line height plus padding, so nothing sets a
   height on its own.
+- **Radius:** `--sv-radius` scales every corner. `--sv-button-radius` sets the buttons' corners
+  alone and follows `--sv-radius` until set, e.g. `9999px` for pill buttons beside square cards.
 - **Dark:** `svAppearanceStyle("dark")` returns the public properties for the dark appearance.
 
 ## Develop

@@ -81,6 +81,15 @@ describe("shared image framing", () => {
     expect(wide.y + wide.height / 2).toBeCloseTo(aligned.y + aligned.height / 2);
   });
 
+  it("aligns the shared canvas with the stage top, e.g. under an open picker, at the same scale", () => {
+    const viewport = { width: 320, height: 640 };
+    const original = resolveImageFraming(viewport, 0.75, 0.75, {})!;
+    const top = resolveImageFraming(viewport, 0.75, 0.75, { blockAlign: "start" })!;
+    expect(top.height).toBeCloseTo(original.height);
+    expect(top.y).toBeLessThan(original.y);
+    expect(top.frame.y).toBeCloseTo(0, 0);
+  });
+
   it("uses conservative defaults for invalid bounds and margins and refuses invalid dimensions", () => {
     const viewport = { width: 370, height: 500 };
     const baseline = resolveImageFraming(viewport, 0.75, 0.75, {});

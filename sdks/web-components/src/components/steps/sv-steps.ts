@@ -55,6 +55,9 @@ export class SvSteps extends SvElement implements SvStepsProps {
         line-height: 1;
         font-weight: var(--_sv-font-weight-medium);
       }
+      .number > span {
+        text-box: trim-both cap alphabetic;
+      }
     `,
   ];
 
@@ -74,7 +77,7 @@ export class SvSteps extends SvElement implements SvStepsProps {
       ${this.items.map(
         (step, index) =>
           html`<li>
-            <span part="number" class="number" aria-hidden="true">${index + 1}</span>
+            <span part="number" class="number" aria-hidden="true"><span>${index + 1}</span></span>
             <span>${step}</span>
           </li>`,
       )}

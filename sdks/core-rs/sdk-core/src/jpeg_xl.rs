@@ -1,10 +1,9 @@
-//! JPEG XL decoding, for native hosts whose platform cannot decode it.
+//! JPEG XL decoding, for hosts whose platform cannot decode it.
 //!
 //! The API keeps a body's source photo as JPEG XL, and a restored session
-//! shows it from the API's signed URL. Browsers and Apple platforms decode
-//! it themselves; Android does not, so the Flutter SDK decodes it here
-//! (with `jxl-oxide`, in pure Rust). The WebAssembly build leaves it out:
-//! the browser decodes the image.
+//! shows it from the API's signed URL. Apple platforms decode it themselves;
+//! Android does not, so the Flutter SDK decodes it here (with `jxl-oxide`, in
+//! pure Rust). The web SDK decodes it here too when the browser cannot.
 
 /// A decoded image: 8-bit sRGB samples with alpha, row by row.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
@@ -17,21 +16,12 @@ pub struct DecodedImage {
 
 /// Decodes a JPEG XL image (a bare codestream or the ISO container) to
 /// sRGB. `None` when the bytes are not JPEG XL, are malformed, or exceed the
-/// size this decoder accepts, and always in the WebAssembly build.
+/// size this decoder accepts.
 #[uniffi::export]
 pub fn decode_jpeg_xl(bytes: Vec<u8>) -> Option<DecodedImage> {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        native::decode(&bytes)
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        let _ = bytes;
-        None
-    }
+    native::decode(&bytes)
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 mod native {
     use jxl_oxide::{EnumColourEncoding, JxlImage, RenderingIntent};
 

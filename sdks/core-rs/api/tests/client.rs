@@ -62,8 +62,13 @@ fn a_try_on_request_carries_the_shop_key_the_session_and_the_variant() {
         variant_id: "v1".into(),
         body_revision_id: Some("revision-1".into()),
     };
-    let result =
-        pollster::block_on(client.create_try_on("p 1/2".into(), "b1".into(), body)).unwrap();
+    let result = pollster::block_on(client.create_try_on(
+        "p 1/2".into(),
+        Some("attempt-1".into()),
+        "b1".into(),
+        body,
+    ))
+    .unwrap();
     assert_eq!(result.try_on_id, "t1");
     assert_eq!(result.variant_id.as_deref(), Some("v1"));
 
@@ -75,6 +80,7 @@ fn a_try_on_request_carries_the_shop_key_the_session_and_the_variant() {
         "https://api.example.test/products/p%201%2F2/try-on?bodyId=b1"
     );
     assert_eq!(header(request, "X-Client-Api-Key"), Some("sv_client_test"));
+    assert_eq!(header(request, "Idempotency-Key"), Some("attempt-1"));
     assert_eq!(header(request, "X-Api-Version"), Some(API_VERSION));
     assert_eq!(
         header(request, "X-Client-Version"),
@@ -134,6 +140,7 @@ fn a_size_rejection_is_told_apart_by_its_reason() {
     let (client, _) = client(422, body);
     let error = pollster::block_on(client.create_try_on(
         "p1".into(),
+        None,
         "b1".into(),
         CreateTryOnBody {
             variant_id: "v1".into(),

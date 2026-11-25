@@ -1,6 +1,4 @@
-import type { BackendError } from "@studio-vaai/core";
-
-import { Outcome } from "@studio-vaai/core";
+import { BackendError, Outcome } from "@studio-vaai/core";
 import { ApiError, classifyExperienceApiError, credentialRejected } from "@studio-vaai/core/api";
 
 export class CookieSessionChangedError extends Error {
@@ -26,6 +24,19 @@ export class ApiSessionOutcomeError extends Error {
     super("The authenticated request failed.");
     this.outcome = outcome;
   }
+}
+
+/**
+ * Whether a failed renewal means the API no longer has the image's subject: deleted or expired,
+ * with its body or on its own. Any other failure (unavailable, a timeout, offline) may work later.
+ */
+export function renewalGone(error: unknown): boolean {
+  return (
+    error instanceof ApiSessionOutcomeError &&
+    Outcome.Failed.instanceOf(error.outcome) &&
+    (error.outcome.inner.error === BackendError.NotFound ||
+      error.outcome.inner.error === BackendError.BodyNotFound)
+  );
 }
 
 export function throwSessionOutcome(outcome: Outcome): never {

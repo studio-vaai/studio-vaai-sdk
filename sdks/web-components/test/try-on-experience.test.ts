@@ -48,9 +48,11 @@ import {
   SessionPhase,
   SizeRecommendationAction,
   SizeRecommendationOutcome,
+  TryOnJob,
   TryOnOutcome,
   TryOnError,
 } from "@studio-vaai/core";
+import { createTryOnAnalytics } from "@studio-vaai/core/analytics";
 import { ApiClient, ApiError, browserTransport } from "@studio-vaai/core/api";
 import { describe, expect, it, vi } from "vitest";
 
@@ -63,6 +65,7 @@ import type {
 import { bodySelectionStore } from "../src/experience/api/body-selection.js";
 import { ApiSessionOutcomeError } from "../src/experience/api/outcomes.js";
 import { apiSession } from "../src/experience/api/session.js";
+import { tryOnHistoryStore } from "../src/experience/api/try-on-history.js";
 import { createBrowserTryOnDevices } from "../src/experience/browser/devices.js";
 // @vitest-environment jsdom
 import {
@@ -167,6 +170,7 @@ async function mountWithAdapters({
   autoStart = AutoStartPolicy.Never,
   missingCookie = false,
   open = true,
+  fitScore = true,
 }: {
   height?: number | null;
   photoSource?: PhotoSource;
@@ -177,6 +181,8 @@ async function mountWithAdapters({
   autoStart?: AutoStartPolicy;
   missingCookie?: boolean;
   open?: boolean;
+  /** Whether the host opts in to the fit score; `false` keeps the element's default. */
+  fitScore?: boolean;
   choosePhoto?: (token: string) => DeviceEvent | Promise<DeviceEvent> | undefined;
 } = {}) {
   await initializeTestUi();
@@ -270,6 +276,9 @@ async function mountWithAdapters({
     },
   );
   const element = document.createElement("sv-try-on-experience");
+  if (fitScore) {
+    element.fitScore = true;
+  }
   element.experience = experience;
   document.body.append(element);
   await vi.waitFor(() => {
@@ -515,6 +524,46 @@ describe("web try-on experience", () => {
     }
   });
 
+  it("keeps the intro, its button spinning, while a chosen photo is processed", async () => {
+    const upload = deferred<Outcome>();
+    const { experience, element, dispose } = await mountWithAdapters({
+      restore: false,
+      run: (job): Promise<Outcome> | undefined =>
+        Job.Photo.instanceOf(job) ? upload.promise : undefined,
+    });
+    try {
+      const intro = await rendered(element, "sv-session-intro-screen");
+      const checkbox = await rendered(intro, "sv-checkbox");
+      checkbox.shadowRoot?.querySelector("button")?.click();
+      await press(intro, 'sv-button[slot="primary"]');
+      await vi.waitFor(async () => {
+        expect(
+          NewPhotoStatus.Processing.instanceOf(experience.view.photoChange?.newPhoto?.status),
+        ).toBe(true);
+        // No processing screen: the intro stays, and its upload button spins.
+        expect(element.shadowRoot?.querySelector("sv-session-intro-screen")).toBe(intro);
+        await intro.updateComplete;
+        const button = await rendered(intro, "sv-button", 'sv-button[slot="primary"]');
+        expect(button.busy).toBe(true);
+      });
+      upload.resolve(
+        new Outcome.Photo({
+          outcome: new PhotoOutcome.Accepted({
+            bodyId: crypto.randomUUID(),
+            estimatedHeight: 172,
+          }),
+        }),
+      );
+      // Straight on to the height.
+      await vi.waitFor(async () => {
+        await rendered(element, "sv-height-setting-screen");
+        expect(element.shadowRoot?.querySelector("sv-session-intro-screen")).toBeNull();
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it.each(["picker-cancel", "close"] as const)(
     "applies a deferred height error on %s",
     async (ending) => {
@@ -709,7 +758,7 @@ describe("web try-on experience", () => {
     }
   });
 
-  it("releases the camera when hidden and reacquires it on resume", async () => {
+  it("keeps the dialog open while the hidden tab releases and reacquires the camera", async () => {
     const acquire = vi.fn<() => void>();
     const release = vi.fn<() => void>();
     const fixture = await mountWithAdapters({
@@ -746,17 +795,25 @@ describe("web try-on experience", () => {
           ScreenView.Camera.instanceOf(screen) && CameraState.Live.instanceOf(screen.inner.camera),
         ).toBe(true);
       });
+      const dialog = await rendered(element, "sv-dialog");
+      const panel = dialog.shadowRoot?.querySelector("dialog");
+      expect(panel?.open).toBe(true);
       visibility.mockReturnValue("hidden");
       document.dispatchEvent(new Event("visibilitychange"));
       expect(experience.view.presence.foreground).toBe(false);
       expect(release).toHaveBeenCalledOnce();
       const hidden = await rendered(element, "sv-dialog");
-      expect(hidden.open).toBe(false);
+      expect(hidden).toBe(dialog);
+      expect(hidden.open).toBe(true);
+      expect(panel?.open).toBe(true);
+      expect(panel?.dataset.closing).toBeUndefined();
       visibility.mockReturnValue("visible");
       document.dispatchEvent(new Event("visibilitychange"));
       expect(acquire).toHaveBeenCalledTimes(2);
       const visible = await rendered(element, "sv-dialog");
+      expect(visible).toBe(dialog);
       expect(visible.open).toBe(true);
+      expect(panel?.open).toBe(true);
     } finally {
       visibility.mockRestore();
       fixture.dispose();
@@ -1259,7 +1316,8 @@ describe("web try-on experience", () => {
                   fitChecks: [
                     {
                       pointId: "sleeve",
-                      label: "Sleeve length",
+                      // A point-of-measure name: shoppers see the catalog's name instead.
+                      label: "i sleeve length outside",
                       dimension: "sleeve_length",
                       garmentMm: 600,
                       bodyMm: 580,
@@ -1300,8 +1358,10 @@ describe("web try-on experience", () => {
                     scene: { overlayColor: "#ffffff" },
                     fitAnchors: [
                       { dimension: "sleeve_length", side: "left", x: 0.2, y: 0.4 },
-                      { dimension: "sleeve_length", side: "right", x: 1.2, y: 0.4 },
+                      { dimension: "sleeve_length", side: "right", x: 0.8, y: 0.4 },
+                      { dimension: "chest", x: 1.2, y: 0.4 },
                     ],
+                    subjectBands: [{ top: 0.1, bottom: 0.9, left: 0.25, right: 0.75 }],
                   },
                   201,
                 );
@@ -1377,6 +1437,7 @@ describe("web try-on experience", () => {
       document.body.addEventListener("sv-try-on-requested", onRequested);
       document.body.addEventListener("sv-try-on-add-to-cart-requested", onCart);
       const element = document.createElement("sv-try-on-experience");
+      element.fitScore = true;
       element.experience = experience;
       element.addToCart = cart;
       document.body.append(element);
@@ -1433,13 +1494,19 @@ describe("web try-on experience", () => {
             id: resultId,
             height: 175,
             imageUrl: "https://images.example.test/try-on.webp",
-            fitAnchors: [{ dimension: "sleeve_length", side: "left", x: 0.2, y: 0.4 }],
+            fitAnchors: [
+              { dimension: "sleeve_length", side: "left", x: 0.2, y: 0.4 },
+              { dimension: "sleeve_length", side: "right", x: 0.8, y: 0.4 },
+            ],
+            subjectBands: [{ top: 0.1, bottom: 0.9, left: 0.25, right: 0.75 }],
           }),
         ]);
         expect(tryOn.presentation?.triedItems?.get("size")).toEqual(["M"]);
         expect(tryOn.fit).toMatchObject({
           state: "ready",
-          callouts: [{ key: "sleeve_length:left", label: "Sleeve length", x: 0.2, y: 0.4 }],
+          // One callout for both sleeves, named from the catalog.
+          callouts: [{ key: "sleeve_length", label: "Sleeve length", x: 0.2, y: 0.4 }],
+          subject: [{ top: 0.1, bottom: 0.9, left: 0.25, right: 0.75 }],
         });
         await settleResultImage(tryOn);
         await element.updateComplete;
@@ -1596,6 +1663,298 @@ describe("web try-on experience", () => {
     },
   );
 
+  it("forgets a kept try-on only once the API no longer has it", async () => {
+    await initializeTestUi();
+    defineSvTryOnExperience();
+    stubDialogMethods();
+    const expiresAt = "2099-01-01T00:00:00Z";
+    const productId = crypto.randomUUID();
+    const variantId = crypto.randomUUID();
+    const bodyId = crypto.randomUUID();
+    const bodyRevisionId = crypto.randomUUID();
+    const restored = crypto.randomUUID();
+    const deleted = crypto.randomUUID();
+    const unavailable = crypto.randomUUID();
+    const offline = crypto.randomUUID();
+    const received: string[] = [];
+    const api = { baseUrl: "https://api.example.test", clientApiKey: crypto.randomUUID() };
+    const stored = await bodySelectionStore(api.baseUrl, api.clientApiKey);
+    stored.save({ id: bodyId, source: PhotoSource.Library });
+    const history = await tryOnHistoryStore(api.baseUrl, api.clientApiKey);
+    for (const tryOnId of [restored, deleted, unavailable, offline]) {
+      history.remember(bodyId, { tryOnId, productId, variantId, backendRevision: bodyRevisionId });
+    }
+    const experience = await createApiTryOnExperience({
+      api,
+      product: { productId },
+      presentProduct: () => ({
+        axes: [
+          { key: "size", items: [{ key: "M", display: new ItemDisplay.Text({ text: "M" }) }] },
+        ],
+        labelFormats: [],
+        variantId,
+        chosenAxes: [],
+      }),
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        const route = `${request.method} ${new URL(request.url).pathname}`;
+        received.push(route);
+        switch (route) {
+          case `GET /products/${productId}`: {
+            return await Promise.resolve(
+              Response.json({
+                productId,
+                variants: [{ id: variantId, foreignVariantIds: { size: "M" } }],
+              }),
+            );
+          }
+          case "GET /session": {
+            return Response.json({ expiresAt });
+          }
+          case "GET /bodies": {
+            return Response.json({
+              bodies: [
+                {
+                  bodyId,
+                  estimatedHeightCm: 172,
+                  userProvidedHeightCm: 170,
+                  bodyRevisionId,
+                  createdAt: "2026-01-01T00:00:00Z",
+                  sourceImageUrl: "https://storage.example.test/crops/owner/cut-out.jxl",
+                  sourceImageUrlExpiresAt: expiresAt,
+                },
+              ],
+            });
+          }
+          case `GET /try-ons/${restored}`: {
+            return Response.json({
+              status: "completed",
+              tryOnId: restored,
+              variantId,
+              bodyRevisionId,
+              imageUrl: "/result.webp",
+              scene: { overlayColor: "#ffffff" },
+            });
+          }
+          case `GET /try-ons/${deleted}`: {
+            return Response.json(
+              { kind: "try-on-not-found", title: "Not found" },
+              { status: 404, headers: { "Content-Type": "application/problem+json" } },
+            );
+          }
+          case `GET /try-ons/${unavailable}`: {
+            return Response.json(
+              { kind: "service-unavailable", title: "Unavailable" },
+              { status: 503, headers: { "Content-Type": "application/problem+json" } },
+            );
+          }
+          case `GET /try-ons/${offline}`: {
+            throw new TypeError("Failed to fetch");
+          }
+          case `GET /products/${productId}/recommended-size`: {
+            return Response.json({ kind: "internal-server-error", title: "x" }, { status: 500 });
+          }
+          default: {
+            throw new Error(`Unexpected route: ${route}`);
+          }
+        }
+      },
+      devices: {
+        restorePhoto: () => crypto.randomUUID(),
+        startDeviceEffect: () => globalThis.undefined,
+        getPhoto: () => globalThis.undefined,
+        getUploadPhoto: () => globalThis.undefined,
+        getCamera: () => globalThis.undefined,
+        applyDomainMediaEffect: vi.fn<() => void>(),
+        dispose: vi.fn<() => void>(),
+      },
+    });
+    try {
+      await vi.waitFor(() => {
+        for (const tryOnId of [restored, deleted, unavailable, offline]) {
+          expect(received).toContain(`GET /try-ons/${tryOnId}`);
+        }
+      });
+      // Only the deleted one goes; a 503 or a dropped connection may read on the next restore.
+      await vi.waitFor(() => {
+        expect(
+          history
+            .of(bodyId)
+            .map(({ tryOnId }) => tryOnId)
+            .toSorted(),
+        ).toEqual([restored, unavailable, offline].toSorted());
+      });
+    } finally {
+      experience.dispose();
+    }
+  });
+
+  it.each(["stored", "deleted"] as const)(
+    "restores a session whose cut-out is %s",
+    async (cutOut) => {
+      await initializeTestUi();
+      defineSvTryOnExperience();
+      stubDialogMethods();
+      const expiresAt = "2099-01-01T00:00:00Z";
+      const productId = crypto.randomUUID();
+      const variantId = crypto.randomUUID();
+      const bodyId = crypto.randomUUID();
+      const bodyRevisionId = crypto.randomUUID();
+      const tryOnId = crypto.randomUUID();
+      const crop = "https://storage.example.test/crops/owner/cut-out.jxl";
+      const received: string[] = [];
+      const tryOn = deferred<Response>();
+      const restorePhoto = vi.fn<(src: string) => string>(() => crypto.randomUUID());
+      const api = { baseUrl: "https://api.example.test", clientApiKey: crypto.randomUUID() };
+      const stored = await bodySelectionStore(api.baseUrl, api.clientApiKey);
+      stored.save({ id: bodyId, source: PhotoSource.Library });
+      const history = await tryOnHistoryStore(api.baseUrl, api.clientApiKey);
+      history.remember(bodyId, {
+        tryOnId: crypto.randomUUID(),
+        productId,
+        variantId,
+        backendRevision: bodyRevisionId,
+      });
+      const experience = await createApiTryOnExperience({
+        api,
+        product: { productId },
+        presentProduct: () => ({
+          axes: [
+            { key: "size", items: [{ key: "M", display: new ItemDisplay.Text({ text: "M" }) }] },
+          ],
+          labelFormats: [],
+          variantId,
+          chosenAxes: [],
+        }),
+        fetch: async (input, init) => {
+          const request = new Request(input, init);
+          const url = new URL(request.url);
+          const route = `${request.method} ${url.pathname}`;
+          received.push(route);
+          switch (route) {
+            case `GET /products/${productId}`: {
+              return await Promise.resolve(
+                Response.json({
+                  productId,
+                  variants: [{ id: variantId, foreignVariantIds: { size: "M" } }],
+                }),
+              );
+            }
+            case "GET /session": {
+              return Response.json({ expiresAt });
+            }
+            case "GET /bodies": {
+              return Response.json({
+                bodies: [
+                  {
+                    bodyId,
+                    estimatedHeightCm: 172,
+                    userProvidedHeightCm: 170,
+                    bodyRevisionId,
+                    createdAt: "2026-01-01T00:00:00Z",
+                    // Empty once retention deleted the cut-out.
+                    sourceImageUrl: cutOut === "stored" ? crop : "",
+                    sourceImageUrlExpiresAt: expiresAt,
+                  },
+                ],
+              });
+            }
+            case `GET /try-ons/${tryOnId}`:
+            case `GET /products/${productId}/recommended-size`: {
+              return Response.json(
+                { kind: "internal-server-error", title: "Unavailable" },
+                { status: 500 },
+              );
+            }
+            case `POST /products/${productId}/try-on`: {
+              return await tryOn.promise;
+            }
+            default: {
+              throw new Error(`Unexpected route: ${route}`);
+            }
+          }
+        },
+        devices: {
+          restorePhoto,
+          startDeviceEffect: () => globalThis.undefined,
+          getPhoto: () => globalThis.undefined,
+          getUploadPhoto: () => globalThis.undefined,
+          getCamera: () => globalThis.undefined,
+          applyDomainMediaEffect: vi.fn<() => void>(),
+          dispose: vi.fn<() => void>(),
+        },
+      });
+      const element = document.createElement("sv-try-on-experience");
+      element.experience = experience;
+      document.body.append(element);
+      const notes = () =>
+        [...(element.shadowRoot?.querySelectorAll("sv-message") ?? [])].map((message) => ({
+          variant: message.variant,
+          text: message.textContent?.trim(),
+        }));
+      try {
+        await vi.waitFor(() => {
+          expect(experience.view.domain.session).toBe(SessionPhase.Ready);
+        });
+        if (cutOut === "deleted") {
+          // Nothing to show or try on with: no body, no photo box, a calm request for a photo.
+          expect(BodyState.NoBody.instanceOf(experience.view.domain.body)).toBe(true);
+          expect(experience.view.domain.photo).toBeUndefined();
+          expect(restorePhoto).not.toHaveBeenCalled();
+          expect(stored.selected()).toBeUndefined();
+          expect(history.of(bodyId)).toEqual([]);
+          experience.open();
+          expect(ScreenView.Introduction.instanceOf(experience.view.screen)).toBe(true);
+          await rendered(element, "sv-session-intro-screen");
+          await vi.waitFor(() => {
+            expect(notes()).toEqual([{ variant: "neutral", text: "Add a photo to try this on." }]);
+          });
+          expect(element.shadowRoot?.querySelector("sv-try-on-view-screen")).toBeNull();
+          expect(received).not.toContain(`POST /products/${productId}/try-on`);
+          return;
+        }
+
+        // The cut-out shows where the photo shows: the try-on view, while rendering, and height.
+        await vi.waitFor(() => {
+          expect(bodyIdentity(experience.view.domain.body)?.bodyId).toBe(bodyId);
+        });
+        expect(restorePhoto).toHaveBeenCalledWith(crop);
+        experience.open();
+        const screen = await rendered(element, "sv-try-on-view-screen");
+        expect(screen.photoSrc).toBe(crop);
+        await press(screen, 'sv-button[slot="primary"]');
+        await vi.waitFor(() => {
+          expect(screen.state).toBe("generating");
+        });
+        expect(screen.photoSrc).toBe(crop);
+        expect(notes().filter(({ variant }) => variant !== "neutral")).toEqual([]);
+        tryOn.resolve(
+          Response.json(
+            {
+              status: "completed",
+              tryOnId,
+              variantId,
+              bodyRevisionId,
+              imageUrl: "/result.webp",
+              scene: { overlayColor: "#ffffff" },
+            },
+            { status: 201 },
+          ),
+        );
+        await vi.waitFor(() => {
+          expect(screen.presentation?.displayed).toEqual(new DisplayedImage.TryOn({ tryOnId }));
+        });
+        editHeight(experience);
+        const height = await renderedAfterUpdate(element, "sv-height-setting-screen");
+        expect(height.photoSrc).toBe(crop);
+        expect(experience.failure).toBeUndefined();
+      } finally {
+        element.remove();
+        experience.dispose();
+      }
+    },
+  );
+
   it.each(["fit-retry", "historical-fit", "credential-refresh", "cross-tab-height"] as const)(
     "restores a body and handles %s",
     async (scenario) => {
@@ -1743,6 +2102,7 @@ describe("web try-on experience", () => {
         },
       });
       const element = document.createElement("sv-try-on-experience");
+      element.fitScore = true;
       element.experience = experience;
       document.body.append(element);
       try {
@@ -2301,6 +2661,9 @@ describe("generated API and mounted experience parity", () => {
     "body-not-found",
     "image-reauth",
     "try-on-variant-mismatch",
+    "try-on-network-error",
+    "try-on-gateway-timeout",
+    "try-on-undecodable",
     "recommendation-unavailable",
   ] as const)("%s", async (scenario) => {
     await initializeTestUi();
@@ -2315,6 +2678,7 @@ describe("generated API and mounted experience parity", () => {
     const baseUrl = "https://api.example.test";
     const api = { baseUrl, clientApiKey: crypto.randomUUID() };
     const routes: string[] = [];
+    const tryOnKeys: (string | null)[] = [];
     let heightWrites = 0;
     let renders = 0;
     const fetchImpl: typeof fetch = async (input, init) => {
@@ -2322,6 +2686,9 @@ describe("generated API and mounted experience parity", () => {
       const url = new URL(request.url);
       const route = `${request.method} ${url.pathname}`;
       routes.push(route);
+      if (route.endsWith("/try-on")) {
+        tryOnKeys.push(request.headers.get("Idempotency-Key"));
+      }
       const problem = (kind: string, status: number) =>
         Response.json(
           { kind, title: kind },
@@ -2380,6 +2747,19 @@ describe("generated API and mounted experience parity", () => {
           if (scenario === "body-not-found") {
             return problem("body-not-found", 404);
           }
+          if (scenario === "try-on-network-error" && renders === 1) {
+            throw new TypeError("Failed to fetch");
+          }
+          if (scenario === "try-on-gateway-timeout" && renders === 1) {
+            return new Response("upstream timed out", { status: 504 });
+          }
+          if (scenario === "try-on-undecodable" && renders === 1) {
+            // Created and billed by the backend; only the answer was lost.
+            return new Response('{"status":"compl', {
+              status: 201,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
           return Response.json(
             {
               status: "completed",
@@ -2430,6 +2810,7 @@ describe("generated API and mounted experience parity", () => {
       });
     const experience = await connect();
     const element = document.createElement("sv-try-on-experience");
+    element.fitScore = true;
     element.experience = experience;
     const cart = vi.fn<() => Promise<void>>().mockImplementation(async () => globalThis.undefined);
     element.addToCart = cart;
@@ -2487,6 +2868,34 @@ describe("generated API and mounted experience parity", () => {
             expect(screen.tryOns).toHaveLength(1);
           });
           expect(experience.adapters.getResult?.(tryOnId)?.result.variantId).toBe(variantId);
+        } else if (
+          scenario === "try-on-network-error" ||
+          scenario === "try-on-gateway-timeout" ||
+          scenario === "try-on-undecodable"
+        ) {
+          // A lost response is a failed try-on: the photo stays and the same try-on is retried.
+          await vi.waitFor(() => {
+            expect(screen.state).toBe("error");
+          });
+          expect(screen.error).toContain("could not generate the try-on");
+          expect(experience.view.domain.uncertainTryOn).toBe(false);
+          expect(bodyIdentity(experience.view.domain.body)?.bodyId).toBe(bodyId);
+          expect(Capability.Unavailable.instanceOf(screen.presentation?.canRequestTryOn)).toBe(
+            false,
+          );
+          const retry = await rendered(screen, "sv-button", 'sv-button[slot="primary"]');
+          expect(retry.textContent).toContain("Retry");
+          await press(screen, 'sv-button[slot="primary"]');
+          await vi.waitFor(() => {
+            expect(screen.tryOns).toHaveLength(1);
+          });
+          expect(routes.filter((route) => route.endsWith("/try-on"))).toHaveLength(2);
+          // The retry repeats the attempt's idempotency key, so the backend answers with the
+          // try-on it may have made instead of rendering and billing a second.
+          expect(tryOnKeys).toHaveLength(2);
+          expect(tryOnKeys[0]).toMatch(/^[0-9a-f-]{36}$/u);
+          expect(tryOnKeys[1]).toBe(tryOnKeys[0]);
+          expect(bodyIdentity(experience.view.domain.body)?.bodyId).toBe(bodyId);
         } else if (scenario === "recommendation-unavailable") {
           await vi.waitFor(() => {
             expect(screen.tryOns).toHaveLength(1);
@@ -3258,6 +3667,106 @@ describe("result recovery and height navigation", () => {
     },
   );
 
+  it("gives analytics the recommendation to compare a tried and a carted size with", async () => {
+    const sent: Request[] = [];
+    const analytics = createTryOnAnalytics({
+      clientApiKey: "public-shop-key",
+      baseUrl: "https://collector.example.test",
+      enabled: () => true,
+      fetch: async (input, init) => {
+        sent.push(new Request(input, init));
+        return await Promise.resolve(new Response(null, { status: 204 }));
+      },
+    });
+    const fixture = await mountWithAdapters({
+      open: false,
+      run: () => result(),
+      recommend: (variantId) =>
+        new Outcome.SizeRecommendation({
+          outcome: new SizeRecommendationOutcome.Fetched({
+            scores: [
+              { variantIds: [variantId], aggregate: { fit: Fit.Ideal, fitMatch: 0.75 }, axes: [] },
+            ],
+          }),
+        }),
+    });
+    const { element, experience, dispose } = fixture;
+    // From the opening on, as a host observes it.
+    const stop = analytics.observe((listener) => experience.subscribeEvents(listener));
+    experience.open();
+    element.addToCart = (detail) => {
+      analytics.cartItemAdded(detail);
+    };
+    const compared = async () => {
+      const bodies = await Promise.all(
+        sent.map(
+          async (request) =>
+            (await request.clone().json()) as {
+              event: { name: string; data: Record<string, unknown> };
+            },
+        ),
+      );
+      return bodies
+        .filter(({ event }) => event.name === "size-compared")
+        .map(({ event }) => event.data);
+    };
+    try {
+      await vi.waitFor(() => {
+        expect(experience.view.domain.sizeRecommendationPending).toBe(false);
+      });
+      const screen = await firstResult(fixture);
+      await settleResultImage(screen);
+      await press(screen, 'sv-button[slot="secondary"]');
+      await vi.waitFor(async () => {
+        await expect(compared()).resolves.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ measure: "tried", "recommended-size": "M" }),
+            expect.objectContaining({
+              measure: "cart",
+              "observed-size": "M",
+              "recommended-size": "M",
+            }),
+          ]),
+        );
+      });
+    } finally {
+      stop();
+      dispose();
+    }
+  });
+
+  it("hides the fit score unless the host opts in", async () => {
+    const fixture = await mountWithAdapters({
+      fitScore: false,
+      run: () => result(),
+      recommend: (variantId) =>
+        new Outcome.SizeRecommendation({
+          outcome: new SizeRecommendationOutcome.Fetched({
+            scores: [
+              { variantIds: [variantId], aggregate: { fit: Fit.Ideal, fitMatch: 0.75 }, axes: [] },
+            ],
+          }),
+        }),
+    });
+    const { element, dispose } = fixture;
+    try {
+      expect(element.fitScore).not.toBe(true);
+      const screen = await firstResult(fixture);
+      await settleResultImage(screen);
+      await element.updateComplete;
+      expect(screen.fit).toBeUndefined();
+      expect(screen.shadowRoot?.querySelector("sv-fit-score")).toBeNull();
+      element.fitScore = true;
+      await element.updateComplete;
+      await vi.waitFor(() => {
+        expect(screen.fit).toMatchObject({ state: "ready" });
+      });
+      await rendered(screen, "sv-fit-score");
+    } finally {
+      dispose();
+    }
+  });
+
   it("keeps the result visible until the dialog finishes closing", async () => {
     const fixture = await mountWithAdapters({
       run: () => result(),
@@ -3549,7 +4058,16 @@ describe("camera, photo, and fit gates", () => {
       });
       experience.dispatch(new FlowAction.Camera({ action: new CameraAction.Switch() }));
       await vi.waitFor(() => {
-        expect(constraints[1]?.video).toEqual({ deviceId: { exact: "rear" } });
+        expect(constraints[0]?.video).toEqual({
+          facingMode: { ideal: "user" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        });
+        expect(constraints[1]?.video).toEqual({
+          deviceId: { exact: "rear" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        });
       });
       await vi.waitFor(() => {
         expect(screen.state).toBe("live");
@@ -3557,7 +4075,11 @@ describe("camera, photo, and fit gates", () => {
       experience.dispatch(new FlowAction.Presence({ action: PresenceAction.Suspend }));
       experience.dispatch(new FlowAction.Presence({ action: PresenceAction.Resume }));
       await vi.waitFor(() => {
-        expect(constraints[2]?.video).toEqual({ deviceId: { exact: "rear" } });
+        expect(constraints[2]?.video).toEqual({
+          deviceId: { exact: "rear" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        });
       });
       await vi.waitFor(() => {
         expect(screen.state).toBe("live");
@@ -3573,8 +4095,7 @@ describe("camera, photo, and fit gates", () => {
     }
   });
 
-  it("announces file selection while the rejected-photo picker is open", async () => {
-    const picker = deferred<DeviceEvent>();
+  it("keeps the rejected-photo screen idle while its picker is open, and can open it again", async () => {
     let count = 0;
     const fixture = await mountWithAdapters({
       height: null,
@@ -3588,7 +4109,7 @@ describe("camera, photo, and fit gates", () => {
           ? new DeviceEvent.Picker({
               event: new PickerEvent.Selected({ token, media: crypto.randomUUID() }),
             })
-          : picker.promise;
+          : deferred<DeviceEvent>().promise;
       },
     });
     const { element, experience, dispose } = fixture;
@@ -3605,9 +4126,48 @@ describe("camera, photo, and fit gates", () => {
       await vi.waitFor(() => {
         expect(Modal.Picker.instanceOf(experience.view.modal)).toBe(true);
       });
+      await rejected.updateComplete;
       const shell = await rendered(rejected, "sv-screen");
-      expect(shell.statusMessage).toMatch(/choosing.*photo/i);
+      expect(rejected.busy).toBe(false);
+      expect(shell.statusMessage).toBe("");
       expect(experience.view.photoChange?.newPhoto).toBeUndefined();
+      // A picker whose cancellation never arrives does not keep the photo closed.
+      await press(rejected, 'sv-button[slot="primary"]');
+      await vi.waitFor(() => {
+        expect(count).toBe(3);
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it("only spins the intro's upload once a photo is chosen, not while the picker is open", async () => {
+    const picker = deferred<DeviceEvent>();
+    let token = "";
+    const { experience, element, dispose } = await mountWithAdapters({
+      restore: false,
+      async choosePhoto(opened): Promise<DeviceEvent> {
+        token = opened;
+        return await picker.promise;
+      },
+    });
+    try {
+      const intro = await rendered(element, "sv-session-intro-screen");
+      const checkbox = await rendered(intro, "sv-checkbox");
+      checkbox.shadowRoot?.querySelector("button")?.click();
+      await press(intro, 'sv-button[slot="primary"]');
+      await vi.waitFor(() => {
+        expect(Modal.Picker.instanceOf(experience.view.modal)).toBe(true);
+      });
+      await intro.updateComplete;
+      expect(intro.busy).toBe(false);
+      picker.resolve(new DeviceEvent.Picker({ event: new PickerEvent.Cancelled({ token }) }));
+      await vi.waitFor(() => {
+        expect(experience.view.modal).toBeUndefined();
+      });
+      await intro.updateComplete;
+      expect(intro.busy).toBe(false);
+      expect(ScreenView.Introduction.instanceOf(experience.view.screen)).toBe(true);
     } finally {
       dispose();
     }
@@ -3712,6 +4272,145 @@ describe("camera, photo, and fit gates", () => {
       const button = await rendered(height, "sv-button", 'sv-button[slot="primary"]');
       expect(button.disabled).toBe(true);
       expect(calls).toEqual([172, 181]);
+    } finally {
+      dispose();
+    }
+  });
+});
+
+describe("next size that fits", () => {
+  /**
+   * A product in S, M and L whose fit gate refuses `refused`, with `picked` selected by the
+   * shopper in the picker, or by the storefront when `by` is `"storefront"`.
+   */
+  async function gated(
+    picked: string,
+    refused: Record<string, RefusalReason>,
+    by: "shopper" | "storefront" = "shopper",
+  ) {
+    const rec = deferred<Outcome>();
+    const run = vi.fn<NonNullable<Parameters<typeof mountWithAdapters>[0]>["run"]>(() => result());
+    const fixture = await mountWithAdapters({ run, recommend: async () => await rec.promise });
+    const variants = installStyles(fixture.experience, ["Plain"], ["S", "M", "L"]);
+    const bySize = (size: string) => variants.find((v) => v.foreignIds.get("size") === size)!;
+    if (by === "storefront") {
+      fixture.experience.setSelection({ size: picked });
+    } else {
+      fixture.experience.dispatch(
+        new FlowAction.Selection({
+          action: new SelectionAction.SelectItem({ axis: "size", item: picked }),
+        }),
+      );
+    }
+    rec.resolve(
+      new Outcome.SizeRecommendation({
+        outcome: new SizeRecommendationOutcome.Ranked({
+          preferred: [bySize("M").id],
+          scores: [],
+          noSuitableSize: false,
+          restrictions: Object.entries(refused).map(([size, reason]) => ({
+            variantId: bySize(size).id,
+            reason,
+          })),
+        }),
+      }),
+    );
+    const screen = await rendered(fixture.element, "sv-try-on-view-screen");
+    await vi.waitFor(() => {
+      expect(fixture.experience.view.domain.sizeRecommendationPending).toBe(false);
+    });
+    await fixture.element.updateComplete;
+    await screen.updateComplete;
+    return { ...fixture, run, screen, bySize };
+  }
+
+  /** Text as read, without MF2's bidi isolation marks. */
+  const plain = (text: string | null | undefined) =>
+    text
+      ?.replace(/[\u2068\u2069]/gu, "")
+      .replace(/\s+/gu, " ")
+      .trim();
+  /** The gate note, which the picker's size row shows in place of the recommendation. */
+  const note = (element: HTMLElement) =>
+    plain(
+      element.shadowRoot
+        ?.querySelector("sv-try-on-view-screen")
+        ?.shadowRoot?.querySelector("sv-variant-picker")
+        ?.shadowRoot?.querySelector(".badge-slot .note")?.textContent,
+    );
+  const primary = async (screen: HTMLElementTagNameMap["sv-try-on-view-screen"]) =>
+    await rendered(screen, "sv-button", 'sv-button[slot="primary"]');
+  const tryOns = (run: { mock: { calls: unknown[][] } }) =>
+    run.mock.calls.flatMap(([job]) =>
+      Job.TryOn.instanceOf(job) && TryOnJob.Create.instanceOf(job.inner.job)
+        ? [job.inner.job.inner.key.variantId]
+        : [],
+    );
+
+  it("names the next larger size for a size too small, and the button tries it on", async () => {
+    const { element, experience, screen, run, bySize, dispose } = await gated("S", {
+      S: RefusalReason.GarmentTooSmall,
+    });
+    try {
+      expect(experience.view.screen).toBeDefined();
+      expect(note(element)).toContain("Size S is too small. We recommend size M.");
+      const button = await primary(screen);
+      expect(button.disabled).toBe(false);
+      expect(plain(button.textContent)).toMatch(/Try on M\b/u);
+      await press(screen, 'sv-button[slot="primary"]');
+      await vi.waitFor(() => {
+        expect(tryOns(run)).toEqual([bySize("M").id]);
+      });
+      expect(ScreenView.TryOn.instanceOf(experience.view.screen)).toBe(true);
+      const view = experience.view.screen as InstanceType<typeof ScreenView.TryOn>;
+      expect(view.inner.selection.variantId).toBe(bySize("M").id);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("moves a storefront size the gate refuses to the next size that fits, and says why", async () => {
+    const { element, experience, screen, run, bySize, dispose } = await gated(
+      "S",
+      { S: RefusalReason.GarmentTooSmall },
+      "storefront",
+    );
+    try {
+      const view = experience.view.screen as InstanceType<typeof ScreenView.TryOn>;
+      expect(view.inner.selection.variantId).toBe(bySize("M").id);
+      expect(note(element)).toContain("Size S is too small. We recommend size M.");
+      const button = await primary(screen);
+      expect(plain(button.textContent)).toMatch(/^Try on M\b/u);
+      // The shopper did not ask for M: nothing runs until they press the button.
+      expect(tryOns(run)).toEqual([]);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("skips sizes the gate refuses too, and names a smaller size for one too large", async () => {
+    const { element, screen, dispose } = await gated("L", {
+      L: RefusalReason.GarmentTooLarge,
+      M: RefusalReason.GarmentTooLarge,
+    });
+    try {
+      expect(note(element)).toContain("Size L is too large. We recommend size S.");
+      const button = await primary(screen);
+      expect(plain(button.textContent)).toMatch(/Try on S\b/u);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("keeps the button closed when no size is left in that direction", async () => {
+    const { element, screen, run, dispose } = await gated("L", {
+      L: RefusalReason.GarmentTooSmall,
+    });
+    try {
+      expect(note(element)).toContain("this style doesn't come any larger");
+      const button = await primary(screen);
+      expect(button.disabled).toBe(true);
+      expect(tryOns(run)).toEqual([]);
     } finally {
       dispose();
     }
@@ -4743,6 +5442,72 @@ describe("device recovery across transitions", () => {
       }
     },
   );
+
+  it("drops the restored cut-out it holds once the API deleted it", async () => {
+    await initializeTestUi();
+    const api = { baseUrl: "https://api.example.test", clientApiKey: crypto.randomUUID() };
+    const selection = await bodySelectionStore(api.baseUrl, api.clientApiKey);
+    const bodyId = crypto.randomUUID();
+    selection.save({ id: bodyId, source: PhotoSource.Library });
+    const expiresAt = "2099-01-01T00:00:00Z";
+    const crop = "https://storage.example.test/crops/owner/cut-out.jxl";
+    let bodyReads = 0;
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const url = new URL(new Request(input, init).url);
+      if (url.href === crop) {
+        return new Response(new Blob(["cut-out"], { type: "image/png" }));
+      }
+      if (url.pathname === "/session") {
+        return Response.json({ expiresAt });
+      }
+      bodyReads += 1;
+      return await Promise.resolve(
+        Response.json({
+          bodies: [
+            {
+              bodyId,
+              createdAt: expiresAt,
+              estimatedHeightCm: 170,
+              sourceImageUrl: bodyReads === 1 ? crop : "",
+              sourceImageUrlExpiresAt: expiresAt,
+            },
+          ],
+        }),
+      );
+    };
+    const revoked: string[] = [];
+    // The one blob this restore makes.
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:1");
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation((src) => {
+      revoked.push(src);
+    });
+    const client = new ApiClient(api, browserTransport(fetch));
+    const media = crypto.randomUUID();
+    const session = apiSession(client, fetch, selection, () => media);
+    try {
+      await session.run(new SessionJob.Restore(), new AbortController().signal);
+      const restored = session.getRestoredPhoto(media);
+      expect(restored?.src).toBe("blob:1");
+      expect(session.photoGone()).toBe(false);
+
+      // The renewal finds the cut-out deleted: the page lets go of its copy.
+      await expect(session.refreshPhoto(restored!, new AbortController().signal)).resolves.toBe(
+        true,
+      );
+      expect(revoked).toEqual(["blob:1"]);
+      expect(session.getRestoredPhoto(media)).toMatchObject({ src: "", gone: true });
+      expect(session.photoGone()).toBe(true);
+      await expect(
+        session.refreshPhoto(session.getRestoredPhoto(media)!, new AbortController().signal),
+      ).resolves.toBe(false);
+      expect(bodyReads).toBe(2);
+    } finally {
+      session.dispose();
+      client.uniffiDestroy();
+      createObjectURL.mockRestore();
+      revokeObjectURL.mockRestore();
+    }
+  });
 
   it.each(["missing", "malformed"] as const)(
     "restores without a photo when the committed body is %s",

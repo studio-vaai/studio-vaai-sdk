@@ -31,13 +31,19 @@ export class SvOptionGroup extends SvElement {
         min-inline-size: 0;
         max-inline-size: 100%;
       }
+      /* A row longer than its panel scrolls sideways: it reaches the panel's edges (the host sets
+         the bleed, its own inset) and keeps that inset at either end, so the first and last chip
+         line up with the rest of the panel instead of being cut at its content edge. */
       .chips {
+        --_sv-chips-bleed: var(--_sv-picker-bleed, calc(var(--_sv-spacing) * 0.5));
         display: flex;
         gap: calc(var(--_sv-spacing) * 1.5);
         min-inline-size: 0;
         overflow-x: auto;
-        margin-inline: calc(var(--_sv-spacing) * -0.5);
-        padding: calc(var(--_sv-spacing) * 0.5);
+        margin-inline: calc(-1 * var(--_sv-chips-bleed));
+        padding-block: calc(var(--_sv-spacing) * 0.5);
+        padding-inline: var(--_sv-chips-bleed);
+        scroll-padding-inline: var(--_sv-chips-bleed);
         scrollbar-width: none;
       }
       .chips.swatches {

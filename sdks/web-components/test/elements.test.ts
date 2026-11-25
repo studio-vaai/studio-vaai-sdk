@@ -89,6 +89,21 @@ describe("sv elements", () => {
       expect(el.shadowRoot?.querySelector("sv-spinner")).not.toBeNull();
     });
 
+    it("disables an icon button while busy and enables it when the spinner is removed", async () => {
+      const el = await mount("sv-button", { variant: "icon", busy: "" });
+      const button = inner(el, "button");
+
+      expect(button.disabled).toBe(true);
+      expect(button.getAttribute("aria-busy")).toBe("true");
+      expect(inner(el, "sv-spinner")).toBeDefined();
+
+      el.busy = false;
+      await el.updateComplete;
+      expect(inner(el, "button")).toBe(button);
+      expect(button.disabled).toBe(false);
+      expect(el.shadowRoot?.querySelector("sv-spinner")).toBeNull();
+    });
+
     it("disables the native button", async () => {
       const el = await mount("sv-button", { disabled: "" });
       expect(inner(el, "button").hasAttribute("disabled")).toBe(true);
@@ -235,13 +250,14 @@ describe("sv elements", () => {
       expect(inner(soldOut, "button").getAttribute("aria-disabled")).toBe("true");
     });
 
-    it("draws a swatch named by its label, with a check readable on its color", async () => {
+    it("draws a selected swatch with its label and without a checkmark", async () => {
       const el = await mount("sv-chip", { color: "#18366d", label: "Navy", selected: "" });
       const button = inner(el, "button");
       expect(button.classList.contains("swatch")).toBe(true);
       expect(button.getAttribute("aria-label")).toBe("Navy");
       expect(inner(el, ".disc").style.background).toBe("rgb(24, 54, 109)");
-      expect(inner(el, ".check").style.color).toBe("rgb(255, 255, 255)");
+      expect(button.getAttribute("aria-pressed")).toBe("true");
+      expect(button.querySelector("sv-icon")).toBeNull();
     });
 
     it("lays a fabric photo over the color, without a check, and falls back to the color", async () => {
@@ -253,10 +269,33 @@ describe("sv elements", () => {
       });
       const img = inner(el, ".disc img");
       expect(img.getAttribute("src")).toBe("/fabric.jpg");
-      expect(el.shadowRoot?.querySelector(".check")).toBeNull();
+      expect(el.shadowRoot?.querySelector("sv-icon")).toBeNull();
       img.dispatchEvent(new Event("error"));
       expect(img.hidden).toBe(true);
       expect(inner(el, ".disc").style.background).toBe("rgb(56, 102, 176)");
+    });
+
+    it("keeps a refused size in the same bubble as the other sizes", async () => {
+      const refused = await mount("sv-chip", { label: "XS", status: "refused" });
+      const plain = await mount("sv-chip", { label: "M" });
+      // The same button and class, so the same pill, height and padding.
+      expect(inner(refused, "button").className).toBe(inner(plain, "button").className);
+      const css = (
+        customElements.get("sv-chip") as unknown as { styles: { cssText: string }[] }
+      ).styles
+        .map(({ cssText }) => cssText)
+        .join("\n");
+      // The picker panel is the muted color: a refused chip takes the control surface, so it
+      // does not read as bare text on it, and only its text is muted and struck through.
+      const rule =
+        /:host\(\[status="refused"\]\) \.chip,\s*:host\(\[status="sold-out"\]\) \.chip\s*\{([^}]*)\}/u.exec(
+          css,
+        );
+      expect(rule?.at(1)).toContain("background: var(--_sv-control);");
+      expect(rule?.at(1)).toContain("color: var(--_sv-muted-foreground);");
+      expect(css).toMatch(
+        /:host\(\[status="refused"\]\) \.chip\s*\{\s*text-decoration: line-through;/u,
+      );
     });
 
     it("rings a white swatch so it doesn't vanish on paper", async () => {
@@ -264,6 +303,12 @@ describe("sv elements", () => {
       const navy = await mount("sv-chip", { color: "#18366d", label: "Navy" });
       expect(inner(white, "button").classList.contains("light")).toBe(true);
       expect(inner(navy, "button").classList.contains("light")).toBe(false);
+      // The outline sits on the disc, which would cover one drawn on the chip.
+      const styles = (customElements.get("sv-chip") as unknown as { styles: { cssText: string }[] })
+        .styles;
+      expect(styles.map(({ cssText }) => cssText).join("\n")).toMatch(
+        /\.chip\.swatch\.light \.disc\s*\{\s*box-shadow: inset 0 0 0 1px var\(--_sv-input\)/u,
+      );
     });
   });
 
@@ -358,6 +403,13 @@ describe("sv elements", () => {
       );
       const publicNames = new Set<string>(SV_PUBLIC_TOKENS);
       expect([...read].filter((name) => name !== undefined && !publicNames.has(name))).toEqual([]);
+    });
+
+    it("lets a shop round its buttons alone, following the base radius until it does", () => {
+      expect(svTokens.cssText).toContain(
+        "--_sv-button-radius: var(--sv-button-radius, var(--_sv-radius));",
+      );
+      expect(new Set<string>(SV_PUBLIC_TOKENS).has("button-radius")).toBe(true);
     });
 
     it("does not expose weights, shadows or motion", () => {

@@ -34,7 +34,10 @@ export interface SvStockNoticeDetail {
 export interface SvVariantPickerProps {
   /** The Rust experience's selection projection, including the target of every choice. */
   selection?: SelectionView | undefined;
-  /** Previously tried option IDs by axis, after accounting for related selections. */
+  /**
+   * Previously tried option IDs by axis, after accounting for related selections. Items the
+   * selection marks as tried are marked either way.
+   */
   triedItems?: ReadonlyMap<AxisKey, ReadonlySet<ForeignId>> | undefined;
   /** The recommended size as host-localized axis values. */
   recommendedSize?: VariantLabel | undefined;
@@ -114,6 +117,43 @@ export class SvVariantPicker extends SvElement implements SvVariantPickerProps {
         align-items: center;
         gap: calc(var(--_sv-spacing) * 1.5);
       }
+      /*
+       * The size row's heading keeps one height whatever it says: the recommendation badge, a
+       * note in its place, or nothing yet. The badge's place is a slot of fixed height, beside
+       * the label where the picker is wide and on a line of its own where it is narrow, and a
+       * note longer than the slot ends in an ellipsis (its whole text is its title and is
+       * announced). The chips below never move.
+       */
+      :host {
+        container-type: inline-size;
+      }
+      .heading.badged {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        column-gap: calc(var(--_sv-spacing) * 1.5);
+        row-gap: var(--_sv-spacing);
+      }
+      .badge-slot {
+        display: flex;
+        align-items: center;
+        min-inline-size: 0;
+        block-size: calc(var(--_sv-root) * 1.375);
+      }
+      @container (max-width: 24rem) {
+        .heading.badged {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      .badge-slot .note {
+        align-items: center;
+        max-inline-size: 100%;
+        white-space: nowrap;
+      }
+      .badge-slot .note > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
       .recommendation {
         display: inline-flex;
         appearance: none;
@@ -151,6 +191,7 @@ export class SvVariantPicker extends SvElement implements SvVariantPickerProps {
   ];
 
   static override properties = {
+    sizeNote: { attribute: false },
     selection: { attribute: false },
     triedItems: { attribute: false },
     recommendedSize: { attribute: false },
@@ -160,6 +201,8 @@ export class SvVariantPicker extends SvElement implements SvVariantPickerProps {
     disabled: { type: Boolean, reflect: true },
   };
 
+  /** Said about the selected size in place of the recommendation, e.g. why the fit gate refuses it. */
+  declare sizeNote: string | undefined;
   declare selection: SelectionView | undefined;
   declare triedItems: ReadonlyMap<AxisKey, ReadonlySet<ForeignId>> | undefined;
   declare recommendedSize: VariantLabel | undefined;
@@ -231,8 +274,7 @@ export class SvVariantPicker extends SvElement implements SvVariantPickerProps {
   }
 
   readonly #announcements = new LiveStatus(this, () =>
-    (this.selection?.rows ?? [])
-      .map((row) => this.#noticeText(row))
+    [this.sizeNote, ...(this.selection?.rows ?? []).map((row) => this.#noticeText(row))]
       .filter(Boolean)
       .join(" "),
   );
@@ -266,15 +308,31 @@ export class SvVariantPicker extends SvElement implements SvVariantPickerProps {
         });
   }
 
+  /** The host's axis name, else "Size:" or "Color:" by the axis role, with the selected value. */
+  #rowLabel(row: VariantRow, value: string): string | undefined {
+    if (row.label !== undefined && row.label !== "") {
+      return value === ""
+        ? row.label
+        : this.ui.text("tryOnView.variantAxisLabel", { axisLabel: row.label, valueLabel: value });
+    }
+    if (row.role === AxisRole.Size) {
+      return this.ui.text("tryOnView.sizeAxisLabel", {
+        hasSize: value === "" ? "no" : "yes",
+        sizeLabel: value,
+      });
+    }
+    if (row.role === AxisRole.Color && value !== "") {
+      return this.ui.text("tryOnView.colorAxisLabel", { colorLabel: value });
+    }
+    return row.label;
+  }
+
   #renderRow(row: VariantRow, firstSize: AxisKey | undefined) {
     const tried = this.triedItems?.get(row.key);
     const selected = row.items.find((item) => item.selected);
     const value = selected === undefined ? "" : itemDisplayText(selected.display);
-    const label =
-      row.label === undefined || row.label === "" || value === ""
-        ? row.label
-        : this.ui.text("tryOnView.variantAxisLabel", { axisLabel: row.label, valueLabel: value });
-    const note = this.#noticeText(row);
+    const label = this.#rowLabel(row, value);
+    const note = (row.key === firstSize ? this.sizeNote : undefined) ?? this.#noticeText(row);
     const recommendation =
       this.recommendedSize !== undefined && row.key === firstSize
         ? this.ui.text("tryOnView.recommendedVariant", { variant: this.recommendedSize })
@@ -288,25 +346,41 @@ export class SvVariantPicker extends SvElement implements SvVariantPickerProps {
     const hasHeading = [label, note, recommendation, fallback].some(
       (text) => text !== undefined && text !== "",
     );
+    const noteView =
+      note === undefined
+        ? nothing
+        : html`<span class="note" part="note" title=${note}
+            ><sv-icon name="info"></sv-icon><span>${note}</span></span
+          >`;
+    // A note replaces the recommendation: the badge is the steady state, the note the interruption.
+    const badge =
+      note === undefined ? this.#recommendationBadge(recommendation, fallback) : noteView;
+    let heading: unknown = nothing;
+    if (row.key === firstSize) {
+      heading = html`<div class="heading badged">
+        <span part="label" class="label">${label ?? ""}</span>
+        <div class="badge-slot">${badge}</div>
+      </div>`;
+    } else if (hasHeading) {
+      heading = html`<div class="heading">
+        ${label === undefined || label === "" ? nothing : html`<span part="label" class="label">${label}</span>`}
+        ${noteView}
+        ${note === undefined ? this.#recommendationBadge(recommendation, fallback) : nothing}
+      </div>`;
+    }
     return html`<div part="row" class="row">
-      ${
-        hasHeading
-          ? html`<div class="heading">
-              ${label === undefined || label === "" ? nothing : html`<span part="label" class="label">${label}</span>`}
-              ${note === undefined ? nothing : html`<span class="note"><sv-icon name="info"></sv-icon><span>${note}</span></span>`}
-              ${this.#recommendationBadge(recommendation, note === undefined ? fallback : undefined)}
-            </div>`
-          : nothing
-      }
+      ${heading}
       <sv-option-group
         exportparts="chips"
         .label=${row.displayOptions?.control === AxisControl.Segmented ? row.label : label}
         .control=${row.displayOptions?.control}
         .options=${row.items.map((item) => {
-          const wasTried = tried?.has(item.key) === true;
-          let mark: OptionMark | undefined = wasTried ? "tried" : undefined;
-          if (row.role === AxisRole.Size && item.selected) {
-            mark = "current";
+          // The core marks an item whose choice selects a variant already tried.
+          const wasTried = item.tried || tried?.has(item.key) === true;
+          // Only a selected, tried size uses a dark mark.
+          let mark: OptionMark | undefined;
+          if (wasTried) {
+            mark = row.role === AxisRole.Size && item.selected ? "current" : "tried";
           }
           const description = this.#description(item);
           return {

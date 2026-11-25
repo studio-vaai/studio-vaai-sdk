@@ -32,6 +32,10 @@ pub struct TryOn {
     pub fit: Option<ResultFit>,
     #[cfg_attr(feature = "uniffi", uniffi(default))]
     pub fit_anchors: Option<Vec<ResultFitAnchor>>,
+    /// The person's outline in the image, as horizontal bands from top to
+    /// bottom, for placing the fit callouts beside the person.
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub subject_bands: Option<Vec<ResultSubjectBand>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -41,6 +45,17 @@ pub struct ResultFitAnchor {
     pub side: Option<String>,
     pub x: f64,
     pub y: f64,
+}
+
+/// One horizontal band of the person's outline in a result image, garment
+/// included. All values range from 0 to 1 relative to the complete image.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ResultSubjectBand {
+    pub top: f64,
+    pub bottom: f64,
+    pub left: f64,
+    pub right: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -335,6 +350,25 @@ pub enum TryOnCommand {
         expected: TryOnAsset,
         image_url: ImageUrl,
     },
+    /// Brings back try-ons the shopper made earlier with this body, as the
+    /// backend still has them, e.g. after a page reload restored the
+    /// session. Only those of the body's acknowledged height are kept; one
+    /// known already, by its identifier or its key, is skipped.
+    Restore { try_ons: Vec<RestoredTryOn> },
+}
+
+/// A try-on made earlier with the body, as the backend reports it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct RestoredTryOn {
+    pub try_on_id: TryOnId,
+    /// The product it was made for.
+    pub product_id: ProductId,
+    pub variant_id: VariantId,
+    /// Where the image is now.
+    pub image_url: ImageUrl,
+    /// The backend's revision of the body it read.
+    pub backend_revision: String,
 }
 
 /// What the host does for a try-on.
@@ -372,6 +406,8 @@ pub enum TryOnOutcome {
         try_on_id: TryOnId,
         image_url: ImageUrl,
         fit_anchors: Vec<ResultFitAnchor>,
+        /// The person's outline in the image; empty when the backend sent none.
+        subject_bands: Vec<ResultSubjectBand>,
     },
     /// The backend refused to try the variant on the body.
     Refused {
@@ -1018,6 +1054,64 @@ impl DomainEngine {
             } => {
                 self.requests.replace_image(expected, image_url);
             }
+            TryOnCommand::Restore { try_ons } => self.restore_try_ons(try_ons, output)?,
+        }
+        Ok(())
+    }
+
+    /// Keeps the restored try-ons of the body's acknowledged height, in
+    /// their order, as if they had just been created.
+    fn restore_try_ons(
+        &mut self,
+        try_ons: Vec<RestoredTryOn>,
+        output: &mut DomainOutput,
+    ) -> Result<(), Rejection> {
+        let Ok(ready) = self.body.ready() else {
+            return Ok(());
+        };
+        let (revision, backend_revision) = (ready.revision, ready.backend_revision.clone());
+        let Some(HeightStatus::Acknowledged { height, .. }) = self.body.height_status().cloned()
+        else {
+            return Ok(());
+        };
+        for restored in try_ons {
+            let key = TryOnKey {
+                body_revision: revision,
+                variant_id: restored.variant_id,
+            };
+            if backend_revision.as_deref() != Some(restored.backend_revision.as_str())
+                || restored.image_url.is_empty()
+                || self.requests.result(restored.try_on_id).is_some()
+                || self.requests.created(&key).is_some()
+            {
+                continue;
+            }
+            let operation = self.operations.next_id()?;
+            let try_on = TryOn {
+                id: restored.try_on_id,
+                fit: self.fit_for_render(&key),
+                key,
+                height,
+                image_url: restored.image_url,
+                fit_anchors: None,
+                subject_bands: None,
+            };
+            output.events.push(
+                TryOnEvent::Created {
+                    operation,
+                    product_id: restored.product_id,
+                    try_on: try_on.clone(),
+                }
+                .into(),
+            );
+            if let Some(try_on_id) = self.requests.remember(StoredTryOn {
+                product: restored.product_id,
+                operation,
+                result: try_on,
+                backend_revision: Some(restored.backend_revision),
+            }) {
+                output.events.push(TryOnEvent::Evicted { try_on_id }.into());
+            }
         }
         Ok(())
     }
@@ -1078,19 +1172,21 @@ impl DomainEngine {
             backend_revision,
             ..
         } = job;
-        let (outcome, fit_anchors) = match outcome {
+        let (outcome, fit_anchors, subject_bands) = match outcome {
             TryOnOutcome::CreatedWithAnchors {
                 try_on_id,
                 image_url,
                 fit_anchors,
+                subject_bands,
             } => (
                 TryOnOutcome::Created {
                     try_on_id,
                     image_url,
                 },
                 Some(fit_anchors),
+                (!subject_bands.is_empty()).then_some(subject_bands),
             ),
-            outcome => (outcome, None),
+            outcome => (outcome, None, None),
         };
         match outcome {
             TryOnOutcome::Created {
@@ -1139,6 +1235,7 @@ impl DomainEngine {
                     image_url,
                     fit: Some(fit),
                     fit_anchors,
+                    subject_bands,
                 };
                 output.events.push(
                     TryOnEvent::Created {

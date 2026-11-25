@@ -58,7 +58,7 @@ pub use presentation::{
     PrimaryTryOnAction, TryOnFailureKind, TryOnFeedback, TryOnProgress, TryOnWarning,
 };
 pub use selection::{
-    AxisControl, AxisDisplayOptions, AxisItem, AxisPlacement, AxisRole, HostProduct,
+    AxisControl, AxisDisplayOptions, AxisItem, AxisPlacement, AxisRole, GateSwitch, HostProduct,
     InitialProductInstallation, ItemDisplay, ItemGlyph, ProductInstallation,
     ProductInstallationStatus, SelectionAction, SelectionEvent, SelectionView, VariantAxis,
     VariantLabelFormat, VariantRow, VariantRowItem,
@@ -160,6 +160,7 @@ impl DefaultController {
                 auto_start: AutoStart::new(config.auto_start),
                 preparing: None,
                 prepared: Default::default(),
+                restoring: Default::default(),
             },
             issue: None,
         })
@@ -391,7 +392,7 @@ impl DefaultController {
             },
             Screen::Height { draft } => ScreenView::Height { draft: *draft },
             Screen::TryOn => ScreenView::TryOn {
-                selection: self.selection.view(snapshot),
+                selection: self.selection_view(snapshot),
                 presentation: Box::new(self.presentation_view(snapshot)),
             },
             Screen::PhotoRejected { photo, reason } => ScreenView::PhotoRejected {

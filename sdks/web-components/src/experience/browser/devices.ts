@@ -57,6 +57,13 @@ function deviceError(error: unknown): DeviceError {
   return DeviceError.Failed;
 }
 
+/**
+ * The picture size asked of every camera, as a preference. Without one, browsers open cameras at
+ * 640 × 480, which leaves a full-body photo a few hundred pixels tall; a phone held upright
+ * delivers the same size turned.
+ */
+const PREFERRED_PICTURE = { width: { ideal: 1920 }, height: { ideal: 1080 } } as const;
+
 function stop(stream: MediaStream): void {
   for (const track of stream.getTracks()) {
     track.stop();
@@ -189,8 +196,8 @@ export function createBrowserTryOnDevices(options: BrowserDeviceOptions): Browse
         await devices.getUserMedia({
           video:
             id === undefined || id === ""
-              ? { facingMode: { ideal: "user" } }
-              : { deviceId: { exact: id } },
+              ? { facingMode: { ideal: "user" }, ...PREFERRED_PICTURE }
+              : { deviceId: { exact: id }, ...PREFERRED_PICTURE },
           audio: false,
         });
       signal.throwIfAborted();

@@ -122,6 +122,8 @@ export class SvHeightInput extends SvElement implements SvHeightInputProps {
         font-weight: var(--_sv-font-weight-medium);
         font-variant-numeric: tabular-nums;
         text-align: end;
+      }
+      .entry input:focus {
         outline: none;
       }
       .unit {

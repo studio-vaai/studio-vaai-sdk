@@ -164,6 +164,7 @@ export class SvHeightSettingScreen extends SvElement implements SvHeightSettingS
       .busy=${this.busy}
       .statusMessage=${this.statusMessage ?? (this.busy ? copy.saving : "")}
       panel-align="center"
+      align-photo="baseline"
     >
       <sv-image
         slot="stage"
@@ -189,7 +190,7 @@ export class SvHeightSettingScreen extends SvElement implements SvHeightSettingS
       </div>
       <div slot="before-actions">
         <slot name="recovery"></slot>
-        ${this.error === undefined || this.error === "" ? nothing : html`<sv-message class="error">${this.error}</sv-message>`}
+        ${this.error === undefined || this.error === "" ? nothing : html`<sv-message>${this.error}</sv-message>`}
       </div>
       <sv-button
         slot="primary"

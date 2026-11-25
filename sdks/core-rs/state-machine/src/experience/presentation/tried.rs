@@ -1,10 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
 use super::DefaultController;
+use crate::experience::SelectionView;
 use crate::{AxisKey, AxisRole, DomainSnapshot, ForeignId, ForeignIds};
 
-/// Show sizes tried with the other selected size axes, and colors tried with
-/// the selected size and other color axes. Toolbar styles do not affect marks.
+/// Show sizes tried with the selected color and other size axes, and colors
+/// tried with the selected size and other color axes: an item is marked when
+/// choosing it selects a variant already tried. Toolbar styles do not affect
+/// marks.
 #[cfg_attr(feature = "uniffi", uniffi::export)]
 pub fn tried_picker_items(
     axes: HashMap<AxisKey, AxisRole>,
@@ -24,11 +27,11 @@ fn project(
     }
     axes.iter()
         .filter(|(_, role)| matches!(role, AxisRole::Size | AxisRole::Color))
-        .map(|(axis, role)| {
+        .map(|(axis, _)| {
             let context: Vec<_> = axes
                 .iter()
                 .filter(|(key, other_role)| {
-                    *key != axis && (**other_role == AxisRole::Size || **other_role == *role)
+                    *key != axis && matches!(other_role, AxisRole::Size | AxisRole::Color)
                 })
                 .map(|(key, _)| key)
                 .collect();
@@ -80,5 +83,19 @@ impl DefaultController {
                 .map(|variant| &variant.foreign_ids),
             tried,
         )
+    }
+
+    /// The selection as the view shows it, each item marked when tried.
+    pub(in crate::experience) fn selection_view(&self, snapshot: &DomainSnapshot) -> SelectionView {
+        let mut view = self.selection.view(snapshot);
+        let tried = self.tried_picker_items(snapshot);
+        for row in &mut view.rows {
+            if let Some(items) = tried.get(&row.key) {
+                for item in &mut row.items {
+                    item.tried = items.contains(&item.key);
+                }
+            }
+        }
+        view
     }
 }

@@ -9,6 +9,8 @@ import { sbomInventory } from "../build-tools/sbom/vite/plugin";
  */
 export default defineConfig({
   plugins: [sbomInventory()],
+  // Assets such as the HEIC worker resolve against the module that loads them, not the host page.
+  base: "./",
   build: {
     outDir: "dist",
     target: "es2022",

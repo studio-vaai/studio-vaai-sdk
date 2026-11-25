@@ -25,11 +25,11 @@ export interface SvCameraProps {
 }
 
 export interface SvCameraCapture {
-  /** The full camera frame as a JPEG, mirrored when the picture was. */
+  /** The part of the camera picture the frame showed, as a JPEG, mirrored when the picture was. */
   blob: Blob;
   width: number;
   height: number;
-  /** What the frame showed of it: the frame cuts the camera's picture to its own shape. */
+  /** What the frame showed of the photo: all of it, since the photo is cut to the frame. */
   crop: SvImageCrop;
 }
 
@@ -50,8 +50,8 @@ const PREVIEW_TIMEOUT_MS = 8_000;
  *
  * Shows `stream` filling its box, cut to the box's shape, in a rounded black frame. It never
  * opens the camera itself: the owner gets the stream (asking for permission) and hands it in.
- * `capture()` takes the photo: the full camera frame as a JPEG, and the part of it the frame
- * showed. With `countdownSeconds` it shows the seconds left big over the picture; with `switchLabel`
+ * `capture()` takes the photo: the part of the camera picture the frame shows, as a JPEG, so the
+ * photo holds exactly what the shopper saw. With `countdownSeconds` it shows the seconds left big over the picture; with `switchLabel`
  * a button that fires `sv-switch-camera`. Anything slotted lies over the picture, e.g. a hint.
  *
  * The picture is redrawn onto a canvas rather than shown in a `<video>`, because in-app browsers
@@ -182,6 +182,14 @@ export class SvCamera extends SvElement implements SvCameraProps {
     this.countdownSeconds = undefined;
     this.countdownLabel = undefined;
     this.switchLabel = undefined;
+  }
+
+  /** The camera picture's width over its height, once it shows; `undefined` before. */
+  get pictureAspect(): number | undefined {
+    const video = this.#video;
+    return video && video.videoWidth > 0 && video.videoHeight > 0
+      ? video.videoWidth / video.videoHeight
+      : undefined;
   }
 
   get #video(): HTMLVideoElement | null {
@@ -426,21 +434,27 @@ export class SvCamera extends SvElement implements SvCameraProps {
   }
 
   /**
-   * Takes the photo: the camera's full frame as a JPEG (mirrored when the picture is), and the
-   * part of it the frame showed. Rejects while there is no picture yet.
+   * Takes the photo: the part of the camera picture the frame shows, as a JPEG (mirrored when the
+   * picture is). Nothing beside or above what the shopper saw leaves the device. Rejects while
+   * there is no picture yet.
    */
   async capture(): Promise<SvCameraCapture> {
     const video = this.#video;
-    const { videoWidth: width, videoHeight: height } = video ?? { videoWidth: 0, videoHeight: 0 };
+    const { videoWidth, videoHeight } = video ?? { videoWidth: 0, videoHeight: 0 };
     if (
       !video ||
       this.#previewState === "waiting" ||
       video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
-      width === 0 ||
-      height === 0
+      videoWidth === 0 ||
+      videoHeight === 0
     ) {
       throw new Error("sv-camera: no picture to capture yet");
     }
+    const shown = this.#visibleCrop(videoWidth, videoHeight);
+    const width = Math.max(1, Math.round(videoWidth * shown.width));
+    const height = Math.max(1, Math.round(videoHeight * shown.height));
+    const left = Math.round((videoWidth - width) / 2);
+    const top = Math.round((videoHeight - height) / 2);
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -448,11 +462,12 @@ export class SvCamera extends SvElement implements SvCameraProps {
     if (!context) {
       throw new Error("sv-camera: no 2D canvas");
     }
+    // The cut is centred, so mirroring the drawing mirrors the same part of the picture.
     if (this.mirrored) {
       context.scale(-1, 1);
-      context.drawImage(video, -width, 0, width, height);
+      context.drawImage(video, left, top, width, height, -width, 0, width, height);
     } else {
-      context.drawImage(video, 0, 0, width, height);
+      context.drawImage(video, left, top, width, height, 0, 0, width, height);
     }
     const { promise, resolve } = Promise.withResolvers<Blob | null>();
     canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY);
@@ -460,7 +475,7 @@ export class SvCamera extends SvElement implements SvCameraProps {
     if (!blob) {
       throw new Error("sv-camera: the photo could not be encoded");
     }
-    return { blob, width, height, crop: this.#visibleCrop(width, height) };
+    return { blob, width, height, crop: { cx: 0.5, cy: 0.5, width: 1, height: 1 } };
   }
 
   /** The centered part of a `width` × `height` picture that covering the frame leaves visible. */

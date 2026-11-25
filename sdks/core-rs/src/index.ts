@@ -16,6 +16,8 @@ export type {
   MessageValues,
 } from "./formatting/index.js";
 export {
+  decodeJpegXl,
+  type DecodedImage,
   inspectPhotoHeader,
   PhotoEncodingPlan,
   photoEncodingPlan,

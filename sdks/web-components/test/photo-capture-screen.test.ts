@@ -8,6 +8,7 @@ import type {
 } from "../src/index.js";
 
 import { defineSvElements, SvCamera, createUiContext } from "../src/index.js";
+import { photoCaptureStyles } from "../src/screens/photo-capture/styles.js";
 import { initializeTestUi } from "./ui-fixture.js";
 
 async function mount(props: SvPhotoCaptureScreenProps = {}) {
@@ -150,6 +151,33 @@ describe("stateless photo capture", () => {
     expect(actions).toEqual([]);
     expect(screen.shadowRoot?.textContent).not.toContain("Uploading your photo");
     await expect(screen.capture()).rejects.toThrow("requires a live camera");
+  });
+
+  it("gives the frame a narrower camera picture's shape and keeps it while uploading", async () => {
+    const stream = {} as MediaStream;
+    const aspect = vi.spyOn(SvCamera.prototype, "pictureAspect", "get").mockReturnValue(9 / 16);
+    const { screen } = await mount({ state: "live", stream });
+    const frame = () => screen.shadowRoot?.querySelector<HTMLElement>(".frame");
+    expect(frame()?.style.getPropertyValue("--_sv-camera-aspect")).toBe("");
+    const camera = await child(screen, "sv-camera");
+    camera.dispatchEvent(
+      new CustomEvent("sv-camera-preview-state", {
+        detail: { stream, state: "ready" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await screen.updateComplete;
+    expect(frame()?.style.getPropertyValue("--_sv-camera-aspect")).toBe(String(9 / 16));
+    screen.state = "uploading";
+    screen.photoSrc = "/captured.jpg";
+    await screen.updateComplete;
+    expect(frame()?.style.getPropertyValue("--_sv-camera-aspect")).toBe(String(9 / 16));
+    // The frame takes the picture's shape only when it is narrower, and never below 9:16.
+    expect(photoCaptureStyles.cssText.replace(/\s+/g, " ")).toContain(
+      "min( var(--_sv-capture-aspect), max(var(--_sv-camera-aspect, var(--_sv-capture-aspect)), 0.5625) )",
+    );
+    aspect.mockRestore();
   });
 
   it("locks requests while busy and keeps the camera mirrored", async () => {

@@ -49,6 +49,7 @@ fn shown(key: &str, variant: &str) -> VariantRowItem {
         available: true,
         variant_id: Some(id(variant)),
         refusal: None,
+        tried: false,
     }
 }
 
@@ -393,4 +394,43 @@ fn a_refusal_suggestion_preserves_the_requested_color_after_the_draft_changes() 
     let view = f.flow.view().unwrap();
     assert_eq!(view.selection().variant_id, id("black-M"));
     assert_eq!(view.presentation().suggested_variant_id, Some(id("red-L")));
+}
+
+#[test]
+fn an_item_the_host_does_not_show_is_neither_offered_nor_chosen() {
+    // The catalogue publishes red, but the shop does not sell it: its axis shows black only.
+    let mut sold = jacket("black-M", &[]);
+    sold.host_product.axes = vec![axis("colorway", &["black"]), axis("size", &["M", "L"])];
+    let (f, _) = Fixture::ready_with(sold, vec![size(&["red-M"], 0.9), size(&["black-L"], 0.8)]);
+    let view = f.flow.view().unwrap();
+    let colors: Vec<_> = view.selection().rows[0]
+        .items
+        .iter()
+        .map(|item| item.key.clone())
+        .collect();
+    assert_eq!(colors, ["black".into()] as [ForeignId; 1]);
+    // The recommendation's best size exists only in red: the black variant next in line wins.
+    assert_eq!(view.selection().variant_id, id("black-L"));
+    assert!(
+        f.flow
+            .dispatch(
+                SelectionAction::SelectItem {
+                    axis: "colorway".into(),
+                    item: "red".into(),
+                }
+                .into(),
+            )
+            .is_err()
+    );
+    // A storefront selection naming it changes nothing either.
+    f.flow
+        .dispatch(
+            SelectionAction::SetStorefrontSelection {
+                options: foreign(&[("colorway", "red"), ("size", "M")]),
+                installation: None,
+            }
+            .into(),
+        )
+        .unwrap();
+    assert_ne!(f.flow.view().unwrap().selection().variant_id, id("red-M"));
 }

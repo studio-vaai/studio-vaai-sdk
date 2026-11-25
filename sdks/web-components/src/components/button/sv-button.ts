@@ -4,13 +4,14 @@ import { SvElement } from "../../internal/ui-element.js";
 import { svBase } from "../../styles/base.js";
 import { svTokens } from "../../styles/tokens.js";
 
-export const SV_BUTTON_VARIANTS = ["primary", "ghost"] as const;
+export const SV_BUTTON_VARIANTS = ["primary", "ghost", "icon"] as const;
 export type SvButtonVariant = (typeof SV_BUTTON_VARIANTS)[number];
 
 export interface SvButtonProps {
   /**
    * `primary` for the one main action on a screen: a filled block. `ghost` for the other one:
-   * plain text without a box, e.g. "Use a different photo".
+   * plain text without a box, e.g. "Use a different photo". Use `icon` for an icon-only
+   * action with an accessible name in the label.
    */
   variant?: SvButtonVariant | undefined;
   /** The button cannot be pressed. */
@@ -18,8 +19,8 @@ export interface SvButtonProps {
   /** Announced as unavailable but still pressable, so the host can explain a missing prerequisite. */
   blocked?: boolean | undefined;
   /**
-   * The action is running: shows a spinner, sets `aria-busy` and swallows presses, while the
-   * label stays readable.
+   * The action is running: sets `aria-busy` and prevents presses. For the icon variant,
+   * the spinner replaces the icon after a short delay.
    */
   busy?: boolean | undefined;
 }
@@ -28,7 +29,7 @@ export interface SvButtonProps {
  * `<sv-button>` — a button for the flow's actions.
  *
  * A press fires the native `click`. While `disabled` or `busy` it can't be pressed and fires
- * nothing; `busy` also shows a spinner beside the label.
+ * nothing. Text variants show the busy spinner beside the label.
  *
  * @slot - The label.
  * @csspart button - The native `<button>`.
@@ -63,7 +64,7 @@ export class SvButton extends SvElement implements SvButtonProps {
         align-items: center;
         justify-content: center;
         gap: calc(var(--_sv-spacing) * 2);
-        border-radius: var(--_sv-radius);
+        border-radius: var(--_sv-button-radius);
         font-family: inherit;
         font-size: var(--_sv-action-text-size, var(--_sv-text-base));
         line-height: var(--_sv-text-base--line-height);
@@ -99,6 +100,46 @@ export class SvButton extends SvElement implements SvButtonProps {
         color: var(--_sv-muted-foreground);
       }
 
+      :host([variant="icon"]) .button {
+        position: relative;
+        inline-size: calc(var(--_sv-spacing) * 9);
+        block-size: calc(var(--_sv-spacing) * 9);
+        padding: 0;
+        border-radius: var(--_sv-radius-full);
+        background: transparent;
+        color: var(--_sv-foreground);
+      }
+      :host([variant="icon"]) .label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      :host([variant="icon"][busy]) .button {
+        opacity: 1;
+      }
+      :host([variant="icon"]) sv-spinner {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        translate: -50% -50%;
+      }
+      :host([variant="icon"]) sv-spinner,
+      :host([variant="icon"][busy]) ::slotted(sv-icon),
+      :host([variant="icon"][busy]) ::slotted(svg) {
+        animation: sv-icon-button-spinner-in 0s 150ms both;
+      }
+      :host([variant="icon"][busy]) ::slotted(sv-icon),
+      :host([variant="icon"][busy]) ::slotted(svg) {
+        animation-direction: reverse;
+      }
+      @keyframes sv-icon-button-spinner-in {
+        from {
+          visibility: hidden;
+        }
+        to {
+          visibility: visible;
+        }
+      }
       .button:disabled {
         cursor: not-allowed;
         opacity: 0.5;
@@ -109,6 +150,12 @@ export class SvButton extends SvElement implements SvButtonProps {
       .label {
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+      .baseline {
+        display: inline-block;
+        inline-size: 0;
+        block-size: 0;
+        vertical-align: baseline;
       }
     `,
   ];
@@ -147,13 +194,19 @@ export class SvButton extends SvElement implements SvButtonProps {
       part="button"
       class="button"
       type="button"
-      ?disabled=${this.disabled}
+      ?disabled=${this.disabled || (this.variant === "icon" && this.busy)}
       aria-disabled=${this.blocked ? "true" : nothing}
       aria-busy=${this.busy ? "true" : nothing}
       @click=${this.#onClick}
     >
       ${this.busy ? html`<sv-spinner part="spinner" size="sm"></sv-spinner>` : nothing}
-      <span part="label" class="label"><slot></slot></span>
+      <span part="label" class="label"
+        ><slot></slot>${
+          this.variant === "ghost"
+            ? html`<span class="baseline" aria-hidden="true"></span>`
+            : nothing
+        }</span
+      >
     </button>`;
   }
 }

@@ -52,6 +52,7 @@ const hostDeclarations = declarations([
     internal(`radius-${n}`, `calc(var(--_sv-radius) * ${f})`),
   ),
   internal("radius-full", "9999px"),
+  resolved("button-radius", "var(--_sv-radius)"),
   internal("field-padding-inline", "calc(var(--_sv-spacing) * 4)"),
   // A button: its label's line height plus spacing × 3 above and below (48px by default).
   internal(

@@ -60,10 +60,10 @@ export class SvCheckbox extends SvElement implements SvCheckboxProps {
         place-items: center;
         inline-size: calc(var(--_sv-spacing) * 4);
         block-size: calc(var(--_sv-spacing) * 4);
-        border: 2px solid var(--_sv-primary);
+        border: 2px solid var(--_sv-foreground);
         border-radius: calc(var(--_sv-radius) * 0.25);
         background: var(--_sv-control);
-        color: var(--_sv-control-selected-foreground);
+        color: var(--_sv-background);
         cursor: inherit;
         outline: none;
       }
@@ -73,7 +73,7 @@ export class SvCheckbox extends SvElement implements SvCheckboxProps {
           0 0 0 4px var(--_sv-ring);
       }
       :host([checked]) .box {
-        background: var(--_sv-control-selected);
+        background: var(--_sv-foreground);
       }
       .box:disabled {
         opacity: 0.5;

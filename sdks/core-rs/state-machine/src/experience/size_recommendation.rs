@@ -92,6 +92,7 @@ impl DefaultController {
                     .take_if(|issue| matches!(issue, Issue::StockUnavailable { .. }));
                 self.selection.choose_recommended_variant(variant_id);
                 self.presentation.auto_start = AutoStart::Disarmed;
+                self.show_tried_selection(snapshot, plan);
             }
         }
         Ok(())
@@ -142,5 +143,6 @@ impl DefaultController {
         {
             self.presentation.auto_start = AutoStart::Disarmed;
         }
+        self.switch_refused_host_size(snapshot, plan);
     }
 }

@@ -35,6 +35,10 @@ function primaryAction(
     if (PrimaryTryOnAction.Retry.instanceOf(next)) {
       return { label: "retry", action: "retry", variantId: next.inner.variantId };
     }
+    if (PrimaryTryOnAction.TryNextFitting.instanceOf(next)) {
+      // The fit gate refuses the pick: the button offers the next size that can be tried on.
+      return { label: "tryOn", action: "try-on", variantId: next.inner.variantId };
+    }
     return { label: PrimaryTryOnAction.AlreadyWearing.instanceOf(next) ? "wearing" : "tryOn" };
   }
   const { presentation, selection } = props;
@@ -58,6 +62,20 @@ function primaryAction(
     label: retry && props.navigation !== undefined ? "retry" : "tryOn",
     ...(variantId === undefined ? {} : { action: retry ? "retry" : "try-on", variantId }),
   };
+}
+
+function tryOnLabel(
+  props: SvTryOnViewScreenProps,
+  coreReady: boolean,
+  labelFor: (id: string) => ReturnType<typeof variantLabelValue>,
+) {
+  const next = props.presentation?.primaryAction;
+  if (coreReady && next !== undefined && PrimaryTryOnAction.TryNextFitting.instanceOf(next)) {
+    return labelFor(next.inner.variantId);
+  }
+  return coreReady && props.selection !== undefined
+    ? selectionLabelValue(props.selection)
+    : undefined;
 }
 
 /** Joins experience references to immutable domain records without resolving a new selection. */
@@ -170,6 +188,8 @@ export function tryOnView(props: SvTryOnViewScreenProps, coreReady: boolean) {
     shownLabel: shownVariantId === undefined ? undefined : labelFor(shownVariantId),
     selectedLabel:
       coreReady && selection !== undefined ? selectionLabelValue(selection) : undefined,
+    /** What the try-on button tries on: the selection, or the size offered in place of it. */
+    tryOnLabel: tryOnLabel(props, coreReady, labelFor),
     shownCommerce,
     cartVariantId: selecting || shownCommerce?.inStock === false ? undefined : shownVariantId,
     imageSrc,

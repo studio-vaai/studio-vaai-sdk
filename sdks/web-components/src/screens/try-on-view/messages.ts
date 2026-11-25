@@ -31,10 +31,12 @@ export function tryOnHistoryMessages(ui: SvUiContext, variant: VariantLabel) {
 export function tryOnViewMessages(ui: SvUiContext, props: SvTryOnViewScreenProps, view: TryOnView) {
   const shown = variantLabelValues(view.shownLabel);
   const selected = variantLabelValues(view.selectedLabel);
+  const tryOnVariant = variantLabelValues(view.tryOnLabel);
   const title = props.productName ?? ui.text("sessionIntro.defaultProductName");
   const price = view.shownCommerce?.price ?? "";
   const summary = view.shown === undefined ? "" : ui.text("tryOnView.variantSummary", shown);
   const provenance = view.shown === undefined ? "" : ui.text("tryOnView.aiGeneratedLabel");
+  const pickerRows = view.pickerSelection?.rows ?? [];
   const progress = ui.text("tryOnView.busyMessages.0");
   let status = "";
   if (props.state === "generating") {
@@ -52,15 +54,29 @@ export function tryOnViewMessages(ui: SvUiContext, props: SvTryOnViewScreenProps
       view.shown === undefined
         ? ui.text("photo.previewAlt")
         : [title, summary].filter((part) => part !== "").join(" · "),
+    // The bag takes the result on screen, named as the picker names it. A result the rows cannot
+    // name (e.g. of a variant the picker does not offer) borrows the selection's name when it is
+    // the same variant, so the action never falls back to "this variant" while one is named.
     addToCart: ui.text("tryOnView.addVariantToCart", {
-      ...shown,
+      ...(shown.hasVariant === "no" && view.shown?.key.variantId === view.pickerSelection?.variantId
+        ? selected
+        : shown),
       price,
       hasPrice: price === "" ? "no" : "yes",
     }),
-    tryOn: ui.text("tryOnView.tryOnVariant", selected),
+    tryOn: ui.text("tryOnView.tryOnVariant", tryOnVariant),
     wearing: ui.text("tryOnView.wearingVariant", selected),
-    openPicker: ui.text("tryOnView.variantPickerGenericTitle"),
-    pickerTitle: ui.text("sizeAndStyleSelection.variantSectionLabel"),
+    // The collapsed picker's button says what the open picker's heading says.
+    openPicker: ui.text("tryOnView.pickerHeading", {
+      hasResult: "yes",
+      hasSize: pickerRows.some(({ role }) => role === AxisRole.Size) ? "yes" : "no",
+      hasColor: pickerRows.some(({ role }) => role === AxisRole.Color) ? "yes" : "no",
+    }),
+    pickerTitle: ui.text("tryOnView.pickerHeading", {
+      hasResult: view.shown === undefined ? "no" : "yes",
+      hasSize: pickerRows.some(({ role }) => role === AxisRole.Size) ? "yes" : "no",
+      hasColor: pickerRows.some(({ role }) => role === AxisRole.Color) ? "yes" : "no",
+    }),
     upload: ui.text("sizeAndStyleSelection.useAnotherImage"),
     status: props.statusMessage ?? status,
     retry:

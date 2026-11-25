@@ -12,8 +12,11 @@ export interface SvImageFraming {
   bounds?: SvImageCrop | undefined;
   /** Breathing room on each frame edge, as a fraction of that dimension (0–0.25). Default 0.05. */
   margin?: number | undefined;
-  /** Align the fitted reference canvas to the bottom of its stage when there is extra space. */
-  blockAlign?: "end" | undefined;
+  /**
+   * Align the fitted reference canvas to the bottom (`end`) or top (`start`) of its stage when
+   * there is extra space, instead of its middle.
+   */
+  blockAlign?: "start" | "end" | undefined;
 }
 
 interface ImageRectangle {
@@ -117,7 +120,12 @@ export function resolveImageFraming(
   const ty = position(viewport.height, y, y + height, 1, viewport.height * margin, scale);
   const sourceHeight = Math.min(1, referenceAspect / sourceAspect);
   const sourceWidth = sourceAspect * sourceHeight;
-  const blockOffset = framing.blockAlign === "end" ? Math.max(0, viewport.height - ty - scale) : 0;
+  let blockOffset = 0;
+  if (framing.blockAlign === "end") {
+    blockOffset = Math.max(0, viewport.height - ty - scale);
+  } else if (framing.blockAlign === "start") {
+    blockOffset = Math.min(0, -ty);
+  }
   const image = {
     x: tx + ((referenceAspect - sourceWidth) * scale) / 2,
     y: ty + blockOffset + ((1 - sourceHeight) * scale) / 2,

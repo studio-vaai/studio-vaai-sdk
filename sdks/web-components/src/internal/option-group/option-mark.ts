@@ -1,6 +1,9 @@
 import { css, html, nothing } from "lit";
 
-/** A tried-on option or the currently selected size in a try-on picker. */
+/**
+ * A try-on picker's check on an option already tried: `tried` on any such option, `current` on
+ * the selected size once it was tried.
+ */
 export type OptionMark = "tried" | "current";
 
 export const optionMarkStyles = css`
@@ -14,8 +17,9 @@ export const optionMarkStyles = css`
     inline-size: calc(var(--_sv-spacing) * 3.75);
     block-size: calc(var(--_sv-spacing) * 3.75);
     border-radius: 50%;
-    background: #222;
-    color: #fff;
+    background: #fff;
+    color: #000;
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.16);
     pointer-events: none;
     --_sv-icon-stroke: 2.5;
   }
@@ -23,8 +27,9 @@ export const optionMarkStyles = css`
     --_sv-icon-size: calc(var(--_sv-spacing) * 2.5);
   }
   .option-mark[data-mark="current"] {
-    background: #fff;
-    color: #000;
+    background: #000;
+    color: #fff;
+    box-shadow: 0 0 0 1px #fff;
   }
 `;
 

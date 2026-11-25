@@ -1,7 +1,7 @@
 import type { BodyId, MediaId, RestoredBody } from "@studio-vaai/core";
 import type { ExperienceImageTarget } from "@studio-vaai/core/api";
 
-import { Outcome, SessionJob, SessionOutcome } from "@studio-vaai/core";
+import { BackendError, Outcome, SessionJob, SessionOutcome } from "@studio-vaai/core";
 import {
   ApiClient,
   browserTransport,
@@ -22,8 +22,10 @@ import {
 
 import type { BodySelectionStore, CommittedBody } from "./body-selection.js";
 
+import { displayablePhoto, releasePhoto } from "./displayable-photo.js";
 import {
   apiFailure,
+  ApiSessionOutcomeError,
   CookieSessionChangedError,
   CredentialRejectedError,
   isSessionExpired,
@@ -36,6 +38,17 @@ interface RestoredPhoto {
   src: string;
   expiry: number;
   asset: string;
+  /** The API deleted the photo: nothing of it is held any more, and `src` is empty. */
+  gone: boolean;
+}
+
+/** A renewal that found the photo deleted for good, not one that may work later. */
+function photoDeleted(error: unknown): boolean {
+  return (
+    error instanceof ApiSessionOutcomeError &&
+    Outcome.Failed.instanceOf(error.outcome) &&
+    error.outcome.inner.error === BackendError.NotFound
+  );
 }
 
 function ready(): Outcome {
@@ -59,6 +72,11 @@ export function apiSession(
   credentialRefreshed?: (revision: bigint) => void,
 ) {
   let restored: RestoredPhoto | undefined;
+  /**
+   * The shopper's photo is gone: a restore found the saved body, or its stored photo, deleted, or
+   * the photo was deleted while shown. Until a new photo, the page asks for one.
+   */
+  let photoGone = false;
   let disposed = false;
   let credentialLifetime = new AbortController();
   const credentials = new ExperienceCredentials(client, {
@@ -167,19 +185,30 @@ export function apiSession(
       }
       const { body } = result.inner;
       if (body === undefined) {
+        // The API no longer has the body, or no longer stores its photo: nothing to show or try
+        // on with. Forget it and ask for a new photo.
         selection.rejectSelection(saved);
+        photoGone = true;
         continue;
       }
       if (!credentials.requestIsCurrent(request)) {
         break;
       }
-      const media = restorePhoto(body.sourceImageUrl);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- The loop ends here.
+      const src = await displayablePhoto(body.sourceImageUrl, fetchImpl, signal);
+      if (!credentials.requestIsCurrent(request)) {
+        releasePhoto(src);
+        break;
+      }
+      const media = restorePhoto(src);
+      releasePhoto(restored?.src);
       restored = {
         media,
         id: body.bodyId,
-        src: body.sourceImageUrl,
+        src,
         asset: crypto.randomUUID(),
         expiry: body.sourceImageUrlExpiresAtMs,
+        gone: false,
       };
       return cookieReady(generation, {
         bodyId: body.bodyId,
@@ -263,35 +292,63 @@ export function apiSession(
       !disposed && credentials.requestIsCurrent(request),
     invalidatedCookieGeneration: () => credentials.invalidatedCookieGeneration(),
     commitBody(body: CommittedBody) {
+      releasePhoto(restored?.src);
       restored = undefined;
+      photoGone = false;
       const generation = credentials.cookieGeneration();
       if (generation !== undefined) {
         selection.save(body, generation);
       }
     },
     beforeAuthenticatedRequest,
+    /** The body a session restore brought back, until another body or none replaces it. */
+    restoredBody(): BodyId | undefined {
+      return restored?.id;
+    },
     getRestoredPhoto(media: MediaId) {
       return restored?.media === media ? restored : undefined;
     },
+    /** Whether the page should ask for a new photo: the shopper's earlier one is gone. */
+    photoGone(): boolean {
+      return photoGone;
+    },
     renewImage,
     async refreshPhoto(current: RestoredPhoto, signal: AbortSignal) {
-      if (restored !== current) {
+      if (restored !== current || current.gone) {
         return false;
       }
-      const { url, expiresAtMs } = await renewImage(
-        new ImageTarget.Photo({ bodyId: current.id }),
-        signal,
-      );
+      let renewed;
+      try {
+        renewed = await renewImage(new ImageTarget.Photo({ bodyId: current.id }), signal);
+      } catch (error) {
+        if (restored === current && photoDeleted(error)) {
+          // Deleted by the API: drop what this page holds of it, not just its display.
+          releasePhoto(current.src);
+          restored = { ...current, src: "", expiry: Number.POSITIVE_INFINITY, gone: true };
+          photoGone = true;
+          return true;
+        }
+        throw error;
+      }
+      const { url, expiresAtMs } = renewed;
       if (restored !== current || signal.aborted || expiresAtMs === undefined) {
         return false;
       }
-      restored = { ...current, src: url, expiry: expiresAtMs, asset: crypto.randomUUID() };
+      const src = await displayablePhoto(url, fetchImpl, signal);
+      if (restored !== current || signal.aborted) {
+        releasePhoto(src);
+        return false;
+      }
+      releasePhoto(current.src);
+      restored = { ...current, src, expiry: expiresAtMs, asset: crypto.randomUUID() };
       return true;
     },
     clear(forgetBody: boolean) {
       credentialLifetime.abort();
       credentialLifetime = new AbortController();
+      releasePhoto(restored?.src);
       restored = undefined;
+      photoGone = false;
       const generation = credentials.cookieGeneration();
       if (forgetBody && generation !== undefined && generation === selection.generation) {
         selection.save(null, generation);

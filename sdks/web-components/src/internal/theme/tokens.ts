@@ -159,6 +159,10 @@ const SV_SIZE_TOKENS = {
   root: "1rem",
   density: "1",
   radius: "calc(var(--sv-root) * 0.5)",
+  // The button's own radius. It follows `radius` until a shop sets it, so a shop can give its
+  // buttons their own shape (a pill, say) without reshaping the cards, photos and dialog, which
+  // all scale with `radius`.
+  "button-radius": "var(--sv-radius)",
 } as const;
 
 /**

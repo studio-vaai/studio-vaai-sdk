@@ -1350,3 +1350,67 @@ fn an_expired_session_found_on_restore_is_cleared_without_an_event() {
     assert_eq!(session_effects, vec![SessionEffect::Clear]);
     assert!(out.events.is_empty());
 }
+
+#[test]
+fn restored_try_ons_of_the_acknowledged_height_come_back_once() {
+    let mut d = ready();
+    let write = set_height(&mut d, 180.0).receipt.operation.unwrap();
+    complete(
+        &mut d,
+        write,
+        Outcome::Body {
+            outcome: BodyOutcome::HeightSet,
+            backend_revision: Some("rev-180".into()),
+        },
+    );
+    let restored = |name: &str, variant: &str, revision: &str| RestoredTryOn {
+        try_on_id: id(name),
+        product_id: id("jeans"),
+        variant_id: id(variant),
+        image_url: format!("https://example.invalid/{name}").into(),
+        backend_revision: revision.into(),
+    };
+    let out = command(
+        &mut d,
+        TryOnCommand::Restore {
+            try_ons: vec![
+                restored("earlier-M", "M", "rev-180"),
+                restored("earlier-L", "L", "rev-180"),
+                // Another height's try-on is not this body's any more.
+                restored("old-XL", "XL", "rev-170"),
+            ],
+        }
+        .into(),
+    );
+    let created: Vec<TryOnId> = out
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            DomainEvent::TryOn {
+                event: TryOnEvent::Created { try_on, .. },
+            } => Some(try_on.id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(created, [id("earlier-M"), id("earlier-L")]);
+    let snapshot = d.snapshot();
+    let kept: Vec<_> = snapshot
+        .try_ons()
+        .iter()
+        .map(|t| (t.id, t.key.variant_id))
+        .collect();
+    assert_eq!(
+        kept,
+        [(id("earlier-M"), id("M")), (id("earlier-L"), id("L"))]
+    );
+    // Restoring again adds nothing.
+    let again = command(
+        &mut d,
+        TryOnCommand::Restore {
+            try_ons: vec![restored("earlier-M", "M", "rev-180")],
+        }
+        .into(),
+    );
+    assert!(again.events.is_empty());
+    assert_eq!(d.snapshot().try_ons().len(), 2);
+}

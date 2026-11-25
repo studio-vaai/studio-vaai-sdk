@@ -142,7 +142,13 @@ impl DefaultController {
     ) -> Result<(), Rejection> {
         match action {
             PhotoAction::BeginSource { source } => {
-                if self.navigation.modal == Some(Modal::ChoosePhotoSource) {
+                // A picker still open lost the shopper's attention: a host
+                // that never reports its cancellation must not keep the
+                // source closed. The new request replaces it.
+                if matches!(
+                    self.navigation.modal,
+                    Some(Modal::ChoosePhotoSource | Modal::Picker { .. })
+                ) {
                     self.dismiss_modal(plan);
                 }
                 self.start_source(source, snapshot, plan)?;
@@ -209,6 +215,12 @@ impl DefaultController {
         match event {
             PickerEvent::Selected { token, media } => {
                 if self.presence.open && self.navigation.modal == Some(Modal::Picker { token }) {
+                    if !matches!(
+                        snapshot.session,
+                        SessionPhase::Ready | SessionPhase::Creating
+                    ) {
+                        self.create_session(plan)?;
+                    }
                     self.navigation.modal = None;
                     self.stage_photo(media, PhotoSource::Library, snapshot, plan);
                 } else {
@@ -309,8 +321,8 @@ impl DefaultController {
     }
 
     /// Opens the photo source within the photo change: the library's
-    /// picker, or the camera's screen, whose camera waits for the session
-    /// if it is not ready yet. Creates the session if there is none.
+    /// picker, or the camera's screen. The camera waits for a ready session;
+    /// the library starts a session only after a photo is picked.
     pub(super) fn start_source(
         &mut self,
         source: PhotoSource,
@@ -322,11 +334,10 @@ impl DefaultController {
             self.issue = Some(Issue::ConsentRequired);
             return Ok(());
         }
-        if !matches!(
-            snapshot.session,
-            SessionPhase::Ready | SessionPhase::Creating
-        ) {
-            self.create_session(plan)?;
+        match (source, snapshot.session) {
+            (_, SessionPhase::Ready | SessionPhase::Creating)
+            | (PhotoSource::Library, SessionPhase::Absent | SessionPhase::CreateFailed) => {}
+            _ => self.create_session(plan)?,
         }
         self.issue = None;
         self.begin_change();

@@ -10,7 +10,7 @@ mod delivery;
 pub mod experience_events;
 pub mod model;
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use crate::domain::{
@@ -22,12 +22,22 @@ use crate::experience::{
     DefaultController, DeviceEvent, FlowAction, FlowConfig, FlowUpdate, FlowView, Plan,
     PresenceAction,
 };
-use crate::ids::{BatchId, DriverId, FlowId, RuntimeRevision, Sequence, TryOnId};
+use crate::ids::{
+    BatchId, BodyId, CreateKey, DriverId, FlowId, RuntimeRevision, Sequence, TryOnId, VariantId,
+};
 use delivery::Delivery;
 use model::*;
 
 /// Steps one transition may take to settle at most.
 const MAX_SETTLEMENT_STEPS: usize = 512;
+
+/// Unsettled try-on creations remembered at most; the oldest is forgotten
+/// first. A shopper retries one or two, not dozens.
+const MAX_UNSETTLED_CREATES: usize = 32;
+
+/// One try-on creation attempt: this variant on this body at this backend
+/// revision. Retrying it is the same attempt; any other is a new one.
+type CreateAttempt = (BodyId, String, VariantId);
 
 /// The authoritative domain of one shopper's try-on session, driven by one
 /// client: its flow, or the host's own experience.
@@ -53,6 +63,8 @@ impl TryOnSession {
                     flow_ids: Sequence::new(seed),
                     revision: RuntimeRevision(0),
                     delivery: Delivery::new(seed),
+                    create_keys: Sequence::new(seed),
+                    unsettled_creates: BTreeMap::new(),
                 }),
             }),
         });
@@ -372,6 +384,81 @@ impl Shared {
     }
 }
 
+/// Idempotency of try-on creation. Not part of the bindings: the platform
+/// core's job runner sends the key and settles the attempt.
+impl TryOnSession {
+    /// The idempotency key to create `variant` on `body` at `revision` with:
+    /// the key of that attempt while its outcome is unknown, so a retry
+    /// cannot make (and bill) a second try-on, otherwise a new one.
+    pub fn try_on_create_key(
+        &self,
+        body: BodyId,
+        revision: &str,
+        variant: VariantId,
+    ) -> Result<String, TryOnError> {
+        let mut state = self.shared.lock()?;
+        let attempt = (body, revision.to_owned(), variant);
+        if let Some((_, key)) = state.unsettled_creates.get(&attempt) {
+            return Ok(key.0.to_string());
+        }
+        let key = state
+            .create_keys
+            .next()
+            .map_err(|_| TryOnError::Exhausted)?;
+        Ok(key.0.to_string())
+    }
+
+    /// The creation of `key` ended in a way the backend may not have seen
+    /// (the response was lost): keep its key for the shopper's retry.
+    pub fn keep_try_on_create(
+        &self,
+        body: BodyId,
+        revision: &str,
+        variant: VariantId,
+        key: &str,
+    ) -> Result<(), TryOnError> {
+        let Ok(key) = uuid::Uuid::parse_str(key) else {
+            return Ok(());
+        };
+        let mut state = self.shared.lock()?;
+        let order = state
+            .unsettled_creates
+            .values()
+            .map(|(order, _)| *order + 1)
+            .max()
+            .unwrap_or(0);
+        state.unsettled_creates.insert(
+            (body, revision.to_owned(), variant),
+            (order, CreateKey(key)),
+        );
+        while state.unsettled_creates.len() > MAX_UNSETTLED_CREATES {
+            let oldest = state
+                .unsettled_creates
+                .iter()
+                .min_by_key(|(_, (order, _))| *order)
+                .map(|(attempt, _)| attempt.clone());
+            if let Some(oldest) = oldest {
+                state.unsettled_creates.remove(&oldest);
+            }
+        }
+        Ok(())
+    }
+
+    /// The creation attempt ended with an answer: a later one is new.
+    pub fn settle_try_on_create(
+        &self,
+        body: BodyId,
+        revision: &str,
+        variant: VariantId,
+    ) -> Result<(), TryOnError> {
+        self.shared
+            .lock()?
+            .unsettled_creates
+            .remove(&(body, revision.to_owned(), variant));
+        Ok(())
+    }
+}
+
 /// A transaction's result.
 struct Commit<T> {
     /// What the transaction returned.
@@ -393,6 +480,12 @@ struct RuntimeState {
     revision: RuntimeRevision,
     /// The committed effect batches and their driver.
     delivery: Delivery,
+    /// Mints try-on creation idempotency keys from the runtime ID.
+    create_keys: Sequence<CreateKey>,
+    /// The keys of try-on creations whose outcome is unknown, each with the
+    /// order it was minted in, so a retry of the same attempt sends the same
+    /// key and the backend returns the try-on it may already have made.
+    unsettled_creates: BTreeMap<CreateAttempt, (u64, CreateKey)>,
 }
 
 impl RuntimeState {

@@ -48,6 +48,11 @@ export interface StudioVaaiTryOnProps {
   /** MessageFormat 2 overrides for the current locale. */
   messages?: MessageOverrides | undefined;
   appearance?: SvAppearance;
+  /**
+   * Shows the fit score, its intended-fit detail and the fit callouts on a result. Off by default;
+   * the size recommendation and the fit gate work either way.
+   */
+  fitScore?: boolean;
   /** Live overrides of price and stock supplied by presentProduct. */
   commerce?: ProductCommerce;
   autoStart?: FlowConfig["autoStart"];
@@ -94,6 +99,7 @@ const componentProps = {
   messages: Object as PropType<MessageOverrides>,
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Vue validates the constructor at runtime and uses PropType for its public signature.
   appearance: { type: String as PropType<SvAppearance>, default: "light" },
+  fitScore: { type: Boolean, default: false },
   commerce: Object as PropType<StudioVaaiTryOnProps["commerce"]>,
   autoStart: Number as PropType<StudioVaaiTryOnProps["autoStart"]>,
   analytics: Object as PropType<TryOnAnalytics>,
@@ -386,16 +392,26 @@ const component = defineComponent({
       }
     });
 
-    watch([surface, installedToken, () => props.productName, () => props.addToCart], () => {
-      const element = surface.value;
-      if (element === null || !mounted.value) {
-        return;
-      }
-      element.addToCart = props.addToCart;
-      if (installedToken.value !== globalThis.undefined) {
-        element.productName = props.productName;
-      }
-    });
+    watch(
+      [
+        surface,
+        installedToken,
+        () => props.productName,
+        () => props.addToCart,
+        () => props.fitScore,
+      ],
+      () => {
+        const element = surface.value;
+        if (element === null || !mounted.value) {
+          return;
+        }
+        element.fitScore = props.fitScore;
+        element.addToCart = props.addToCart;
+        if (installedToken.value !== globalThis.undefined) {
+          element.productName = props.productName;
+        }
+      },
+    );
 
     const handle: StudioVaaiTryOnHandle = {
       open: (entry) => ready.value && experience.value?.open(entry) === true,

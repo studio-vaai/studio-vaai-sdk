@@ -3,6 +3,7 @@ import type {
   MediaId,
   OperationId,
   Outcome,
+  RestoredTryOn,
   TryOnAsset,
   TryOnSession,
 } from "@studio-vaai/core";
@@ -16,6 +17,7 @@ import {
   Job,
   SessionEffect,
   SessionCommand,
+  SessionEvent,
   TryOnEvent,
 } from "@studio-vaai/core";
 import {
@@ -27,10 +29,17 @@ import {
 
 import type { TryOnExperienceAdapters } from "../controller.js";
 import type { BodySelectionStore } from "./body-selection.js";
+import type { TryOnHistoryStore } from "./try-on-history.js";
 
 import { ImageFetchError } from "../image-fetch-error.js";
 import { imageRenewal } from "./image-renewal.js";
-import { apiFailure, CredentialRejectedError, failed, isSessionExpired } from "./outcomes.js";
+import {
+  apiFailure,
+  CredentialRejectedError,
+  failed,
+  isSessionExpired,
+  renewalGone,
+} from "./outcomes.js";
 import { processPhoto } from "./photo.js";
 import { lookupProduct } from "./product.js";
 import { apiSession } from "./session.js";
@@ -51,6 +60,7 @@ export function apiAdapters(
   devices: TryOnExperienceDevices,
   fetchImpl: typeof fetch,
   selection: BodySelectionStore,
+  history?: TryOnHistoryStore,
 ): TryOnExperienceAdapters {
   const operations = new Map<OperationId, AbortController>();
   let disposed = false;
@@ -71,8 +81,68 @@ export function apiAdapters(
   const pendingDetails = new Map<OperationId, Omit<TryOnSuccess, "imageUrl">>();
   const resultListeners = new Set<() => void>();
   let resultState:
-    | { runtime: TryOnSession; replaceImage: (expected: TryOnAsset, imageUrl: string) => void }
+    | {
+        runtime: TryOnSession;
+        replaceImage: (expected: TryOnAsset, imageUrl: string) => void;
+        restoreTryOns?: ((tryOns: RestoredTryOn[]) => void) | undefined;
+      }
     | undefined;
+
+  /**
+   * Brings back the try-ons this browser kept for a restored session's body: the API lists no
+   * try-ons, so a reload would otherwise start without the shopper's results. Each is read again
+   * for a fresh image link. One the API no longer has is forgotten; one that could not be read
+   * right now (unavailable, a timeout, offline) is kept for the next restore.
+   */
+  async function restoreTryOns(bodyId: string): Promise<void> {
+    const kept = history?.of(bodyId) ?? [];
+    const restore = resultState?.restoreTryOns;
+    if (kept.length === 0 || restore === undefined) {
+      return;
+    }
+    const epoch = sessionEpoch;
+    const read = await Promise.all(
+      kept.map(async (tryOn) => {
+        try {
+          const { url } = await session.renewImage(
+            new ExperienceImageTarget.Result({
+              tryOnId: tryOn.tryOnId,
+              variant: tryOn.variantId,
+              bodyRevision: tryOn.backendRevision,
+            }),
+            AbortSignal.timeout(
+              experienceImageRenewalTimeoutMs(
+                new ExperienceImageTarget.Result({ tryOnId: tryOn.tryOnId }),
+              ),
+            ),
+          );
+          const restored: RestoredTryOn = { ...tryOn, imageUrl: url };
+          return restored;
+        } catch (error) {
+          // Deleted or expired: forgotten below. Anything else may work on the next restore.
+          return renewalGone(error) ? "gone" : "unread";
+        }
+      }),
+    );
+    if (disposed || epoch !== sessionEpoch || session.restoredBody() !== bodyId) {
+      return;
+    }
+    for (const [index, tryOn] of kept.entries()) {
+      if (read.at(index) === "gone") {
+        history?.forget(tryOn.tryOnId);
+      }
+    }
+    restore(read.filter((tryOn): tryOn is RestoredTryOn => typeof tryOn === "object"));
+  }
+
+  /** Keeps a try-on just made, so a reload that restores the session shows it again. */
+  function rememberTryOn(tryOnId: string, productId: string, variantId: string): void {
+    const bodyId = selection.selected()?.body.id;
+    const backendRevision = resultState?.runtime.tryOnAsset(tryOnId)?.backendRevision;
+    if (bodyId !== undefined && backendRevision !== undefined && backendRevision !== "") {
+      history?.remember(bodyId, { tryOnId, productId, variantId, backendRevision });
+    }
+  }
 
   function checkSession() {
     const generation = session.invalidatedCookieGeneration();
@@ -141,7 +211,11 @@ export function apiAdapters(
     consumer?: AbortSignal,
   ): Promise<void> {
     const restored = session.getRestoredPhoto(id);
-    if (restored === undefined || (expectedSrc !== undefined && restored.src !== expectedSrc)) {
+    if (
+      restored === undefined ||
+      restored.gone ||
+      (expectedSrc !== undefined && restored.src !== expectedSrc)
+    ) {
       return;
     }
     await renewImage(
@@ -208,8 +282,8 @@ export function apiAdapters(
   }
 
   return {
-    bindSession(runtime, replaceImage) {
-      resultState = { runtime, replaceImage };
+    bindSession(runtime, replaceImage, restore) {
+      resultState = { runtime, replaceImage, restoreTryOns: restore };
     },
     async runJob(job, operation, onDeadline, onSlow) {
       const abort = new AbortController();
@@ -264,7 +338,12 @@ export function apiAdapters(
         session.commitBody({ id: bodyId, source });
       } else if (effect.inner.effect !== SessionEffect.Persist) {
         sessionEpoch += 1;
-        session.clear(effect.inner.effect === SessionEffect.Clear);
+        const forget = effect.inner.effect === SessionEffect.Clear;
+        session.clear(forget);
+        if (forget) {
+          // A withdrawn session's try-ons are not shown to the next one.
+          history?.clear();
+        }
         clearResults();
       }
     },
@@ -339,23 +418,40 @@ export function apiAdapters(
     },
     getPhoto(id) {
       const restored = session.getRestoredPhoto(id);
-      return restored === undefined
-        ? devices.getPhoto(id)
+      if (restored === undefined) {
+        return devices.getPhoto(id);
+      }
+      return restored.gone
+        ? { src: "", gone: true }
         : { src: restored.src, signed: { asset: restored.asset, expiresAt: restored.expiry } };
     },
     getCamera: (id) => devices.getCamera(id),
+    photoGone: () => session.photoGone(),
     onEvent(event) {
       if (Effect.DomainEvent.instanceOf(event)) {
         const domain = event.inner.event;
         if (DomainEvent.TryOn.instanceOf(domain)) {
           const tryOn = domain.inner.event;
           if (TryOnEvent.Created.instanceOf(tryOn)) {
+            const created = tryOn.inner.tryOn;
             const result = pendingDetails.get(tryOn.inner.operation);
-            if (result?.tryOnId === tryOn.inner.tryOn.id) {
+            if (result?.tryOnId === created.id) {
               details.set(result.tryOnId, result);
             }
+            rememberTryOn(created.id, tryOn.inner.productId, created.key.variantId);
           } else if (TryOnEvent.Evicted.instanceOf(tryOn)) {
             details.delete(tryOn.inner.tryOnId);
+          }
+        } else if (
+          DomainEvent.Session.instanceOf(domain) &&
+          SessionEvent.Ready.instanceOf(domain.inner.event)
+        ) {
+          const bodyId = session.restoredBody();
+          if (bodyId !== undefined) {
+            void restoreTryOns(bodyId);
+          } else if (session.photoGone()) {
+            // The saved body is gone, or its photo: its try-on ids are no use any more.
+            history?.clear();
           }
         }
       }

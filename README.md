@@ -13,8 +13,6 @@ follow.
 | [`sdks/vue`](sdks/vue)                       | `@studio-vaai/vue`            | Vue 3 integration                                                     |
 | [`sdks/flutter`](sdks/flutter)               | `studio_vaai` (pub.dev)       | Flutter and Dart: the core through Dart bindings, prebuilt per target |
 
-The legacy packages remain available during the transition. See the [legacy migration guide](sdks/MIGRATION.md).
-
 ## Development
 
 With Node 26 and pnpm (`corepack enable`):

@@ -176,3 +176,29 @@ fn queued_batches_keep_their_own_flow_views_and_revisions() {
     assert_eq!(*transition.after.unwrap(), opened.view);
     f.driver.acknowledge(open_batch.id).unwrap();
 }
+
+#[test]
+fn a_try_on_creation_keeps_its_idempotency_key_until_it_is_answered() {
+    let session = TryOnSession::new(config()).unwrap();
+    let (body, variant): (BodyId, VariantId) = (id("body"), id("variant"));
+    let key = |revision: &str, variant| session.try_on_create_key(body, revision, variant).unwrap();
+
+    // Each new attempt gets its own key.
+    let first = key("r1", variant);
+    assert_ne!(key("r1", variant), first);
+
+    // A response lost: the shopper's retry of that attempt reuses its key.
+    session
+        .keep_try_on_create(body, "r1", variant, &first)
+        .unwrap();
+    assert_eq!(key("r1", variant), first);
+    assert_eq!(key("r1", variant), first);
+    // Another variant, or the body at another revision, is another attempt.
+    let other: VariantId = id("other");
+    assert_ne!(key("r1", other), first);
+    assert_ne!(key("r2", variant), first);
+
+    // Answered: the next creation is a new attempt.
+    session.settle_try_on_create(body, "r1", variant).unwrap();
+    assert_ne!(key("r1", variant), first);
+}

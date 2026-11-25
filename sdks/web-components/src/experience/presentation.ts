@@ -1,6 +1,8 @@
 import type {
   MessageId,
+  MessageValues,
   FlowView,
+  VariantLabel,
   PresentationView,
   TryOn,
   TryOnExperienceStep,
@@ -10,9 +12,12 @@ import type {
 } from "@studio-vaai/core";
 
 import {
+  AxisRole,
   DisplayedImage,
   BodyProgress,
   JourneyStep,
+  PresentationMode,
+  RefusalReason,
   TryOnFailureKind,
   TryOnWarning,
   variantLabelValue,
@@ -93,6 +98,74 @@ const failures = {
   [TryOnFailureKind.Failed]: ["experience.tryOnFailed", "experience.namedTryOnFailed"],
 } satisfies Record<TryOnFailureKind, readonly [MessageId, MessageId?]>;
 
+/** A size label as plain text: its size axes in the host's format, or joined with " / ". */
+function sizeLabelText({ axes, formats }: VariantLabel): string {
+  const sizes = axes.filter(({ role, label }) => role === AxisRole.Size && label !== "");
+  const format = formats.find(({ role }) => role === AxisRole.Size)?.format;
+  if (format === undefined) {
+    return sizes.map(({ label }) => label).join(" / ");
+  }
+  return sizes.reduce((text, { key, label }) => text.replace(`{${key}}`, label), format);
+}
+
+/** The fit-gate note: why the picked size is refused, and the next size that can be tried on. */
+interface FitGateNote {
+  id: MessageId;
+  values: MessageValues;
+}
+
+/**
+ * A refused size names the next one along the size run that can be tried on, and the primary
+ * button offers it. Picking on the size step reads as a recommendation; on a shown result, as an
+ * inspection of the picked size. With no size left in that direction it says there is none.
+ */
+function fitGateNote(
+  view: FlowView,
+  { selection, presentation }: InstanceType<typeof ScreenView.TryOn>["inner"],
+): FitGateNote | undefined {
+  // The recommendation's fit gate refuses the selected size before any request. A request the
+  // API refused keeps its own message and suggestion; the button still offers the next size.
+  // A host's size the gate refused was already left for the next one: the note says why.
+  const warning = presentation.feedback?.warning;
+  const switched = presentation.gateSwitch;
+  let tooLarge: boolean;
+  if (warning === TryOnWarning.TooSmall || warning === TryOnWarning.TooLarge) {
+    tooLarge = warning === TryOnWarning.TooLarge;
+  } else if (switched === undefined) {
+    return globalThis.undefined;
+  } else {
+    tooLarge = switched.reason === RefusalReason.GarmentTooLarge;
+  }
+  const variants = view.domain.product?.variants ?? [];
+  const sizeRows = selection.rows.filter(({ role }) => role === AxisRole.Size);
+  const formats = selection.labelFormats.filter(({ role }) => role === AxisRole.Size);
+  const sizeOf = (variantId: string) =>
+    sizeLabelText(variantLabelValue(variantId, variants, sizeRows, formats));
+  const requested = sizeOf(switched?.fromVariantId ?? selection.variantId);
+  const next = switched?.toVariantId ?? presentation.nextFittingVariantId;
+  if (next === undefined) {
+    return {
+      id: tooLarge
+        ? "sizeAndStyleSelection.garmentTooLargeNoAlternativeNote"
+        : "sizeAndStyleSelection.garmentTooSmallNoAlternativeNote",
+      values: { requestedSize: requested },
+    };
+  }
+  const recommendedSize = sizeOf(next);
+  if (presentation.mode === PresentationMode.Selection) {
+    return {
+      id: tooLarge
+        ? "sizeAndStyleSelection.garmentTooLargeNote"
+        : "sizeAndStyleSelection.garmentTooSmallNote",
+      values: { requestedSize: requested, recommendedSize },
+    };
+  }
+  return {
+    id: tooLarge ? "tryOnView.gateInspectTooLargeNote" : "tryOnView.gateInspectTooSmallNote",
+    values: { sizeLabel: requested, recommendedSize },
+  };
+}
+
 export function tryOnScreenState(view: FlowView, screen: InstanceType<typeof ScreenView.TryOn>) {
   const { selection, presentation } = screen.inner;
   const { feedback, progress } = presentation;
@@ -116,6 +189,7 @@ export function tryOnScreenState(view: FlowView, screen: InstanceType<typeof Scr
           selection.labelFormats,
         );
   const savingHeight = heightPending(view);
+  const fitGate = fitGateNote(view, screen.inner);
   return {
     displayed: displayedTryOnId(presentation),
     progress,
@@ -126,7 +200,12 @@ export function tryOnScreenState(view: FlowView, screen: InstanceType<typeof Scr
     retryVariantId: presentation.retryVariantId,
     suggestedLabel:
       suggestedLabel !== undefined && suggestedLabel.axes.length > 0 ? suggestedLabel : undefined,
-    warning: feedback?.warning === undefined ? undefined : warnings[feedback.warning],
+    // A fit-gate warning is said by the note under the picker, which names the size to try.
+    warning:
+      feedback?.warning === undefined || fitGate !== undefined
+        ? undefined
+        : warnings[feedback.warning],
+    fitGate,
     noSize: feedback?.noSuitableSize === true,
   };
 }

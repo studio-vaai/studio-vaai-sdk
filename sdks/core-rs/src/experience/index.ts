@@ -144,6 +144,7 @@ export type {
   CartRequest,
   InitialProductInstallation,
   RestoredBody,
+  RestoredTryOn,
   JourneyEntry,
   JourneyView,
   InteractionToken,

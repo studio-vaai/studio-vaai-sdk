@@ -32,6 +32,7 @@ function selection(): SelectionView {
             display: new ItemDisplay.Text({ text: "M" }),
             selected: true,
             available: true,
+            tried: false,
             variantId: "black-m",
           },
           {
@@ -39,6 +40,7 @@ function selection(): SelectionView {
             display: new ItemDisplay.Text({ text: "S" }),
             selected: false,
             available: true,
+            tried: false,
             variantId: "black-s",
             refusal: RefusalReason.GarmentTooSmall,
           },
@@ -47,6 +49,7 @@ function selection(): SelectionView {
             display: new ItemDisplay.Text({ text: "XL" }),
             selected: false,
             available: false,
+            tried: false,
           },
         ],
       },
@@ -59,6 +62,7 @@ function selection(): SelectionView {
             display: new ItemDisplay.Color({ hex: "#242426", alt: "Black" }),
             selected: true,
             available: true,
+            tried: false,
             variantId: "black-m",
           },
           {
@@ -69,6 +73,7 @@ function selection(): SelectionView {
             }),
             selected: false,
             available: false,
+            tried: false,
             variantId: "print-s",
           },
         ],
@@ -82,6 +87,7 @@ function selection(): SelectionView {
             display: new ItemDisplay.Glyph({ glyph: ItemGlyph.ShirtButtoned, alt: "Buttoned" }),
             selected: true,
             available: true,
+            tried: false,
             variantId: "black-m",
           },
           {
@@ -89,6 +95,7 @@ function selection(): SelectionView {
             display: new ItemDisplay.Glyph({ glyph: ItemGlyph.ShirtOpen, alt: "Open" }),
             selected: false,
             available: true,
+            tried: false,
             variantId: "black-m-open",
           },
         ],
@@ -147,13 +154,37 @@ describe("sv-variant-picker", () => {
     expect(all[6]?.label).toBe("Open");
   });
 
-  it("marks the selected size before a try-on is completed", async () => {
+  it("marks nothing before a try-on, not even the selected size", async () => {
     const el = await mountPicker({ selection: selection() });
     const [selected, otherSize, , selectedSwatch] = chips(el);
     await selected?.updateComplete;
-    expect(selected?.shadowRoot?.querySelector('[data-mark="current"]')).toBeInstanceOf(Element);
+    expect(selected?.mark).toBeUndefined();
+    expect(selected?.shadowRoot?.querySelector(".option-mark")).toBeNull();
     expect(otherSize?.mark).toBeUndefined();
     expect(selectedSwatch?.mark).toBeUndefined();
+  });
+
+  it("marks tried items light and the selected tried size dark", async () => {
+    const projected = selection();
+    // M in black was tried, and S in black.
+    projected.rows[0].items[0].tried = true;
+    projected.rows[0].items[1].tried = true;
+    projected.rows[1].items[0].tried = true;
+    const el = await mountPicker({ selection: projected });
+    const [m, s, xl, black, print] = chips(el);
+    await m?.updateComplete;
+    expect(m?.mark).toBe("current");
+    expect(m?.shadowRoot?.querySelector('[data-mark="current"]')).toBeInstanceOf(Element);
+    expect(s?.mark).toBe("tried");
+    expect(s?.shadowRoot?.querySelector('[data-mark="tried"]')).toBeInstanceOf(Element);
+    expect(xl?.mark).toBeUndefined();
+    expect(black?.mark).toBe("tried");
+    expect(print?.mark).toBeUndefined();
+    // A selected item not tried carries no mark.
+    projected.rows[0].items[0].tried = false;
+    el.selection = { ...projected };
+    await el.updateComplete;
+    expect(chips(el)[0]?.mark).toBeUndefined();
   });
 
   it("formats caller headings and selected labels through the shared message context", async () => {
@@ -359,16 +390,55 @@ describe("sv-variant-picker", () => {
     expect(seen).toEqual([]);
   });
 
+  it("says the size note in the recommendation's place, in the same slot, as a quiet note", async () => {
+    const el = await mountPicker({
+      selection: selection(),
+      recommendedSize: { axes: [{ key: "fit", role: AxisRole.Size, label: "L" }], formats: [] },
+    });
+    const slot = () => el.shadowRoot!.querySelector(".heading.badged .badge-slot");
+    expect(slot()?.querySelector("button.recommendation")).toBeInstanceOf(Element);
+    expect(slot()?.querySelector(".note")).toBeNull();
+    el.sizeNote = "Size M is too small. We recommend size L.";
+    await el.updateComplete;
+    // One slot, either the badge or the note: the row keeps its height and the chips stay put.
+    expect(el.shadowRoot!.querySelectorAll(".badge-slot")).toHaveLength(1);
+    expect(slot()?.querySelector("button.recommendation")).toBeNull();
+    const note = slot()?.querySelector<HTMLElement>(".note");
+    expect(note?.textContent?.trim()).toBe("Size M is too small. We recommend size L.");
+    expect(note?.title).toBe("Size M is too small. We recommend size L.");
+    // Not an error: no message element, no alert.
+    expect(el.shadowRoot!.querySelector("sv-message, [role=alert]")).toBeNull();
+  });
+
   it("renders an absent selection or heading without inventing an axis", async () => {
     const el = await mountPicker({});
     expect(chips(el)).toEqual([]);
     const projected = selection();
-    delete projected.rows[0].label;
+    delete projected.rows[2].label;
     el.selection = projected;
     await el.updateComplete;
     expect(
-      el.shadowRoot?.querySelector('[part="row"]')?.querySelector('[part="label"]'),
+      el.shadowRoot?.querySelectorAll('[part="row"]')[2]?.querySelector('[part="label"]'),
     ).toBeNull();
+  });
+
+  it("names unlabelled size and color rows with the selected value", async () => {
+    const projected = selection();
+    delete projected.rows[0].label;
+    delete projected.rows[1].label;
+    projected.rows[1].role = AxisRole.Color;
+    const el = await mountPicker({ selection: projected });
+    const labels = () =>
+      [...el.shadowRoot!.querySelectorAll('[part="label"]')].map((node) =>
+        node.textContent?.replaceAll(/[⁦-⁩]/gu, ""),
+      );
+    expect(labels()).toEqual(["Size: M", "Color: Black", "Wear it: Buttoned"]);
+    const german = createUiContext({ locale: "de" });
+    const detach = german.attach(el);
+    await german.ready();
+    await el.updateComplete;
+    expect(labels()).toEqual(["Größe: M", "Farbe: Black", "Wear it: Buttoned"]);
+    detach();
   });
 
   it("honors segmented axis display hints without introducing another selection source", async () => {

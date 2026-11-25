@@ -11,6 +11,7 @@ import { TryOnExperience, resolveCommerce } from "../controller.js";
 import { apiAdapters } from "./adapter.js";
 import { bodySelectionStore } from "./body-selection.js";
 import { lookupProduct, productPresentationFor } from "./product.js";
+import { tryOnHistoryStore } from "./try-on-history.js";
 
 export interface ApiTryOnExperienceOptions {
   api: ClientConfig;
@@ -67,11 +68,12 @@ export async function createApiTryOnExperience(
       options.presentProduct(product),
     );
     const selection = await bodySelectionStore(options.api.baseUrl, options.api.clientApiKey);
+    const history = await tryOnHistoryStore(options.api.baseUrl, options.api.clientApiKey);
     signal?.throwIfAborted();
     const overrides =
       typeof options.commerce === "function" ? options.commerce() : options.commerce;
     const snapshot = resolveCommerce(commerce, overrides);
-    const adapters = apiAdapters(client, options.devices, fetchImpl, selection);
+    const adapters = apiAdapters(client, options.devices, fetchImpl, selection, history);
     return await TryOnExperience.create(
       { hostProduct, autoStart: options.autoStart ?? AutoStartPolicy.Never },
       adapters,

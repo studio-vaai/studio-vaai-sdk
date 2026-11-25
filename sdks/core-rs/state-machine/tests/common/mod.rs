@@ -409,6 +409,20 @@ impl Fixture {
         scores: Vec<SizeRecommendationScore>,
         session_config: SessionConfig,
     ) -> (Self, Vec<Effect>) {
+        Self::ready_with_recommendation(
+            config,
+            SizeRecommendationOutcome::Fetched { scores },
+            session_config,
+        )
+    }
+
+    /// `ready_with_session`, with this recommendation outcome, e.g. one with
+    /// the API's fit gates.
+    pub fn ready_with_recommendation(
+        config: FlowConfig,
+        recommendation: SizeRecommendationOutcome,
+        session_config: SessionConfig,
+    ) -> (Self, Vec<Effect>) {
         let f = Self::with_session_config(config, session_config);
         let op = f
             .session
@@ -451,10 +465,14 @@ impl Fixture {
             .height()
             .and_then(HeightStatus::outstanding)
             .unwrap();
+        // The backend's revision of the height, as the API reports it.
         f.session
             .complete(Completion {
                 operation: op,
-                outcome: BodyOutcome::HeightSet.into(),
+                outcome: Outcome::Body {
+                    outcome: BodyOutcome::HeightSet,
+                    backend_revision: Some("rev-175".into()),
+                },
             })
             .unwrap();
         // The default experience asks for a recommendation by itself.
@@ -477,7 +495,7 @@ impl Fixture {
         f.session
             .complete(Completion {
                 operation: recommend,
-                outcome: SizeRecommendationOutcome::Fetched { scores }.into(),
+                outcome: recommendation.into(),
             })
             .unwrap();
         let effects = drain(&f.driver);

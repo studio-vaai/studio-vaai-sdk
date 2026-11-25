@@ -45,10 +45,10 @@ pub use size_recommendation::{
     SizeRecommendationOutcome, SizeRecommendationScore, SizeRestriction,
 };
 pub use try_on::{
-    DetachedStage, Inadmissible, PermanentTryOnFailure, RefusalReason, RefusedTryOn, ResultFit,
-    ResultFitAnchor, TryOn, TryOnAsset, TryOnCommand, TryOnEvent, TryOnJob, TryOnKey, TryOnOutcome,
-    TryOnRequestContext, TryOnRequestFailure, TryOnRequestOrigin, TryOnRequestSnapshot,
-    TryOnRequestStatus,
+    DetachedStage, Inadmissible, PermanentTryOnFailure, RefusalReason, RefusedTryOn, RestoredTryOn,
+    ResultFit, ResultFitAnchor, ResultSubjectBand, TryOn, TryOnAsset, TryOnCommand, TryOnEvent,
+    TryOnJob, TryOnKey, TryOnOutcome, TryOnRequestContext, TryOnRequestFailure, TryOnRequestOrigin,
+    TryOnRequestSnapshot, TryOnRequestStatus,
 };
 
 pub(crate) use body::validate_height;

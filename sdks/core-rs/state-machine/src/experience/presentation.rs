@@ -43,6 +43,16 @@ pub struct PresentationView {
     pub fit_retryable: bool,
     /// An eligible alternative for the followed request's refusal.
     pub suggested_variant_id: Option<VariantId>,
+    /// The size to try instead of a selected one the fit gate refuses: the next one along the
+    /// size run, in the direction of the refusal, that can be tried on. `None` when the selection
+    /// is not refused, or when no size is left in that direction.
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub next_fitting_variant_id: Option<VariantId>,
+    /// The host's size the fit gate refused, which the selection left for
+    /// the next size that can be tried on. Shown while that size stays
+    /// selected.
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub gate_switch: Option<super::selection::GateSwitch>,
     /// The carousel: product results matching the displayed toolbar items,
     /// in creation order, earlier body revisions included. Other toolbar
     /// choices are reached through `axis_rows`.
@@ -72,10 +82,21 @@ pub enum TryOnProgress {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum PrimaryTryOnAction {
-    Try { variant_id: VariantId },
-    Retry { variant_id: VariantId },
+    Try {
+        variant_id: VariantId,
+    },
+    Retry {
+        variant_id: VariantId,
+    },
+    /// The selection is refused by the fit gate; running this selects the
+    /// next size that can be tried on, `variant_id`, and tries it on.
+    TryNextFitting {
+        variant_id: VariantId,
+    },
     AlreadyWearing,
-    Unavailable { reason: Rejection },
+    Unavailable {
+        reason: Rejection,
+    },
 }
 
 /// The shopper's current activity on the try-on screen.
@@ -155,6 +176,10 @@ pub enum PresentationAction {
         /// The try-on to display; it must be of the flow's product.
         try_on_id: TryOnId,
     },
+    /// Brings back try-ons the shopper made earlier with this body, e.g.
+    /// after a page reload restored the session (see `TryOnCommand::Restore`).
+    /// One of the selected variant shows at once.
+    RestoreTryOns { try_ons: Vec<RestoredTryOn> },
     /// Shows an item of a result-toolbar axis, preserving every other item
     /// and the displayed body revision. Reuses a companion immediately or
     /// follows its request without changing the next selection.
@@ -201,6 +226,8 @@ pub(super) struct Presentation {
     pub preparing: Option<TryOnRequestId>,
     /// At most once automatically per companion key; explicit requests may retry.
     pub prepared: std::collections::BTreeSet<TryOnKey>,
+    /// Try-ons a session restore is bringing back, until the domain has them.
+    pub restoring: std::collections::BTreeSet<TryOnId>,
 }
 
 impl Presentation {
@@ -299,6 +326,16 @@ impl DefaultController {
                     PrimaryTryOnAction::Retry {
                         variant_id: selected,
                     } if selected == variant_id => PresentationAction::RetryTryOn,
+                    PrimaryTryOnAction::TryNextFitting {
+                        variant_id: fitting,
+                    } if fitting == variant_id => {
+                        // Selection first: the request reads the selection when it starts.
+                        let (axis, item, _) = self
+                            .next_fitting_size(snapshot)
+                            .ok_or(Rejection::TryOnUnavailable)?;
+                        self.select(axis, item, snapshot, plan)?;
+                        PresentationAction::RequestTryOn
+                    }
                     PrimaryTryOnAction::Unavailable { reason } => return Err(reason),
                     _ => return Err(Rejection::TryOnUnavailable),
                 };
@@ -307,6 +344,10 @@ impl DefaultController {
             PresentationAction::RequestTryOn => {
                 self.presentation.auto_start = AutoStart::Disarmed;
                 self.request(TryOnRequestOrigin::Shopper, snapshot, plan)?;
+                // Trying it on makes the selection the shopper's: a refusal then
+                // leaves it in place, with the next size offered.
+                let axes: Vec<_> = self.selection.axes.iter().map(|a| a.key.clone()).collect();
+                self.selection.picked.extend(axes);
             }
             PresentationAction::RetryTryOn => {
                 let (variant_id, target) = self
@@ -348,6 +389,12 @@ impl DefaultController {
             PresentationAction::ShowAxisItem { axis, item } => {
                 self.show_axis_item(&axis, &item, snapshot, plan)?;
             }
+            PresentationAction::RestoreTryOns { try_ons } => {
+                self.presentation
+                    .restoring
+                    .extend(try_ons.iter().map(|restored| restored.try_on_id));
+                plan.command(Purpose::Other, TryOnCommand::Restore { try_ons });
+            }
         }
         Ok(())
     }
@@ -362,6 +409,17 @@ impl DefaultController {
         match event {
             // A newly refused size is seeded no more.
             TryOnEvent::Refused { .. } => self.policy(snapshot, plan)?,
+            // A try-on a session restore brought back shows when it is the
+            // selection's, while the flow shows only the photo and follows no
+            // request.
+            TryOnEvent::Created { try_on, .. }
+                if self.presentation.restoring.remove(&try_on.id)
+                    && self.presentation.followed_try_on_request.is_none()
+                    && displayed_image(self.presentation.displayed, snapshot)
+                        == DisplayedImage::SourcePhoto =>
+            {
+                self.show_tried_selection(snapshot, plan);
+            }
             TryOnEvent::RequestResolved {
                 try_on_request_id, ..
             } if followed(try_on_request_id) => {
@@ -480,6 +538,15 @@ impl DefaultController {
             && matches!(snapshot.body_target(), Some(BodyTarget::Acknowledged { revision }) if revision == result.key.body_revision)
         {
             PrimaryTryOnAction::AlreadyWearing
+        } else if let Err(Rejection::TryOnRefused { .. }) = admission
+            && let Some((_, _, fitting)) = self.next_fitting_size(snapshot)
+            && snapshot
+                .body_target()
+                .is_some_and(|target| self.admit_target(snapshot, fitting, &target).is_ok())
+        {
+            PrimaryTryOnAction::TryNextFitting {
+                variant_id: fitting,
+            }
         } else if let Err(reason) = admission {
             PrimaryTryOnAction::Unavailable { reason: *reason }
         } else if retry == Some(variant_id) {
@@ -487,6 +554,103 @@ impl DefaultController {
         } else {
             PrimaryTryOnAction::Try { variant_id }
         }
+    }
+
+    /// The size to offer in place of a selected one the fit gate refuses: the
+    /// next item along a size axis, in the host's order, in the direction of
+    /// the refusal (larger for too small, smaller for too large), keeping the
+    /// items on the other axes. Refused and sold-out sizes are skipped. It is
+    /// the nearest size that can be tried on, not the best-fitting one: the
+    /// recommendation is for that.
+    pub(super) fn next_fitting_size(
+        &self,
+        snapshot: &DomainSnapshot,
+    ) -> Option<(AxisKey, ForeignId, VariantId)> {
+        let reason = refusal(snapshot, self.selection.variant_id)?;
+        let product = snapshot.product.as_ref()?;
+        let rows = self.selection.rows(product, |id| refusal(snapshot, id));
+        rows.into_iter()
+            .filter(|row| row.role == Some(crate::AxisRole::Size))
+            .find_map(|row| {
+                let at = row.items.iter().position(|item| item.selected)?;
+                let tryable = |item: &&super::selection::VariantRowItem| {
+                    item.available
+                        && item.refusal.is_none()
+                        && item
+                            .variant_id
+                            .is_some_and(|id| !snapshot.unavailable_variants.contains(&id))
+                };
+                let next = match reason {
+                    RefusalReason::GarmentTooSmall => row.items[at + 1..].iter().find(tryable),
+                    RefusalReason::GarmentTooLarge => row.items[..at].iter().rev().find(tryable),
+                }?;
+                Some((row.key.clone(), next.key.clone(), next.variant_id?))
+            })
+    }
+
+    /// The host's size counts as the shopper's choice, so the size
+    /// recommendation leaves it be. The fit gate is the exception: a size of
+    /// the host's it refuses gives way to the next size along the run that
+    /// can be tried on, and the view says why. A size the shopper picked
+    /// stays, with that size offered by the primary action.
+    pub(super) fn switch_refused_host_size(&mut self, snapshot: &DomainSnapshot, plan: &mut Plan) {
+        let size_picked = self.selection.axes.iter().any(|axis| {
+            axis.role == Some(crate::AxisRole::Size) && self.selection.picked.contains(&axis.key)
+        });
+        if size_picked {
+            return;
+        }
+        let from = self.selection.variant_id;
+        let Some(reason) = refusal(snapshot, from) else {
+            return;
+        };
+        let Some((_, _, to)) = self.next_fitting_size(snapshot) else {
+            return;
+        };
+        self.selection.variant_id = to;
+        self.selection.recommended_by = None;
+        self.selection.gate_switch = Some(super::selection::GateSwitch {
+            from_variant_id: from,
+            to_variant_id: to,
+            reason,
+        });
+        // Trying on a size the shopper did not ask for is the shopper's call. A request for the
+        // refused size has nothing left to show: the note says why the size moved.
+        self.presentation.auto_start = AutoStart::Disarmed;
+        self.detach(snapshot, plan);
+        // A size the shopper already tried shows its result at once.
+        self.show_tried_selection(snapshot, plan);
+    }
+
+    /// Shows the selected variant's latest try-on with the current height,
+    /// if it has one: choosing a variant already tried shows it at once,
+    /// without a request, and the primary action says it is worn. An
+    /// untried variant keeps the image in view.
+    pub(super) fn show_tried_selection(&mut self, snapshot: &DomainSnapshot, plan: &mut Plan) {
+        if !self.navigation.on_try_on() {
+            return;
+        }
+        let Some(BodyTarget::Acknowledged { revision }) = snapshot.body_target() else {
+            return;
+        };
+        let variant_id = self.selection.variant_id;
+        let Some(try_on_id) = product_try_ons(snapshot)
+            .filter(|t| t.key.variant_id == variant_id && t.key.body_revision == revision)
+            .last()
+            .map(|t| t.id)
+        else {
+            return;
+        };
+        if self.presentation.mode == PresentationMode::Selection {
+            self.presentation.mode = PresentationMode::EditingVariant;
+        }
+        if self.presentation.displayed == (DisplayedImage::TryOn { try_on_id }) {
+            return;
+        }
+        self.presentation.displayed = DisplayedImage::TryOn { try_on_id };
+        self.clear_try_on_issue();
+        plan.event(PresentationEvent::TryOnSelected { try_on_id });
+        plan.prepare_companions = true;
     }
 
     /// What the view shows of the presentation.
@@ -580,6 +744,13 @@ impl DefaultController {
             fit_retryable,
             cart_pending: self.cart_view(snapshot).pending,
             suggested_variant_id: suggested.map(|variant| variant.id),
+            next_fitting_variant_id: self
+                .next_fitting_size(snapshot)
+                .map(|(_, _, variant_id)| variant_id),
+            gate_switch: self
+                .selection
+                .gate_switch
+                .filter(|switch| switch.to_variant_id == self.selection.variant_id),
             try_ons: self
                 .carousel_try_ons(snapshot)
                 .iter()
@@ -758,8 +929,14 @@ impl DefaultController {
             self.presentation.auto_start = AutoStart::Disarmed;
             return Ok(());
         }
-        // It stays armed until a try-on can start.
-        if self.try_on_admission(snapshot).is_err() {
+        // It stays armed until a try-on can start, and until the size
+        // recommendation has answered: its fit gate may refuse the size, and a
+        // refused size is moved, never sent.
+        if self.try_on_admission(snapshot).is_err()
+            || snapshot.size_recommendation_pending
+            || (snapshot.size_recommendation.is_none()
+                && snapshot.size_recommendation_error.is_none())
+        {
             return Ok(());
         }
         self.presentation.auto_start = AutoStart::Disarmed;

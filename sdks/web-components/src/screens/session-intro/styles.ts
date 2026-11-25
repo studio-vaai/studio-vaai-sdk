@@ -25,14 +25,15 @@ export const sessionIntroStyles = css`
   .guide {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: var(--_sv-stage-frame-justify, center);
     min-inline-size: 0;
     min-block-size: 0;
   }
   .guide-frame {
     /* The attribution sits at the foot of the illustration on narrow screens. */
+    --_sv-guide-aspect: calc(589 / 600);
     position: relative;
-    aspect-ratio: 589 / 600;
+    aspect-ratio: var(--_sv-guide-aspect);
     inline-size: 100%;
     max-block-size: 100%;
     background: transparent;
@@ -125,25 +126,23 @@ export const sessionIntroStyles = css`
     transition: none;
   }
   .legal {
-    margin: 0 0 calc(var(--_sv-spacing) * 2);
+    margin: 0;
   }
   a {
     color: var(--_sv-legal-link);
     text-decoration: none;
   }
-  .before-actions:has(.errors) .legal {
-    margin-block-end: 0;
-  }
   .errors {
     display: grid;
     gap: calc(var(--_sv-spacing) * 2);
-    margin-block: calc(var(--_sv-spacing) * 3);
+    margin-block-start: calc(var(--_sv-spacing) * 3);
   }
   @container sv-session-intro (min-width: 40rem) {
+    .guide {
+      container-type: size;
+    }
     .guide-frame {
-      block-size: 100%;
-      inline-size: auto;
-      max-inline-size: 100%;
+      inline-size: min(100cqi, 100cqb * var(--_sv-guide-aspect));
     }
     .steps {
       display: block;

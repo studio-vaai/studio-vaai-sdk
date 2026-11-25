@@ -124,6 +124,54 @@ fn picker_cancel_preserves_body_results_and_screen() {
 }
 
 #[test]
+fn opening_the_library_again_replaces_a_picker_whose_cancellation_never_came() {
+    let f = Fixture::ready();
+    try_on_m(&f);
+    replace_with_library(&f);
+    let first = picker_token(&f.flow.view().unwrap());
+    drain(&f.driver);
+    f.flow
+        .dispatch(
+            PhotoAction::BeginSource {
+                source: PhotoSource::Library,
+            }
+            .into(),
+        )
+        .unwrap();
+    let second = picker_token(&f.flow.view().unwrap());
+    assert_ne!(first, second);
+    let effects = drain(&f.driver);
+    assert!(effects.iter().any(|effect| matches!(
+        effect,
+        Effect::DeviceEffect {
+            effect: DeviceEffect::Picker {
+                effect: PickerEffect::Dismiss { token }
+            }
+        } if *token == first
+    )));
+    // The first picker's late answer no longer counts; the second one's does.
+    f.flow
+        .complete_device(
+            PickerEvent::Selected {
+                token: first,
+                media: id("late"),
+            }
+            .into(),
+        )
+        .unwrap();
+    assert_eq!(
+        f.flow.view().unwrap().modal,
+        Some(Modal::Picker { token: second })
+    );
+    f.flow
+        .complete_device(PickerEvent::Cancelled { token: second }.into())
+        .unwrap();
+    let view = f.flow.view().unwrap();
+    assert_eq!(view.modal, None);
+    assert!(matches!(view.screen, ScreenView::TryOn { .. }));
+}
+
+#[test]
 fn rejected_replacement_can_return_to_old_result() {
     let f = Fixture::ready();
     try_on_m(&f);

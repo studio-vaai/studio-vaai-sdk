@@ -64,6 +64,18 @@ pub(super) fn classify_authenticated_api_error(
     writes: bool,
     revision: u64,
 ) -> Outcome {
+    // A request sent with the session's credential that comes back 401 was not
+    // authorised by it, whatever its body says (a problem kind this client does
+    // not know, a gateway's own page): the credential is rejected, so the flow
+    // ends the session instead of blaming the variant or the photo.
+    if matches!(
+        error,
+        ApiError::Problem { status: 401, .. }
+            | ApiError::UnexpectedStatus { status: 401, .. }
+            | ApiError::Decode { status: 401, .. }
+    ) {
+        return Outcome::CredentialRejected { revision };
+    }
     match classify_experience_api_error(error, writes) {
         Outcome::SessionExpired => Outcome::CredentialRejected { revision },
         outcome => outcome,
@@ -134,6 +146,39 @@ pub(super) fn foreign_ids(ids: std::collections::HashMap<String, String>) -> For
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn any_unauthorised_answer_to_an_authenticated_request_rejects_the_credential() {
+        for error in [
+            ApiError::UnexpectedStatus {
+                status: 401,
+                body: r#"{"title":"unauthorized"}"#.to_owned(),
+            },
+            ApiError::Decode {
+                status: 401,
+                reason: "not JSON".to_owned(),
+            },
+        ] {
+            assert!(matches!(
+                classify_authenticated_api_error(error, true, 7),
+                Outcome::CredentialRejected { revision: 7 }
+            ));
+        }
+        // Another client error stays the request's own failure.
+        assert!(matches!(
+            classify_authenticated_api_error(
+                ApiError::UnexpectedStatus {
+                    status: 400,
+                    body: String::new(),
+                },
+                true,
+                7
+            ),
+            Outcome::Failed {
+                error: BackendError::InvalidRequest
+            }
+        ));
+    }
 
     #[test]
     fn only_a_submitted_write_can_be_uncertain_after_transport_failure() {

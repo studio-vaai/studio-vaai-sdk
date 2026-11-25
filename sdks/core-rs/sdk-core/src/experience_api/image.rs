@@ -49,18 +49,21 @@ pub async fn renew_experience_image(
     use ExperienceImageRenewal::{Ended, Renewed};
     let ended = |outcome| Ended { outcome };
     let unavailable = || ended(failed(BackendError::Unavailable));
+    let gone = || ended(failed(BackendError::NotFound));
     if !credentials.is_current(&request) {
         return ended(Outcome::SessionExpired);
     }
     let client = request.client();
     let result = match target {
+        // `NotFound` tells the host the photo is gone for good (the body, or its
+        // stored cut-out, was deleted), so it drops what it holds of it;
+        // `Unavailable` is a renewal that may work later.
         ExperienceImageTarget::Photo { body_id } => match client.list_bodies().await {
-            Ok(bodies) => body_from_list(bodies, body_id).map_or_else(unavailable, |body| {
+            Ok(bodies) => body_from_list(bodies, body_id).map_or_else(gone, |body| {
                 let expiry = credentials.parse_expiry_ms(body.source_image_url_expires_at);
-                if body.source_image_url.trim().is_empty()
-                    || !expiry.is_finite()
-                    || expiry <= credentials.now_ms()
-                {
+                if body.source_image_url.trim().is_empty() {
+                    gone()
+                } else if !expiry.is_finite() || expiry <= credentials.now_ms() {
                     unavailable()
                 } else {
                     Renewed {

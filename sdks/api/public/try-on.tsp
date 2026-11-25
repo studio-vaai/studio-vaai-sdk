@@ -15,7 +15,8 @@ namespace StudioVaai {
       | BodyIdBadRequestProblemKind
       | ProductIdBadRequestProblemKind
       | "invalid-try-on-id"
-      | "invalid-variant-id";
+      | "invalid-variant-id"
+      | "invalid-idempotency-key";
   }
 
   @error
@@ -45,6 +46,16 @@ namespace StudioVaai {
   @doc("No size recommendation is available for this product and body.")
   model SizeRecommendationUnavailableResponse
     is NoStoreProblemResponse<400, SizeRecommendationUnavailableProblem>;
+
+  @error
+  @doc("The `Idempotency-Key` already names a try-on of a different request: another body, body revision, product or variant. Send a new key for a new request.")
+  model TryOnIdempotencyConflictProblem extends ProblemDetails {
+    kind: "idempotency-key-reused";
+  }
+
+  @doc("The `Idempotency-Key` was already used for a different try-on request.")
+  model TryOnIdempotencyConflictResponse
+    is NoStoreProblemResponse<409, TryOnIdempotencyConflictProblem>;
 
   @doc("The requested garment size was rejected. Use reason to choose a localized message; title and detail provide fallback text.")
   model TryOnSizeRejectedResponse
@@ -151,6 +162,21 @@ namespace StudioVaai {
     y: float64;
   }
 
+  @doc("One horizontal band of the person's outline in the try-on image, garment included. Coordinates range from 0 to 1 relative to the complete image.")
+  model SubjectBand {
+    @doc("Normalized top edge of the band.")
+    top: float64;
+
+    @doc("Normalized bottom edge of the band.")
+    bottom: float64;
+
+    @doc("Normalized x of the person's leftmost point within the band.")
+    left: float64;
+
+    @doc("Normalized x of the person's rightmost point within the band.")
+    right: float64;
+  }
+
   model TryOnSuccess {
     @doc("The body revision rendered by this request, returned when creating a try-on.")
     bodyRevisionId?: string;
@@ -165,6 +191,9 @@ namespace StudioVaai {
 
     @doc("Optional positions for fit annotations in the try-on image. Omitted when no annotations are available.")
     fitAnchors?: FitAnchor[];
+
+    @doc("Optional outline of the person in the try-on image, as horizontal bands from top to bottom. Bands without the person are omitted. Place fit annotations in the free space beside these bands so they do not cover the person.")
+    subjectBands?: SubjectBand[];
 
     @doc("Diagnostic metadata for internal tooling.")
     @extension("x-internal", true)
@@ -236,11 +265,15 @@ namespace StudioVaai {
     @route("/products/{productId}/try-on")
     @operationId("createTryOn")
     @summary("Generate a try-on")
-    @doc("Generate a try-on for a body and a published product variant. This request waits for completion. Success returns 201 with the image. A size rejection returns a 422 problem response with a reason and a suggested alternative size. Use `getProductDetails` to discover the product's variants.")
+    @doc("Generate a try-on for a body and a published product variant. This request waits for completion. Success returns 201 with the image. A size rejection returns a 422 problem response with a reason and a suggested alternative size. Use `getProductDetails` to discover the product's variants. Send an `Idempotency-Key` so a retry after a lost response cannot create, and bill, a second try-on.")
     createTryOn(
       ...ApiVersionHeader,
       ...ClientApiKeyHeader,
       @path productId: string,
+
+      @doc("Makes the request safe to retry: 1 to 255 printable ASCII characters, unique per try-on request, such as a UUID. A repeat with the same key and the same body, body revision, product and variant answers with the try-on the key already names, as 201 or 422 like the first answer, without rendering or billing another; while that try-on is still rendering, after waiting it returns 503 and can be retried. The key of a try-on that failed can be used again. Reusing the key for a different request returns 409. Keys are scoped to the session's shopper and shop and kept as long as the try-on (at most 60 days).")
+      @header("Idempotency-Key")
+      idempotencyKey?: string,
 
       @doc("Body to use for the try-on. Must belong to the current session.")
       @query
@@ -262,8 +295,10 @@ namespace StudioVaai {
       | SessionUnauthorizedResponse
       | SessionForbiddenResponse
       | TryOnNotFoundResponse
+      | TryOnIdempotencyConflictResponse
       | TryOnSizeRejectedResponse
-      | NoStoreInternalServerErrorResponse;
+      | NoStoreInternalServerErrorResponse
+      | NoStoreServiceUnavailableResponse;
 
     @get
     @route("/try-ons/{tryOnId}")

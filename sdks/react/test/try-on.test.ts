@@ -96,11 +96,12 @@ describe("StudioVaaiTryOn", () => {
         labelFormats: [],
         variantId,
       }));
-      const render = (foreignId: string) => {
+      const render = (foreignId: string, fitScore?: boolean) => {
         root.render(
           createElement(StudioVaaiTryOn, {
             api,
             foreignId,
+            ...(fitScore !== globalThis.undefined && { fitScore }),
             productName: "Shirt",
             fetch,
             presentProduct,
@@ -144,6 +145,13 @@ describe("StudioVaaiTryOn", () => {
         expect(presentProduct).toHaveBeenCalledExactlyOnceWith(
           expect.objectContaining({ productId }),
         );
+        // The fit score stays hidden unless the shop opts in.
+        const element = container.querySelector("sv-try-on-experience");
+        expect(element?.fitScore).toBe(false);
+        await act(async () => {
+          render("shirt", true);
+        });
+        expect(element?.fitScore).toBe(true);
       } finally {
         await act(async () => {
           root.unmount();

@@ -192,13 +192,14 @@ export class SvSessionIntroScreen extends SvElement implements SvSessionIntroScr
       .busy=${this.busy}
       .statusMessage=${this.busy ? copy.busyLabel : ""}
       panel-align="center"
+      .alignPhoto=${this.recoveryOnly === true ? undefined : "baseline"}
     >
       <span slot="description"
         ><span class="subtitle">${copy.subtitle}</span
         ><sv-powered-by class="header-credit"></sv-powered-by
       ></span>
       <div slot="stage" class="guide">
-        <div class="guide-frame">
+        <div class="guide-frame" data-sv-stage-frame>
           <sv-photo-guide></sv-photo-guide>
           <sv-powered-by class="guide-credit"></sv-powered-by>
         </div>

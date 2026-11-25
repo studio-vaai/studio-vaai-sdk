@@ -56,6 +56,11 @@ export type StudioVaaiTryOnProps = (
   /** MessageFormat 2 overrides for the current locale. */
   messages?: MessageOverrides | undefined;
   appearance?: SvAppearance;
+  /**
+   * Shows the fit score, its intended-fit detail and the fit callouts on a result. Off by default;
+   * the size recommendation and the fit gate work either way.
+   */
+  fitScore?: boolean;
   /** Live overrides of price and stock supplied by presentProduct. */
   commerce?: ProductCommerce;
   autoStart?: FlowConfig["autoStart"];
@@ -87,6 +92,7 @@ function StudioVaaiTryOnView(
     productId,
     foreignId,
     productName,
+    fitScore = false,
     active = true,
     commerce,
     presentProduct,
@@ -340,6 +346,7 @@ function StudioVaaiTryOnView(
       return;
     }
     element.experience = experience;
+    element.fitScore = fitScore;
     if (installedToken !== globalThis.undefined) {
       element.productName = productName;
     }
@@ -353,7 +360,7 @@ function StudioVaaiTryOnView(
     return () => {
       element.removeEventListener("sv-try-on-experience-error", onError);
     };
-  }, [experience, installedToken, productName, props.onAddToCart]);
+  }, [experience, fitScore, installedToken, productName, props.onAddToCart]);
 
   return createElement(
     TryOnExperienceContext.Provider,

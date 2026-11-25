@@ -1,6 +1,7 @@
 use api::TryOnSuccess;
 use state_machine::{
-    BackendError, Outcome, ResultFitAnchor, TryOnAsset, TryOnId, TryOnOutcome, VariantId,
+    BackendError, Outcome, ResultFitAnchor, ResultSubjectBand, TryOnAsset, TryOnId, TryOnOutcome,
+    VariantId,
 };
 
 use super::outcomes::failed;
@@ -61,10 +62,30 @@ pub fn created_try_on_outcome(
             y: anchor.y,
         })
         .collect();
+    let unit = |value: f64| (0.0..=1.0).contains(&value);
+    let subject_bands = result
+        .subject_bands
+        .into_iter()
+        .flatten()
+        .filter(|band| {
+            [band.top, band.bottom, band.left, band.right]
+                .into_iter()
+                .all(unit)
+                && band.top < band.bottom
+                && band.left <= band.right
+        })
+        .map(|band| ResultSubjectBand {
+            top: band.top,
+            bottom: band.bottom,
+            left: band.left,
+            right: band.right,
+        })
+        .collect();
     TryOnOutcome::CreatedWithAnchors {
         try_on_id,
         image_url: result.image_url.into(),
         fit_anchors,
+        subject_bands,
     }
     .into()
 }

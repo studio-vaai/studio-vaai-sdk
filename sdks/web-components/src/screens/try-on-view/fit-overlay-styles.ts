@@ -4,9 +4,13 @@ export const fitOverlayStyles = css`
   .callouts {
     --_sv-fit-reveal-duration: 100ms;
     --_sv-fit-reveal-ease: cubic-bezier(0.23, 1, 0.32, 1);
+    /* The least room between a card and the person. */
+    --_sv-fit-clearance: calc(var(--_sv-spacing) * 4);
     position: absolute;
     inset: 0;
     gap: calc(var(--_sv-spacing) * 2.5);
+    /* Unused by the absolute layout, so it carries the clearance to the layout controller. */
+    column-gap: var(--_sv-fit-clearance);
     padding: calc(var(--_sv-spacing) * 3) calc(var(--_sv-spacing) * 2);
     padding-block-end: calc(var(--_sv-spacing) * 11.5 + var(--_sv-caption-lift));
     visibility: hidden;
@@ -54,11 +58,10 @@ export const fitOverlayStyles = css`
     left: var(--_sv-card-x);
     top: var(--_sv-card-y);
     inline-size: max-content;
-    min-inline-size: min(calc(var(--_sv-spacing) * 31), calc(50% - var(--_sv-spacing) * 4));
     max-inline-size: calc(50% - var(--_sv-spacing) * 4);
     padding: 0;
     border: 0;
-    border-radius: var(--_sv-radius-xl);
+    border-radius: var(--_sv-radius-lg);
     background: none;
     font: inherit;
     text-align: start;
@@ -84,7 +87,133 @@ export const fitOverlayStyles = css`
     opacity: calc(0.6 + 0.4 * var(--_sv-fit-emphasis));
     stroke-dasharray: 6 5;
     stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
     transition: opacity 260ms ease;
+  }
+  /* The leader's last stretch: its steps fade out towards the anchor (opacity set per step). */
+  .leader-fade line {
+    stroke-linecap: butt;
+  }
+  /* Where a leader ends: a soft white halo dot on the garment, legible on white, dark, striped
+     and furry cloth alike — white on any theme, as it marks the photo, not the interface. */
+  .callouts[data-layout="columns"] .anchor {
+    display: block;
+    inline-size: calc(var(--_sv-spacing) * 1.75);
+    block-size: calc(var(--_sv-spacing) * 1.75);
+    border: 0;
+    background: var(--_sv-media-foreground);
+    /* A hairline and a soft shadow carry it on white cloth; the white glow on dark cloth. */
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--_sv-media-overlay) 40%, transparent),
+      0 0 0 calc(var(--_sv-spacing) * 0.75)
+        color-mix(in srgb, var(--_sv-media-foreground) 45%, transparent),
+      0 0 calc(var(--_sv-spacing) * 2.5) calc(var(--_sv-spacing) * 1.25)
+        color-mix(in srgb, var(--_sv-media-foreground) 55%, transparent),
+      0 1px calc(var(--_sv-spacing) * 1.5) var(--_sv-media-overlay);
+  }
+  .callouts[data-layout="columns"] .anchor::after {
+    content: "";
+    position: absolute;
+    inset: calc(var(--_sv-spacing) * -2.5);
+  }
+  /* The length is read at the front hem: a short horizontal tick across it, not a dot. */
+  .callouts[data-layout="columns"] .anchor[data-marker="tick"] {
+    inline-size: calc(var(--_sv-spacing) * 5.5);
+    block-size: 3px;
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--_sv-media-overlay) 40%, transparent),
+      0 0 0 calc(var(--_sv-spacing) * 0.5)
+        color-mix(in srgb, var(--_sv-media-foreground) 45%, transparent),
+      0 0 calc(var(--_sv-spacing) * 2) calc(var(--_sv-spacing) * 0.75)
+        color-mix(in srgb, var(--_sv-media-foreground) 50%, transparent),
+      0 1px calc(var(--_sv-spacing) * 1.5) var(--_sv-media-overlay);
+  }
+  /* The marker of the callout pinned or pointed at grows and comes to full strength, and its
+     leader shows whole, fade included. */
+  .callouts[data-layout="columns"] .anchor {
+    transition:
+      opacity var(--_sv-fit-reveal-duration) var(--_sv-fit-reveal-ease),
+      transform var(--_sv-fit-reveal-duration) var(--_sv-fit-reveal-ease),
+      scale 180ms ease;
+  }
+  .callouts[data-open][data-layout="columns"] .anchor {
+    opacity: 0.9;
+  }
+  .callouts[data-open][data-layout="columns"] .anchor[aria-pressed="true"],
+  .callouts[data-open][data-layout="columns"] .annotation:has(.callout[data-active]) + .anchor,
+  .callouts[data-open][data-layout="columns"]:not([data-pinned])
+    .annotation:has(.callout:focus-visible)
+    + .anchor {
+    opacity: 1;
+    scale: 1.75;
+  }
+  .callouts[data-layout="columns"] .anchor[data-marker="tick"][aria-pressed="true"],
+  .callouts[data-layout="columns"]
+    .annotation:has(.callout[data-active])
+    + .anchor[data-marker="tick"] {
+    scale: 1.35 1.75;
+  }
+  .annotation:has(.callout[data-active]) .leader-fade line {
+    opacity: 1;
+  }
+  @media (hover: hover) {
+    .callouts[data-open][data-layout="columns"]:not([data-pinned])
+      .annotation:has(.callout:hover)
+      + .anchor {
+      opacity: 1;
+      scale: 1.75;
+    }
+    .callouts[data-layout="columns"]:not([data-pinned])
+      .annotation:has(.callout:hover)
+      + .anchor[data-marker="tick"] {
+      scale: 1.35 1.75;
+    }
+    .callouts:not([data-pinned]) .annotation:has(.callout:hover) .leader-fade line {
+      opacity: 1;
+    }
+  }
+  /* A phone's frame: a shorter tick. */
+  @container sv-try-on-image (max-width: 30rem) {
+    .callouts[data-layout="columns"] .anchor[data-marker="tick"] {
+      inline-size: calc(var(--_sv-spacing) * 4.5);
+    }
+  }
+  .marker {
+    display: none;
+  }
+  /* Too little room even then: numbered anchors, and the cards as a list in the free area. */
+  .callouts[data-layout="legend"] .leader {
+    display: none;
+  }
+  .callouts[data-layout="legend"] .callout {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--_sv-spacing) * 1.5);
+  }
+  .callouts[data-layout="legend"] .marker {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: calc(var(--_sv-spacing) * 5);
+    block-size: calc(var(--_sv-spacing) * 5);
+    border: 1.5px solid var(--_sv-background);
+    border-radius: var(--_sv-radius-full);
+    background: var(--_sv-foreground);
+    color: var(--_sv-background);
+    font-size: calc(var(--_sv-root) * 0.625);
+    font-weight: var(--_sv-font-weight-semibold);
+    line-height: 1;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
+  }
+  .callouts[data-layout="legend"] .anchor {
+    display: block;
+    inline-size: auto;
+    block-size: auto;
+    border: 0;
+    background: none;
+    box-shadow: none;
   }
   .leader-halo {
     stroke: rgb(255 255 255 / 0.55);
@@ -103,10 +232,12 @@ export const fitOverlayStyles = css`
   .callout sv-fit-callout {
     display: block;
   }
+  /* Compact cards, so less of the garment is covered. */
   .callout sv-fit-callout::part(card) {
     min-inline-size: 0;
-    padding: calc(var(--_sv-spacing) * 2.5) calc(var(--_sv-spacing) * 3.5);
-    gap: var(--_sv-spacing);
+    padding: calc(var(--_sv-spacing) * 1.75) calc(var(--_sv-spacing) * 2.5);
+    gap: calc(var(--_sv-spacing) * 1.25);
+    border-radius: var(--_sv-radius-lg);
     background: var(--_sv-background);
     box-shadow: 0 calc(4px + 6px * var(--_sv-fit-emphasis))
       calc(16px + 12px * var(--_sv-fit-emphasis))
@@ -122,7 +253,11 @@ export const fitOverlayStyles = css`
     text-box: normal;
     line-height: 1.25;
   }
+  .callout sv-fit-callout::part(label) {
+    font-size: calc(var(--_sv-root) * 0.6875);
+  }
   .callout sv-fit-callout::part(verdict) {
+    font-size: calc(var(--_sv-root) * 0.625);
     color: var(--_sv-muted-foreground);
   }
   .callout sv-fit-callout::part(dot) {

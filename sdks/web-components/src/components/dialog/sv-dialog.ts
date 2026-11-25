@@ -27,6 +27,8 @@ export interface SvDismissDetail {
 export interface SvDialogProps {
   /** Shown in the top layer. Only the owner changes it: the dialog asks with `sv-dismiss`. */
   open?: boolean | undefined;
+  /** Use the full viewport for the mobile drawer. */
+  fullHeight?: boolean | undefined;
   /** The dialog's accessible name, usually the current screen's title. */
   label?: string | undefined;
   /**
@@ -185,6 +187,15 @@ export class SvDialog extends SvElement implements SvDialogProps {
         cursor: grab;
         touch-action: none;
       }
+      :host([full-height]) .panel[data-shape="drawer"] {
+        block-size: 100dvh;
+        border-radius: 0;
+        padding-block: env(safe-area-inset-top, 0px) 0;
+        --_sv-screen-safe-bottom: env(safe-area-inset-bottom, 0px);
+      }
+      :host([full-height]) .panel[data-shape="drawer"] .grabber {
+        display: none;
+      }
       .grabber::before {
         content: "";
         position: absolute;
@@ -201,11 +212,13 @@ export class SvDialog extends SvElement implements SvDialogProps {
 
   static override properties = {
     open: { type: Boolean, reflect: true },
+    fullHeight: { type: Boolean, attribute: "full-height", reflect: true },
     label: {},
     persistent: { type: Boolean, reflect: true },
   };
 
   declare open: boolean;
+  declare fullHeight: boolean;
   declare label: string | undefined;
   declare persistent: boolean;
 
@@ -217,6 +230,7 @@ export class SvDialog extends SvElement implements SvDialogProps {
   constructor() {
     super();
     this.open = false;
+    this.fullHeight = false;
     this.label = undefined;
     this.persistent = false;
   }

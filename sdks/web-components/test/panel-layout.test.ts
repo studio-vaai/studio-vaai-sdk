@@ -113,7 +113,7 @@ describe("resting panel layout", () => {
   it("retains the panel budget across open changes and updates it from intrinsic resize", async () => {
     const callbacks: (() => void)[] = [];
     const observed: HTMLElement[] = [];
-    const disconnect = vi.fn<() => void>();
+    const observers = new Map<HTMLElement, { disconnect: () => void }>();
     vi.stubGlobal(
       "ResizeObserver",
       class {
@@ -122,9 +122,10 @@ describe("resting panel layout", () => {
         }
         observe = vi.fn<(target: HTMLElement) => void>((target) => {
           observed.push(target);
+          observers.set(target, this);
         });
         unobserve = vi.fn<() => void>();
-        disconnect = disconnect;
+        disconnect = vi.fn<() => void>();
       },
     );
     const { element, summary } = await disclosure();
@@ -149,7 +150,7 @@ describe("resting panel layout", () => {
     expect(body.style.getPropertyValue("--_sv-panel-resting-size")).toBe("44px");
     expect(element.open).toBe(true);
     screen.remove();
-    expect(disconnect).toHaveBeenCalledOnce();
+    expect(observers.get(summary)?.disconnect).toHaveBeenCalledOnce();
   });
 
   it("updates the image budget as the fit score expands and collapses below the history", async () => {

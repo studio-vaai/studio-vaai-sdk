@@ -60,6 +60,7 @@ const SELECTION: SelectionView = {
           display: new ItemDisplay.Text({ text: "M" }),
           selected: true,
           available: true,
+          tried: false,
           variantId: "v1",
         },
         {
@@ -67,6 +68,7 @@ const SELECTION: SelectionView = {
           display: new ItemDisplay.Text({ text: "S" }),
           selected: false,
           available: false,
+          tried: false,
           variantId: "v2",
         },
       ],
@@ -80,6 +82,7 @@ const SELECTION: SelectionView = {
           display: new ItemDisplay.Color({ hex: "#ffffff", alt: "White" }),
           selected: true,
           available: true,
+          tried: false,
           variantId: "v1",
         },
         {
@@ -87,6 +90,7 @@ const SELECTION: SelectionView = {
           display: new ItemDisplay.Color({ hex: "#51799c", alt: "Blue" }),
           selected: false,
           available: false,
+          tried: false,
           variantId: "v2",
         },
       ],
@@ -100,6 +104,7 @@ const SELECTION: SelectionView = {
           display: new ItemDisplay.Glyph({ glyph: ItemGlyph.ShirtButtoned, alt: "Buttoned" }),
           selected: true,
           available: true,
+          tried: false,
           variantId: "v1",
         },
         {
@@ -107,6 +112,7 @@ const SELECTION: SelectionView = {
           display: new ItemDisplay.Glyph({ glyph: ItemGlyph.ShirtOpen, alt: "Open" }),
           selected: false,
           available: false,
+          tried: false,
           variantId: "v2",
         },
       ],
@@ -258,7 +264,9 @@ describe("Rust-aligned stateless try-on view", () => {
     await screen.updateComplete;
     const primary = await child(screen, "sv-button", '[slot="primary"]');
     expect(text(primary.textContent)).toMatch(/try another variant/i);
-    expect(screen.shadowRoot?.querySelector(".error")?.textContent).toMatch(/try-on/i);
+    expect(
+      screen.shadowRoot?.querySelector('[slot="before-actions"] sv-message')?.textContent,
+    ).toMatch(/try-on/i);
   });
 
   it("keeps the selection composition through the first request and presents the result on the same screen", async () => {
@@ -277,6 +285,9 @@ describe("Rust-aligned stateless try-on view", () => {
     const label = text(primary.textContent);
     expect(shell.panelMode).toBe("overlay");
     expect(shell.description).toBe("Choose a variant to try on");
+    expect(text(panel.querySelector(".picker-heading")?.textContent)?.trim()).toBe(
+      "Choose a variant",
+    );
     expect(picker.selection).toBe(selection);
     expect(source.src).toBe("/source.jpg");
     await press(screen, "primary");
@@ -544,17 +555,24 @@ describe("Rust-aligned stateless try-on view", () => {
     expect(text(primary.textContent)).toBe("You’re wearing M in White");
     expect(primary.disabled).toBe(true);
     expect(actions).toEqual([]);
+    expect(text(screen.shadowRoot?.querySelector(".picker-heading")?.textContent)?.trim()).toBe(
+      "Try another size or color",
+    );
 
     const picker = await child(screen, "sv-variant-picker");
     const [sizes, colors] = picker.shadowRoot!.querySelectorAll("sv-option-group");
     expect(sizes).toBeDefined();
     expect(colors).toBeDefined();
     await Promise.all([sizes?.updateComplete, colors?.updateComplete]);
-    expect(sizes?.options.map(({ mark }) => mark)).toEqual(["current", "tried"]);
+    // M in white is worn; S was tried in blue only, and blue never in M.
+    expect(sizes?.options.map(({ mark }) => mark)).toEqual(["current", undefined]);
     expect(colors?.options.map(({ mark }) => mark)).toEqual(["tried", undefined]);
     const recommendation =
       picker.shadowRoot!.querySelector<HTMLButtonElement>("button.recommendation");
     expect(text(recommendation?.textContent)?.trim()).toBe("Recommended S");
+    expect(
+      text(recommendation?.closest(".heading")?.querySelector(".label")?.textContent)?.trim(),
+    ).toBe("Dimension: M");
     recommendation?.click();
     expect(actions).toEqual([{ action: "select-recommendation" }]);
   });
@@ -595,13 +613,14 @@ describe("Rust-aligned stateless try-on view", () => {
         imageUrl: "/result.jpg",
       })),
     };
+    // Lengths tried with the selected waist and color; colors with the selected waist and length.
     const marks = tryOnView(props, true).triedItems;
-    expect(marks?.get("length")).toEqual(new Set(["30", "34"]));
+    expect(marks?.get("length")).toEqual(new Set(["34"]));
     expect(marks?.get("color")).toEqual(new Set(["blue"]));
 
     props.selection!.variantId = "other-waist";
     const next = tryOnView(props, true).triedItems;
-    expect(next?.get("length")).toEqual(new Set(["34"]));
+    expect(next?.get("length")).toEqual(new Set());
     expect(next?.get("color")).toEqual(new Set());
   });
 
@@ -931,6 +950,29 @@ describe("Rust-aligned stateless try-on view", () => {
     expect(screen.fitDetailsOpen).toBe(false);
     expect(screen.pickerOpen).toBe(true);
     expect(raw).toEqual([]);
+  });
+
+  it("marks the length with a tick and every other callout with a dot", async () => {
+    const { screen } = await mount({
+      fitDetailsOpen: true,
+      fit: {
+        tryOnId: "current",
+        state: "ready",
+        score: 87,
+        callouts: [
+          { key: "chest", label: "Chest width", x: 0.4, y: 0.3 },
+          { key: "total_length", label: "Length", x: 0.55, y: 0.6, marker: "tick" },
+        ],
+      },
+    });
+    await child(screen, "sv-image");
+    const markers = [
+      ...(screen.shadowRoot?.querySelectorAll<HTMLButtonElement>(".anchor") ?? []),
+    ].map((anchor) => [anchor.getAttribute("aria-label"), anchor.dataset.marker]);
+    expect(markers).toEqual([
+      ["Chest width", "dot"],
+      ["Length", "tick"],
+    ]);
   });
 
   it("renders only valid image-relative fit anchors and leaves the active callout controlled", async () => {

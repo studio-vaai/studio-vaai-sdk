@@ -46,9 +46,6 @@ export const tryOnViewStyles = css`
   .result-summary > * {
     flex: none;
   }
-  .picker-clip {
-    overflow: clip;
-  }
   .picker-heading {
     margin: 0;
     font-size: calc(var(--_sv-root) * 0.8125);
@@ -82,6 +79,8 @@ export const tryOnViewStyles = css`
     flex: none;
   }
   .picker-body {
+    /* The picker's chip rows scroll to the panel's edges, with this inset at either end. */
+    --_sv-picker-bleed: calc(var(--_sv-spacing) * 3.5);
     padding: 0 calc(var(--_sv-spacing) * 3.5) calc(var(--_sv-spacing) * 3);
   }
   .picker-error {
@@ -134,9 +133,7 @@ export const tryOnViewStyles = css`
     .picker-card {
       background: var(--_sv-surface-raised);
       backdrop-filter: none;
-      box-shadow:
-        inset 0 0 0 1px var(--_sv-glass-border),
-        var(--_sv-shadow-sm);
+      box-shadow: none;
       color: var(--_sv-foreground);
     }
     .history {
@@ -147,6 +144,10 @@ export const tryOnViewStyles = css`
     }
   }
   @container sv-try-on-view (max-width: 39.999rem) {
+    sv-screen {
+      --_sv-screen-phone-gap: calc(var(--_sv-spacing) * 2);
+      --_sv-screen-phone-secondary-text-size: calc(var(--_sv-root) * 0.9375);
+    }
     /* Gaps in the overlaid controls must let taps reach the photo underneath. */
     sv-screen::part(panel) {
       pointer-events: none;
@@ -169,6 +170,9 @@ export const tryOnViewStyles = css`
     .result-clip,
     .picker-clip {
       min-block-size: 0;
+    }
+    .picker-clip {
+      overflow: clip;
     }
     .result-clip {
       overflow: hidden;
@@ -214,11 +218,8 @@ export const tryOnViewStyles = css`
       animation: none;
     }
   }
-  .error {
-    margin-block-end: calc(var(--_sv-spacing) * 2);
-  }
   .sold-out {
-    margin: 0 0 calc(var(--_sv-spacing) * 2);
+    margin: 0;
     color: var(--_sv-muted-foreground);
     font-size: var(--_sv-text-sm);
   }
@@ -236,20 +237,10 @@ export const tryOnViewStyles = css`
     pointer-events: auto;
   }
   .download::part(button) {
-    inline-size: calc(var(--_sv-spacing) * 9);
-    min-inline-size: 0;
-    block-size: calc(var(--_sv-spacing) * 9);
-    padding: 0;
-    border-radius: var(--_sv-radius-full);
     background: var(--_sv-photo-overlay);
     box-shadow: inset 0 0 0 1px var(--_sv-glass-border);
     color: var(--_sv-photo-overlay-foreground);
     backdrop-filter: blur(4px);
-  }
-  .download::part(label) {
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
   .progress {
     position: absolute;

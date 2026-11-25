@@ -6,6 +6,7 @@ import type { SvImageCrop } from "../media/image-crop.js";
 import type { SvImageFraming } from "../media/image-framing.js";
 import type { PhotoCaptureMessages } from "./photo-capture/messages.js";
 
+import { SvCamera } from "../components/camera/sv-camera.js";
 import { SvElement } from "../internal/ui-element.js";
 import { photoImageFraming } from "../media/image-framing.js";
 import { svBase } from "../styles/base.js";
@@ -73,6 +74,8 @@ export interface SvPhotoCaptureScreenProps {
  */
 export class SvPhotoCaptureScreen extends SvElement implements SvPhotoCaptureScreenProps {
   #previewStream: MediaStream | undefined;
+  /** The shape of the stream's picture, once it shows; the frame takes it when it is narrower. */
+  #camera: { stream: MediaStream; aspect: number } | undefined;
   protected override readonly usesMessages = true;
   static override styles = [svTokens, svBase, photoCaptureStyles];
   static override properties = {
@@ -205,9 +208,34 @@ export class SvPhotoCaptureScreen extends SvElement implements SvPhotoCaptureScr
       : html`<div class="desktop-guidance">${message}</div>`;
   }
 
+  /** Keeps the live picture's shape, so the frame and the upload preview can follow it. */
+  #notePicture(event: HTMLElementEventMap["sv-camera-preview-state"]): void {
+    const { stream, state } = event.detail;
+    const aspect = event.target instanceof SvCamera ? event.target.pictureAspect : undefined;
+    if (
+      state === "ready" &&
+      stream === this.stream &&
+      aspect !== undefined &&
+      (this.#camera?.stream !== stream || this.#camera.aspect !== aspect)
+    ) {
+      this.#camera = { stream, aspect };
+      this.requestUpdate();
+    }
+  }
+
+  /**
+   * The frame is the layout's shape (3:4 upright, 4:3 wide) and cuts a wider picture to it. A
+   * narrower picture, such as a phone held upright or a webcam turned on its side, would lose the
+   * head and the feet to that cut, so the frame takes the picture's own shape instead, down to
+   * 9:16. It keeps that shape while the photo uploads.
+   */
+  get #frameStyle() {
+    return this.#camera === undefined ? nothing : `--_sv-camera-aspect: ${this.#camera.aspect}`;
+  }
+
   #stage(copy: PhotoCaptureMessages) {
     if (this.state === "live" || this.state === "uploading") {
-      return html`<div class="frame">
+      return html`<div class="frame" style=${this.#frameStyle}>
         ${
           this.state === "uploading"
             ? html`<sv-image
@@ -227,6 +255,7 @@ export class SvPhotoCaptureScreen extends SvElement implements SvPhotoCaptureScr
                 @sv-camera-preview-state=${(
                   event: HTMLElementEventMap["sv-camera-preview-state"],
                 ) => {
+                  this.#notePicture(event);
                   if (this.canStartTimer === undefined && event.detail.stream === this.stream) {
                     this.#previewStream =
                       event.detail.state === "ready" ? event.detail.stream : undefined;

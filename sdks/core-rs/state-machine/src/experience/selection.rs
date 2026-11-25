@@ -209,6 +209,12 @@ pub struct VariantRowItem {
     /// Why the backend refused to try that variant on the body, once a
     /// try-on of it was refused.
     pub refusal: Option<RefusalReason>,
+    /// Whether this item has a try-on with the current height and the
+    /// selection's items on the other size and color axes: a size with the
+    /// selected color, a color with the selected size. On the selected item it
+    /// says the selected variant was tried.
+    #[cfg_attr(feature = "uniffi", uniffi(default = false))]
+    pub tried: bool,
 }
 
 /// Host inputs installed with the initial product in one commit.
@@ -327,6 +333,25 @@ pub(super) struct Selection {
     /// The size recommendation that picked the items on the other axes,
     /// until an item is chosen.
     pub recommended_by: Option<SizeRecommendationKey>,
+    /// The axes the shopper picked in the picker, as opposed to the host's
+    /// choices: the fit gate moves a refused size of the host's only.
+    pub picked: BTreeSet<AxisKey>,
+    /// The host's size the fit gate refused, which the selection left for
+    /// the next size that can be tried on, until the selection changes.
+    pub gate_switch: Option<GateSwitch>,
+}
+
+/// A host's size the fit gate refused, and the size the selection took
+/// instead: the next one along the size run that can be tried on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct GateSwitch {
+    /// The refused variant the host selected.
+    pub from_variant_id: VariantId,
+    /// The variant selected instead.
+    pub to_variant_id: VariantId,
+    /// Why the gate refused it.
+    pub reason: RefusalReason,
 }
 
 /// What the host selected: a variant, and the axes chosen on purpose.
@@ -383,6 +408,8 @@ impl Selection {
             variant_id,
             chosen,
             recommended_by: None,
+            picked: BTreeSet::new(),
+            gate_switch: None,
         })
     }
 
@@ -475,8 +502,10 @@ impl Selection {
         self.chosen
             .retain(|a| target.foreign_ids.get(a) == current.foreign_ids.get(a));
         self.chosen.insert(axis.clone());
+        self.picked.insert(axis.clone());
         self.variant_id = target.id;
         self.recommended_by = None;
+        self.gate_switch = None;
         Ok(())
     }
 
@@ -603,6 +632,7 @@ impl Selection {
                             }),
                             variant_id: target.map(|t| t.id),
                             refusal: target.and_then(|t| refusal(t.id)),
+                            tried: false,
                         }
                     })
                     .collect(),
@@ -811,17 +841,25 @@ impl DefaultController {
                 .and_then(|id| snapshot.try_on(id))
                 .and_then(|result| product.variant(result.key.variant_id))
                 .is_some_and(|variant| variant.foreign_ids == options);
-        let chosen = options.axes().cloned().collect();
+        let chosen: BTreeSet<AxisKey> = options.axes().cloned().collect();
         self.selection.storefront_options = Some(options);
-        if echoes_result
-            || (target.id == self.selection.variant_id && chosen == self.selection.chosen)
-        {
+        if echoes_result {
+            return;
+        }
+        // A page following the picker echoes the selection it already shows: the picks stay
+        // the shopper's (and a refused one stays where they put it), the axes it names count
+        // as chosen too.
+        if target.id == self.selection.variant_id {
+            self.selection.chosen.extend(chosen);
             return;
         }
         let variant_changed = self.selection.variant_id != target.id;
         self.selection.variant_id = target.id;
         self.selection.chosen = chosen;
         self.selection.recommended_by = None;
+        // The page's choice is the host's again, the default size included.
+        self.selection.picked.clear();
+        self.selection.gate_switch = None;
         self.issue = None;
         if self.navigation.on_try_on() {
             if variant_changed {
@@ -833,6 +871,7 @@ impl DefaultController {
             if self.try_on_screen_free().is_ok() {
                 self.recommend(product, snapshot, plan);
             }
+            self.show_tried_selection(snapshot, plan);
         }
     }
 
@@ -897,7 +936,7 @@ impl DefaultController {
                 .is_none_or(|installation| installation.status == ProductInstallationStatus::Ready)
     }
 
-    fn select(
+    pub(super) fn select(
         &mut self,
         axis: AxisKey,
         item: ForeignId,
@@ -925,6 +964,7 @@ impl DefaultController {
         }
         self.presentation.auto_start = AutoStart::Disarmed;
         self.issue = None;
+        self.show_tried_selection(snapshot, plan);
         Ok(())
     }
 

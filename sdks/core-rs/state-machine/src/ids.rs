@@ -184,6 +184,7 @@ pub(crate) enum Kind {
     Batch = 4,
     Driver = 5,
     Interaction = 7,
+    CreateKey = 8,
 }
 
 /// An identifier type the state machine mints itself.
@@ -209,6 +210,21 @@ impl Minted for DriverId {
 }
 impl Minted for InteractionToken {
     const KIND: Kind = Kind::Interaction;
+}
+
+/// The idempotency key of one try-on creation attempt, minted by the runtime;
+/// not part of the API. The backend keeps one try-on per key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CreateKey(pub Uuid);
+
+impl From<Uuid> for CreateKey {
+    fn from(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
+}
+
+impl Minted for CreateKey {
+    const KIND: Kind = Kind::CreateKey;
 }
 
 /// Mints identifiers from a seed UUID: version 8 UUIDs whose upper half folds

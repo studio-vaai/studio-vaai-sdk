@@ -229,6 +229,14 @@ describe("stateless session intro", () => {
 
   it("localizes content and renders legal links as structured text", async () => {
     const { screen, host } = await mount({ withdrawalOpen: true });
+    const legal = screen.shadowRoot?.querySelector(".legal");
+    expect(legal?.textContent).toBe(
+      "By continuing, you agree to studio vaai GmbH’s Terms and Conditions.",
+    );
+    expect(legal?.querySelector("a")?.getAttribute("href")).toBe(
+      "https://studio-vaai.com/try-on/terms",
+    );
+    expect(legal?.querySelector("strong")).toBeNull();
     const context = createUiContext({ locale: "de-CH" });
     const detach = context.attach(host);
     await context.ready();

@@ -854,10 +854,10 @@ pub struct InitialBodySummary {
     /// Initial height estimate from the source image, in centimetres.
     #[serde(rename = "estimatedHeightCm")]
     pub estimated_height_cm: f32,
-    /// Temporary signed URL for the image used to create the body. Use it before `sourceImageUrlExpiresAt`; call `listBodies` for a fresh URL after expiry.
+    /// Temporary signed URL for the shopper's cut-out from the photo, the image try-ons are rendered from (JPEG XL with transparency around the person), while it is stored. The uploaded photo itself is not kept, and the cut-out is deleted with the session's data; then this is empty, and clients must handle a body without a photo. Use a URL before `sourceImageUrlExpiresAt`; call `listBodies` for a fresh URL after expiry.
     #[serde(rename = "sourceImageUrl")]
     pub source_image_url: String,
-    /// When `sourceImageUrl` expires (UTC). Each `createBody` or `listBodies` response includes a valid URL and its expiry.
+    /// When `sourceImageUrl` expires (UTC). Each `createBody` or `listBodies` response signs the image again while it is stored; with an empty `sourceImageUrl`, the time of the response.
     #[serde(rename = "sourceImageUrlExpiresAt")]
     pub source_image_url_expires_at: String,
 }
@@ -1064,10 +1064,10 @@ pub struct BodySummary {
     /// Initial height estimate from the source image, in centimetres.
     #[serde(rename = "estimatedHeightCm")]
     pub estimated_height_cm: f32,
-    /// Temporary signed URL for the image used to create the body. Use it before `sourceImageUrlExpiresAt`; call `listBodies` for a fresh URL after expiry.
+    /// Temporary signed URL for the shopper's cut-out from the photo, the image try-ons are rendered from (JPEG XL with transparency around the person), while it is stored. The uploaded photo itself is not kept, and the cut-out is deleted with the session's data; then this is empty, and clients must handle a body without a photo. Use a URL before `sourceImageUrlExpiresAt`; call `listBodies` for a fresh URL after expiry.
     #[serde(rename = "sourceImageUrl")]
     pub source_image_url: String,
-    /// When `sourceImageUrl` expires (UTC). Each `createBody` or `listBodies` response includes a valid URL and its expiry.
+    /// When `sourceImageUrl` expires (UTC). Each `createBody` or `listBodies` response signs the image again while it is stored; with an empty `sourceImageUrl`, the time of the response.
     #[serde(rename = "sourceImageUrlExpiresAt")]
     pub source_image_url_expires_at: String,
     /// Identifier of the immutable revision represented by this summary. Pass it when requesting a try-on or size recommendation for this height.
@@ -1549,6 +1549,8 @@ pub enum TryOnBadRequestProblemKind {
     InvalidTryOnId,
     /// `invalid-variant-id`
     InvalidVariantId,
+    /// `invalid-idempotency-key`
+    InvalidIdempotencyKey,
     /// A value this client does not know yet.
     Unknown { value: String },
 }
@@ -1569,11 +1571,12 @@ impl TryOnBadRequestProblemKind {
             Self::InvalidProductId => "invalid-product-id",
             Self::InvalidTryOnId => "invalid-try-on-id",
             Self::InvalidVariantId => "invalid-variant-id",
+            Self::InvalidIdempotencyKey => "invalid-idempotency-key",
             Self::Unknown { value } => value,
         }
     }
 
-    pub(crate) const KNOWN: &'static [&'static str] = &["invalid-request", "client-api-key-required", "client-api-key-header-invalid", "client-api-key-malformed", "origin-header-invalid", "origin-not-a-url", "cookie-origin-required", "ambiguous-session", "invalid-body-id", "invalid-product-id", "invalid-try-on-id", "invalid-variant-id"];
+    pub(crate) const KNOWN: &'static [&'static str] = &["invalid-request", "client-api-key-required", "client-api-key-header-invalid", "client-api-key-malformed", "origin-header-invalid", "origin-not-a-url", "cookie-origin-required", "ambiguous-session", "invalid-body-id", "invalid-product-id", "invalid-try-on-id", "invalid-variant-id", "invalid-idempotency-key"];
 
     pub fn from_wire(value: &str) -> Self {
         match value {
@@ -1589,6 +1592,7 @@ impl TryOnBadRequestProblemKind {
             "invalid-product-id" => Self::InvalidProductId,
             "invalid-try-on-id" => Self::InvalidTryOnId,
             "invalid-variant-id" => Self::InvalidVariantId,
+            "invalid-idempotency-key" => Self::InvalidIdempotencyKey,
             other => Self::Unknown { value: other.to_owned() },
         }
     }
@@ -1774,6 +1778,29 @@ impl crate::runtime::WireModel for FitAnchor {
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
+/// One horizontal band of the person's outline in the try-on image, garment included. Coordinates range from 0 to 1 relative to the complete image.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct SubjectBand {
+    /// Normalized top edge of the band.
+    #[serde(rename = "top")]
+    pub top: f64,
+    /// Normalized bottom edge of the band.
+    #[serde(rename = "bottom")]
+    pub bottom: f64,
+    /// Normalized x of the person's leftmost point within the band.
+    #[serde(rename = "left")]
+    pub left: f64,
+    /// Normalized x of the person's rightmost point within the band.
+    #[serde(rename = "right")]
+    pub right: f64,
+}
+
+impl crate::runtime::WireModel for SubjectBand {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
 /// Where a try-on came from, so a reviewer can trace the image back to the exact bake and builds that produced it. Hashes and ids only, never who did anything. Not the C2PA manifest (that is in the image).
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -1848,6 +1875,10 @@ pub struct TryOnSuccess {
     #[serde(rename = "fitAnchors", default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "uniffi", uniffi(default))]
     pub fit_anchors: Option<Vec<FitAnchor>>,
+    /// Optional outline of the person in the try-on image, as horizontal bands from top to bottom. Bands without the person are omitted. Place fit annotations in the free space beside these bands so they do not cover the person.
+    #[serde(rename = "subjectBands", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub subject_bands: Option<Vec<SubjectBand>>,
     /// Diagnostic metadata for internal tooling.
     #[serde(rename = "provenance", default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "uniffi", uniffi(default))]
@@ -1856,6 +1887,24 @@ pub struct TryOnSuccess {
 
 impl crate::runtime::WireModel for TryOnSuccess {
     const CONSTANTS: &'static [(&'static str, &'static str)] = &[("status", "completed")];
+    const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
+}
+
+/// The `Idempotency-Key` already names a try-on of a different request: another body, body revision, product or variant. Send a new key for a new request.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct TryOnIdempotencyConflictProblem {
+    /// A short, human-readable summary of the problem type.
+    #[serde(rename = "title")]
+    pub title: String,
+    /// A human-readable explanation specific to this occurrence.
+    #[serde(rename = "detail", default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "uniffi", uniffi(default))]
+    pub detail: Option<String>,
+}
+
+impl crate::runtime::WireModel for TryOnIdempotencyConflictProblem {
+    const CONSTANTS: &'static [(&'static str, &'static str)] = &[("kind", "idempotency-key-reused")];
     const LITERAL_UNIONS: &'static [(&'static str, &'static [&'static str])] = &[];
 }
 
@@ -3493,6 +3542,8 @@ pub enum ApiProblem {
     SizeRecommendationUnavailableProblem { problem: SizeRecommendationUnavailableProblem },
     /// The body, product, variant, or try-on is not available in the current session or shop. Resources outside that scope are also reported as not found.
     TryOnNotFoundProblem { problem: TryOnNotFoundProblem },
+    /// The `Idempotency-Key` already names a try-on of a different request: another body, body revision, product or variant. Send a new key for a new request.
+    TryOnIdempotencyConflictProblem { problem: TryOnIdempotencyConflictProblem },
     /// The selected size is too small for this body. Choose another size.
     TryOnGarmentTooSmall { problem: TryOnGarmentTooSmall },
     /// The selected size is too large for this body. Choose another size.
@@ -3523,6 +3574,7 @@ impl ApiProblem {
             Self::TryOnBadRequestProblem { problem } => problem.kind.as_str().to_owned(),
             Self::SizeRecommendationUnavailableProblem { problem } => { let _ = problem; "recommendation-unavailable".to_owned() },
             Self::TryOnNotFoundProblem { problem } => problem.kind.as_str().to_owned(),
+            Self::TryOnIdempotencyConflictProblem { problem } => { let _ = problem; "idempotency-key-reused".to_owned() },
             Self::TryOnGarmentTooSmall { problem } => { let _ = problem; "try-on-size-rejected".to_owned() },
             Self::TryOnGarmentTooLarge { problem } => { let _ = problem; "try-on-size-rejected".to_owned() },
             Self::AnalyticsEventProblem { problem } => problem.kind.as_str().to_owned(),
@@ -3905,13 +3957,16 @@ pub fn get_recommended_size_response(response: &HttpResponse) -> Result<Recommen
 }
 
 /// Builds the `createTryOn` request (`POST /products/{productId}/try-on`).
-pub fn create_try_on_request(context: &RequestContext, product_id: &str, body_id: &str, body: &CreateTryOnBody) -> Result<HttpRequest, ApiError> {
+pub fn create_try_on_request(context: &RequestContext, product_id: &str, idempotency_key: Option<String>, body_id: &str, body: &CreateTryOnBody) -> Result<HttpRequest, ApiError> {
     let path = format!("/products/{}/try-on", runtime::encode_path_segment(product_id));
     let mut query: Vec<(&str, String)> = Vec::new();
     query.push(("bodyId", body_id.to_owned()));
     let mut request = context.request("POST", &path, &query);
     request.header("X-Api-Version", context.api_version.clone());
     request.header("X-Client-Api-Key", context.client_api_key.clone());
+    if let Some(value) = &idempotency_key {
+        request.header("Idempotency-Key", value.to_string());
+    }
     context.authorize_bearer(&mut request);
     request.with_credentials = true;
     request.json_body(body)?;
@@ -3926,8 +3981,10 @@ pub fn create_try_on_response(response: &HttpResponse) -> Result<TryOnSuccess, A
         401 => Err(runtime::decode_problem(response, &[runtime::candidate::<SessionUnauthorizedProblem>(|problem| ApiProblem::SessionUnauthorizedProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
         403 => Err(runtime::decode_problem(response, &[runtime::candidate::<SessionForbiddenProblem>(|problem| ApiProblem::SessionForbiddenProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
         404 => Err(runtime::decode_problem(response, &[runtime::candidate::<TryOnNotFoundProblem>(|problem| ApiProblem::TryOnNotFoundProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
+        409 => Err(runtime::decode_problem(response, &[runtime::candidate::<TryOnIdempotencyConflictProblem>(|problem| ApiProblem::TryOnIdempotencyConflictProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
         422 => Err(runtime::decode_problem(response, &[runtime::candidate::<TryOnGarmentTooSmall>(|problem| ApiProblem::TryOnGarmentTooSmall { problem }), runtime::candidate::<TryOnGarmentTooLarge>(|problem| ApiProblem::TryOnGarmentTooLarge { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
         500 => Err(runtime::decode_problem(response, &[runtime::candidate::<InternalServerErrorProblem>(|problem| ApiProblem::InternalServerErrorProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
+        503 => Err(runtime::decode_problem(response, &[runtime::candidate::<ServiceUnavailableProblem>(|problem| ApiProblem::ServiceUnavailableProblem { problem })], |problem: ProblemDetails| ApiProblem::Other { problem })),
         _ => Err(runtime::unexpected_status(response, |problem: ProblemDetails| ApiProblem::Other { problem })),
     }
 }
@@ -4099,9 +4156,9 @@ impl ApiClient {
         get_recommended_size_response(&response)
     }
 
-    /// Generate a try-on for a body and a published product variant. This request waits for completion. Success returns 201 with the image. A size rejection returns a 422 problem response with a reason and a suggested alternative size. Use `getProductDetails` to discover the product's variants.
-    pub async fn create_try_on(&self, product_id: String, body_id: String, body: CreateTryOnBody) -> Result<TryOnSuccess, ApiError> {
-        let request = create_try_on_request(&self.context(), &product_id, &body_id, &body)?;
+    /// Generate a try-on for a body and a published product variant. This request waits for completion. Success returns 201 with the image. A size rejection returns a 422 problem response with a reason and a suggested alternative size. Use `getProductDetails` to discover the product's variants. Send an `Idempotency-Key` so a retry after a lost response cannot create, and bill, a second try-on.
+    pub async fn create_try_on(&self, product_id: String, idempotency_key: Option<String>, body_id: String, body: CreateTryOnBody) -> Result<TryOnSuccess, ApiError> {
+        let request = create_try_on_request(&self.context(), &product_id, idempotency_key, &body_id, &body)?;
         let response = self.send(request).await?;
         create_try_on_response(&response)
     }

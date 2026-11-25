@@ -2,6 +2,7 @@ import { css, html } from "lit";
 
 import { LiveStatus } from "../../internal/live-status.js";
 import { PanelLayoutController } from "../../internal/panel-layout.js";
+import { StagePhotoLayoutController } from "../../internal/stage-photo-layout.js";
 import { SvElement } from "../../internal/ui-element.js";
 import { svBase } from "../../styles/base.js";
 import { svTokens } from "../../styles/tokens.js";
@@ -30,6 +31,8 @@ export interface SvScreenProps {
   statusMessage?: string | undefined;
   /** Center the stage across the full screen width above any panel content and actions. */
   stageLayout?: "centered" | undefined;
+  /** Align controls to the fitted photo on wide screens. `baseline` uses the secondary label. */
+  alignPhoto?: "frame" | "baseline" | undefined;
   /**
    * Where the panel's content sits in its area. `end` puts it right on top of the
    * actions, always the same gap away. `center` is for the exceptions, such as the height
@@ -95,7 +98,7 @@ export class SvScreen extends SvElement implements SvScreenProps {
       /* The sizes live on .screen, not :host: a container query can't restyle its container. */
       .screen {
         --_sv-screen-inset: calc(var(--_sv-spacing) * 4);
-        --_sv-screen-gap: calc(var(--_sv-spacing) * 4);
+        --_sv-screen-gap: var(--_sv-screen-phone-gap, calc(var(--_sv-spacing) * 4));
         --_sv-screen-action-gap: calc(var(--_sv-spacing) * 2);
         block-size: 100%;
         display: grid;
@@ -106,7 +109,7 @@ export class SvScreen extends SvElement implements SvScreenProps {
           auto minmax(calc(var(--_sv-spacing) * 32), 1fr) minmax(0, max-content)
           auto;
         grid-template-areas: "header" "stage" "panel" "actions";
-        padding-block-end: var(--_sv-screen-inset);
+        padding-block-end: max(var(--_sv-screen-inset), var(--_sv-screen-safe-bottom, 0px));
       }
 
       /* ---------- Header ---------- */
@@ -133,9 +136,18 @@ export class SvScreen extends SvElement implements SvScreenProps {
         font-size: var(--_sv-text-base);
         line-height: var(--_sv-text-base--line-height);
         font-weight: var(--_sv-font-weight-semibold);
+      }
+      /* A long title or subtitle (a product name, a longer language) wraps to a second line
+         instead of losing its end; past two lines it ends in an ellipsis. */
+      h2,
+      .description {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
         overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow-wrap: break-word;
+        text-wrap: balance;
       }
       .description {
         margin: 0;
@@ -143,9 +155,6 @@ export class SvScreen extends SvElement implements SvScreenProps {
         line-height: 1.4;
         font-weight: var(--_sv-font-weight-light);
         color: var(--_sv-muted-foreground);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
       .icon-button {
         appearance: none;
@@ -242,7 +251,10 @@ export class SvScreen extends SvElement implements SvScreenProps {
         row-gap: var(--_sv-screen-action-gap);
       }
       slot[name="before-actions"] {
-        display: block;
+        display: flow-root;
+      }
+      slot[name="before-actions"][data-has-content] {
+        margin-block-end: calc(var(--_sv-spacing) * 3);
       }
       ::slotted([slot="primary"]),
       ::slotted([slot="secondary"]) {
@@ -251,6 +263,9 @@ export class SvScreen extends SvElement implements SvScreenProps {
       }
 
       @container sv-screen (max-width: 39.999rem) {
+        ::slotted(sv-button[slot="secondary"]) {
+          --_sv-action-text-size: var(--_sv-screen-phone-secondary-text-size, var(--_sv-text-sm));
+        }
         :host([panel-mode="overlay"]) .screen,
         :host([panel-mode="backdrop"]) .screen {
           grid-template-rows: auto minmax(0, 1fr) auto;
@@ -338,13 +353,31 @@ export class SvScreen extends SvElement implements SvScreenProps {
         .actions {
           padding-inline: 0 var(--_sv-screen-inset);
         }
+        :host([align-photo]:not([stage-layout="centered"])) slot[name="stage"]::slotted(*) {
+          --_sv-stage-frame-justify: start;
+        }
+        :host([align-photo]:not([stage-layout="centered"])) slot[name="stage"]::slotted(sv-image) {
+          --_sv-image-frame-align-left: 0px;
+          --_sv-image-frame-align-right: auto;
+        }
+        :host([align-photo]:not([stage-layout="centered"]))
+          slot[name="stage"]::slotted(sv-image:dir(rtl)) {
+          --_sv-image-frame-align-left: auto;
+          --_sv-image-frame-align-right: 0px;
+        }
+        :host([align-photo]:not([stage-layout="centered"])) :is(.panel, .actions) {
+          margin-inline-start: calc(-1 * var(--_sv-stage-unused-width, 0px));
+        }
+        :host([align-photo]:not([stage-layout="centered"])) .actions {
+          margin-block-end: var(--_sv-stage-actions-offset, 0px);
+        }
       }
 
       :host([stage-layout="centered"]) .screen {
         grid-template-columns: minmax(0, 1fr);
         grid-template-rows: auto minmax(0, 1fr) minmax(0, max-content) auto;
         grid-template-areas: "header" "stage" "panel" "actions";
-        padding-block-end: var(--_sv-screen-gap);
+        padding-block-end: max(var(--_sv-screen-gap), var(--_sv-screen-safe-bottom, 0px));
       }
       :host([stage-layout="centered"]) .body {
         display: contents;
@@ -367,15 +400,10 @@ export class SvScreen extends SvElement implements SvScreenProps {
         padding-block-start: 0;
       }
       :host([stage-layout="centered"]) .actions {
-        display: grid;
-        row-gap: var(--_sv-screen-action-gap);
+        padding-block-start: var(--_sv-screen-action-gap);
       }
-      :host([stage-layout="centered"]) .actions::before {
-        /* A zero-height row adds the first gap only when there is action content. */
-        content: "";
-      }
-      :host([stage-layout="centered"]) :is(.action-buttons, slot[name="before-actions"]) {
-        display: contents;
+      :host([stage-layout="centered"]) .action-buttons {
+        grid-template-rows: none;
       }
     `,
   ];
@@ -387,6 +415,7 @@ export class SvScreen extends SvElement implements SvScreenProps {
     busy: { type: Boolean, reflect: true },
     statusMessage: { attribute: "status-message" },
     stageLayout: { attribute: "stage-layout", reflect: true },
+    alignPhoto: { attribute: "align-photo", reflect: true },
     panelAlign: { attribute: "panel-align", reflect: true },
     panelMode: { attribute: "panel-mode", reflect: true },
     panelGlass: { type: Boolean, attribute: "panel-glass" },
@@ -398,6 +427,7 @@ export class SvScreen extends SvElement implements SvScreenProps {
   declare busy: boolean;
   declare statusMessage: string | undefined;
   declare stageLayout: SvScreenProps["stageLayout"];
+  declare alignPhoto: SvScreenProps["alignPhoto"];
   /** Unset renders `end`. */
   declare panelAlign: SvScreenPanelAlign | undefined;
   declare panelMode: SvScreenPanelMode;
@@ -405,6 +435,25 @@ export class SvScreen extends SvElement implements SvScreenProps {
 
   readonly #panelLayout = new PanelLayoutController(this);
   readonly #status = new LiveStatus(this, () => this.statusMessage ?? "");
+  #beforeActionsObserver: ResizeObserver | undefined;
+
+  readonly #observeBeforeActions = (): void => {
+    if (this.#beforeActionsObserver || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const slot = this.renderRoot.querySelector('slot[name="before-actions"]');
+    if (!slot) {
+      return;
+    }
+    // The slot can contain an empty recovery wrapper whose descendants change across shadow roots.
+    this.#beforeActionsObserver = new ResizeObserver(([entry]) => {
+      if (entry) {
+        const size = entry.contentBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+        slot.toggleAttribute("data-has-content", size > 0);
+      }
+    });
+    this.#beforeActionsObserver.observe(slot);
+  };
 
   constructor() {
     super();
@@ -416,6 +465,14 @@ export class SvScreen extends SvElement implements SvScreenProps {
     this.panelMode = "stack";
     this.panelGlass = false;
     this.addController(this.#panelLayout);
+    this.addController({
+      hostUpdated: this.#observeBeforeActions,
+      hostDisconnected: () => {
+        this.#beforeActionsObserver?.disconnect();
+        this.#beforeActionsObserver = undefined;
+      },
+    });
+    this.addController(new StagePhotoLayoutController(this));
   }
 
   readonly #onBack = (): void => {

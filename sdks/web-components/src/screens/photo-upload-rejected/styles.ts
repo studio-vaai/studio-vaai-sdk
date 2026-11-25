@@ -20,8 +20,12 @@ export const photoUploadRejectedStyles = css`
     --_sv-icon-size: calc(var(--_sv-spacing) * 4);
   }
   .heading span {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: break-word;
+    text-wrap: balance;
   }
 `;
