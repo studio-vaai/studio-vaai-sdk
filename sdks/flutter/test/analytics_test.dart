@@ -62,8 +62,10 @@ void main() {
         'image-upload-initiated',
         'consent-granted',
         'image-uploaded',
-        'height-entered',
+        // The selection opens as the height is confirmed; the height is
+        // entered once the API saved it.
         'variant-selection-initiated',
+        'height-entered',
         'try-on-initiated',
       ]),
     );

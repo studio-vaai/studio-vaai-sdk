@@ -109,8 +109,7 @@ Map<String, Object> _variantData(
   if (variantId != null)
     'variant-id': variantId
   else
-    for (final axis in _axes)
-      if (foreignIds[axis] case final value?) 'variant-$axis': value,
+    for (final axis in _axes) 'variant-$axis': ?foreignIds[axis],
 };
 
 Map<String, String> _foreignIds(Map<String, Object?> detail) =>
@@ -195,7 +194,7 @@ final class _Summary {
 
   Map<String, Object> toData() => {
     'product-id': productId,
-    if (entry case final value?) 'entry': value,
+    'entry': ?entry,
     'reached-intro': intro,
     'granted-consent': consent,
     'accepted-photo': photo,
@@ -211,7 +210,7 @@ final class _Summary {
       'distinct-waists': axes['waist']!.length,
       'distinct-lengths': axes['length']!.length,
     },
-    if (timeToResult case final value?) 'time-to-result': value,
+    'time-to-result': ?timeToResult,
   };
 }
 
@@ -220,9 +219,8 @@ final class _TryOnAnalytics implements TryOnAnalytics {
     required this.clientApiKey,
     required this.enabled,
     required String baseUrl,
-    required HttpTransport? transport,
-  }) : _endpoint = '${baseUrl.replaceFirst(RegExp(r'/$'), '')}/v2/events',
-       _transport = transport;
+    required this._transport,
+  }) : _endpoint = '${baseUrl.replaceFirst(RegExp(r'/$'), '')}/v2/events';
 
   final String clientApiKey;
   final bool Function() enabled;
@@ -295,14 +293,10 @@ final class _TryOnAnalytics implements TryOnAnalytics {
       }
       final scope = summary?.productId == productId ? summary : null;
 
-      void operation(String work, String outcome, [String? reason]) =>
-          _send('experience-operation-failed', {
-            ...data,
-            'work': work,
-            'outcome': outcome,
-            'current-step': step,
-            if (reason != null) 'reason': reason,
-          });
+      void operation(String work, String outcome, [String? reason]) => _send(
+        'experience-operation-failed',
+        {...data, 'work': work, 'outcome': outcome, 'current-step': step, 'reason': ?reason},
+      );
 
       void reportTried(Map<String, String> pair) {
         if (scope != null &&
@@ -319,7 +313,7 @@ final class _TryOnAnalytics implements TryOnAnalytics {
           summary = _Summary(productId, entry)
             ..intro = event.step == 'intro'
             ..selection = event.step == 'variant-selection';
-          final withEntry = {...data, if (entry != null) 'entry': entry};
+          final withEntry = {...data, 'entry': ?entry};
           _send('widget-opened', withEntry);
           if (entry != null) _send('entrypoint-clicked', withEntry);
         case 'sv-try-on-step-changed':
@@ -384,8 +378,9 @@ final class _TryOnAnalytics implements TryOnAnalytics {
             'origin': origin,
           });
         case 'sv-try-on-presented':
-          if (variantId != null && detail['foreignIds'] is Map)
+          if (variantId != null && detail['foreignIds'] is Map) {
             scope?.rememberVariant(variantId, _foreignIds(detail));
+          }
           if (variantId != null &&
               (scope?.present(detail['tryOnId'] as String, variantId) ?? true)) {
             final actual = _comparison(scope?.variants[variantId] ?? {}, {});
