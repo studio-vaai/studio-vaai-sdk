@@ -1,6 +1,8 @@
 // The ready-made widgets on the real core, against ScriptedApi and scripted
 // devices: every screen state the flow shows, reached by tapping as a
 // shopper would. No core logic is mocked.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:studio_vaai/studio_vaai.dart';
@@ -188,15 +190,70 @@ void main() {
   });
 
   group('photo', () {
-    testWidgets('processing shows the photo and announces progress', (tester) async {
+    testWidgets('an open picker is no upload yet; a cancelled one leaves the intro idle', (
+      tester,
+    ) async {
+      final picker = h.devices.pickerGate = Completer<DevicePhoto?>();
+      await start(tester, h);
+      await giveConsent(tester, h);
+      await tapText(tester, h.m('sessionIntro.primaryCtaPhoto'));
+      await settleView(tester, h, (v) => v.modal is PickerModal);
+      // No spinner and no busy state while the shopper chooses.
+      expect(primarySpinner(), findsNothing);
+      expect(primaryEnabled(tester), isTrue);
+      picker.complete(null);
+      await settleView(tester, h, (v) => v.modal == null && v.screen is IntroductionScreenView);
+      expect(primarySpinner(), findsNothing);
+      expect(primaryEnabled(tester), isTrue);
+      expect(h.api.sent('POST /session/bearer'), isEmpty, reason: 'no session for a cancel');
+      await finish(tester);
+    });
+
+    testWidgets('a chosen photo spins the button it came from, then goes on to the height', (
+      tester,
+    ) async {
       final semantics = tester.ensureSemantics();
       await start(tester, h);
-      await scenarios['photo-processing']!(tester, h);
-      expect(find.bySemanticsLabel(h.m('photo.previewAlt')), findsWidgets);
-      expect(find.bySemanticsLabel(h.m('experience.processingPhoto')), findsWidgets);
+      await scenarios['photo-uploading']!(tester, h);
+      // The intro stays, its primary button spinning; no processing screen.
+      expect(text(h.m('sessionIntro.sheetTitle')), findsOneWidget);
+      expect(text(h.m('experience.processingPhoto')), findsNothing);
+      expect(primarySpinner(), findsOneWidget);
+      expect(find.bySemanticsLabel(h.m('sessionIntro.busyUploadSr')), findsWidgets);
       h.gate.release('POST /bodies');
       await settleFor(tester, text(h.m('heightSetting.title')));
       semantics.dispose();
+      await finish(tester);
+    });
+
+    testWidgets('a new photo from the height step spins its button there', (tester) async {
+      await start(tester, h);
+      await scenarios['height']!(tester, h);
+      // The second photo makes a second body.
+      h.api.overrides['POST /bodies'] = (_) => ScriptedApi.json(201, {
+        'body': {
+          'bodyId': '0192f0e0-0000-7000-8000-0000000000b1',
+          'createdAt': '2026-11-16T10:05:00Z',
+          'estimatedHeightCm': 168,
+          'sourceImageUrl': 'https://images.example.test/body-2.webp',
+          'sourceImageUrlExpiresAt': DateTime.now()
+              .toUtc()
+              .add(const Duration(hours: 1))
+              .toIso8601String(),
+        },
+      });
+      h.gate.hold('POST /bodies');
+      await tapText(tester, h.m('heightSetting.useOtherImage'));
+      await settleView(tester, h, (v) => v.journey.photoUpload?.phase == PhotoUploadPhase.pending);
+      expect(text(h.m('heightSetting.title')), findsOneWidget);
+      expect(primarySpinner(), findsOneWidget);
+      h.gate.release('POST /bodies');
+      await settleView(
+        tester,
+        h,
+        (v) => v.screen is HeightScreenView && v.journey.photoUpload == null,
+      );
+      expect(primarySpinner(), findsNothing);
       await finish(tester);
     });
 
@@ -361,7 +418,12 @@ void main() {
 
       // A second variant: the history lists both results.
       await tapPrimary(tester);
-      await settleFor(tester, text(h.m('sizeAndStyleSelection.variantSectionLabel')));
+      await settleFor(
+        tester,
+        text(
+          h.m('tryOnView.pickerHeading', {'hasResult': 'yes', 'hasSize': 'yes', 'hasColor': 'no'}),
+        ),
+      );
       await tapText(tester, 'L');
       await settleView(
         tester,
@@ -391,13 +453,15 @@ void main() {
       await start(tester, h);
       await scenarios['result-fit']!(tester, h);
       expect(text('87%'), findsOneWidget);
-      expect(text('Chest'), findsOneWidget);
+      // One callout per measurement, named from the catalog.
+      expect(text(h.m('tryOnView.fitAxisNames.chest')), findsOneWidget);
+      expect(text(h.m('tryOnView.fitAxisNames.sleeveLength')), findsOneWidget);
       expect(text(h.m('tryOnView.fitVerdicts.ideal')), findsOneWidget);
       expect(text(h.m('tryOnView.lengthVerdicts.runsLoose')), findsOneWidget);
       // Collapsing the score hides the callouts.
       await tester.tap(text('87%'));
       await tester.pump(const Duration(milliseconds: 300));
-      expect(text('Chest'), findsNothing);
+      expect(text(h.m('tryOnView.fitAxisNames.chest')), findsNothing);
       await finish(tester);
     });
 

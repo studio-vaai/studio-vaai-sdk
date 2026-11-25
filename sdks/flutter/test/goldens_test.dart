@@ -41,7 +41,15 @@ void main() {
   ];
 
   // The wide layout (a 1200×880 window: the web's 65rem × 50rem dialog).
-  const wide = {'intro', 'camera-live', 'height', 'selection', 'result-fit', 'result-picker'};
+  const wide = {
+    'intro',
+    'camera-live',
+    'height',
+    'selection',
+    'selection-gated',
+    'result-fit',
+    'result-picker',
+  };
   final layouts = [
     for (final MapEntry(key: name, value: scenario) in scenarios.entries)
       for (final (locale, appearance) in variants(name))

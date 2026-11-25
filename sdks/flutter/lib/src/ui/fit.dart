@@ -1,9 +1,9 @@
 import 'dart:math' as math;
-import 'dart:ui' show PathMetric;
 
 import 'package:flutter/material.dart';
 
 import '../generated/state_machine.dart';
+import 'callout_layout.dart';
 import 'components.dart';
 import 'scope.dart';
 import 'theme.dart';
@@ -24,12 +24,25 @@ final class FitFailed extends FitView {
 }
 
 final class FitReady extends FitView {
-  const FitReady(super.tryOnId, {required this.score, required this.callouts});
+  const FitReady(
+    super.tryOnId, {
+    required this.score,
+    required this.callouts,
+    this.subject = const [],
+  });
 
   /// 0–100.
   final double score;
   final List<FitCallout> callouts;
+
+  /// The person's outline in the result (the try-on's subject bands), to set
+  /// the cards beside them; empty for results without it.
+  final List<ResultSubjectBand> subject;
 }
+
+/// Where a callout's leader ends: a halo dot, or a tick across the hem for
+/// the length.
+enum FitMarker { dot, tick }
 
 /// The web's `SvFitCalloutVariant`.
 enum FitCalloutVariant { positive, caution, destructive }
@@ -43,11 +56,18 @@ final class FitCallout {
     required this.label,
     required this.description,
     required this.variant,
+    this.alternates = const [],
+    this.marker = FitMarker.dot,
   });
   final String key;
   final double x, y;
   final String label, description;
   final FitCalloutVariant variant;
+
+  /// The same measurement's other anchors (the other sleeve), 0–1: the card
+  /// points at one of them when its own has no room beside it.
+  final List<(double, double)> alternates;
+  final FitMarker marker;
 }
 
 const _verdicts = {
@@ -93,9 +113,20 @@ FitView? fitForResult(TryOn result, bool retryable, String Function(String key) 
             description: text(
               'tryOnView.${c.isLength ? 'lengthVerdicts' : 'fitVerdicts'}.${_verdicts[c.fit]!.$1}',
             ),
+            alternates: [
+              for (final a in result.fitAnchors ?? const <ResultFitAnchor>[])
+                if (a.dimension == c.key && (a.x != c.x || a.y != c.y)) (a.x, a.y),
+            ],
+            // The length is read at the front hem: a tick across it marks it better.
+            marker: c.axis == FitAxis.totalLength ? FitMarker.tick : FitMarker.dot,
           ),
       ];
-      return FitReady(result.id, score: score.fitMatch * 100, callouts: callouts);
+      return FitReady(
+        result.id,
+        score: score.fitMatch * 100,
+        callouts: callouts,
+        subject: result.subjectBands ?? const [],
+      );
     default:
       return null;
   }
@@ -295,14 +326,23 @@ class FitScoreBar extends StatelessWidget {
 
 // --- The callouts on the image (`sv-fit-callout`, the fit overlay) ----------------
 
-/// A callout card: the measurement and a dot with its verdict.
+/// A compact callout card: the measurement and a dot with its verdict; in a
+/// legend, led by its anchor's number.
 class FitCalloutCard extends StatelessWidget {
-  const FitCalloutCard({super.key, required this.callout, this.active = false});
+  const FitCalloutCard({super.key, required this.callout, this.active = false, this.number});
   final FitCallout callout;
   final bool active;
 
-  static const labelStyle = TextStyle(fontSize: 13, height: 1.25, fontWeight: FontWeight.w600);
-  static const verdictStyle = TextStyle(fontSize: 11, height: 1.25);
+  /// The anchor's number, in a legend.
+  final int? number;
+
+  static const labelStyle = TextStyle(fontSize: 11, height: 1.25, fontWeight: FontWeight.w600);
+  static const verdictStyle = TextStyle(fontSize: 10, height: 1.25);
+  static const padding = EdgeInsets.symmetric(horizontal: 10, vertical: 7);
+  static const lineGap = 5.0, dotSize = 6.0, dotGap = 6.0;
+
+  /// A legend's number before the card's text, and the gap after it.
+  static const numberSize = 20.0, numberGap = 6.0;
 
   @override
   Widget build(BuildContext context) {
@@ -312,134 +352,93 @@ class FitCalloutCard extends StatelessWidget {
       FitCalloutVariant.caution => t.caution,
       FitCalloutVariant.destructive => t.destructive,
     };
+    final text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(callout.label, style: labelStyle.copyWith(color: t.foreground)),
+        const SizedBox(height: lineGap),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: dotSize,
+              height: dotSize,
+              decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: dotGap),
+            Flexible(
+              child: Text(
+                callout.description,
+                style: verdictStyle.copyWith(color: t.mutedForeground),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
     return AnimatedScale(
       scale: active ? 1.03 : 1,
       duration: const Duration(milliseconds: 250),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: padding,
         decoration: BoxDecoration(
           color: t.background,
-          borderRadius: BorderRadius.circular(TryOnTokens.radiusXl),
-          border: Border.all(color: t.glassBorder),
+          borderRadius: BorderRadius.circular(TryOnTokens.radiusLg),
           boxShadow: [
             BoxShadow(
-              color: const Color(0x1A0A0A0A),
+              color: Color.fromRGBO(0, 0, 0, active ? 0.16 : 0.1),
               blurRadius: active ? 28 : 16,
               offset: Offset(0, active ? 10 : 4),
             ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(callout.label, style: labelStyle.copyWith(color: t.foreground)),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    callout.description,
-                    style: verdictStyle.copyWith(color: t.mutedForeground),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+        child: number == null
+            ? text
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _NumberMarker(number!),
+                  const SizedBox(width: numberGap),
+                  Flexible(child: text),
+                ],
+              ),
       ),
     );
   }
 }
 
-/// A card's place and its leader line, from [placeFitCallouts].
-typedef CalloutPlacement = ({Rect card, Offset lineStart, Offset lineEnd});
+/// A legend's number, on its card and at its anchor.
+class _NumberMarker extends StatelessWidget {
+  const _NumberMarker(this.number);
+  final int number;
 
-/// The web's `placeFitCallouts`: cards parked at the photo's edges, the two
-/// sides balanced around the subject, stacked by their points' heights, each
-/// with a line from its edge toward its point.
-List<CalloutPlacement> placeFitCallouts(
-  List<({Offset point, Size size})> callouts, {
-  required double left,
-  required double right,
-  required double top,
-  required double bottom,
-  required double gap,
-}) {
-  if (callouts.isEmpty) return const [];
-  final xs = callouts.map((c) => c.point.dx);
-  final center = (xs.reduce(math.min) + xs.reduce(math.max)) / 2;
-  final columns = <String, List<int>>{'left': [], 'right': []};
-  for (final (i, c) in callouts.indexed) {
-    columns[c.point.dx < center ? 'left' : 'right']!.add(i);
-  }
-  final heavy = columns['left']!.length > columns['right']!.length ? 'left' : 'right';
-  final light = heavy == 'left' ? 'right' : 'left';
-  final ordered = [...columns[heavy]!]
-    ..sort(
-      (a, b) =>
-          (callouts[a].point.dx - center).abs().compareTo((callouts[b].point.dx - center).abs()),
+  @override
+  Widget build(BuildContext context) {
+    final t = TryOnScope.of(context).tokens;
+    return Container(
+      width: FitCalloutCard.numberSize,
+      height: FitCalloutCard.numberSize,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: t.foreground,
+        shape: BoxShape.circle,
+        border: Border.all(color: t.background, width: 1.5),
+        boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 4, offset: Offset(0, 1))],
+      ),
+      child: Text(
+        '$number',
+        style: TextStyle(fontSize: 10, height: 1, fontWeight: FontWeight.w600, color: t.background),
+      ),
     );
-  final move = (ordered.length - columns[light]!.length) ~/ 2;
-  columns[light]!.addAll(ordered.take(math.max(0, move)));
-  columns[heavy] = ordered.skip(math.max(0, move)).toList();
-
-  final positions = List<CalloutPlacement?>.filled(callouts.length, null);
-  for (final side in ['left', 'right']) {
-    final column = [...columns[side]!]
-      ..sort((a, b) => callouts[a].point.dy.compareTo(callouts[b].point.dy));
-    final total = column.fold<double>(0, (sum, i) => sum + callouts[i].size.height);
-    final room = bottom - top;
-    final spacing = math.min(gap, (room - total) / math.max(1, column.length - 1));
-    var nextTop = top;
-    final forward = <(int, double, double)>[];
-    for (final i in column) {
-      final (:point, :size) = callouts[i];
-      final x = side == 'left' ? left : right - size.width;
-      var preferred = point.dy - size.height / 2;
-      if (point.dx >= x && point.dx <= x + size.width) {
-        final below = point.dy + gap, above = point.dy - size.height - gap;
-        if (below + size.height <= bottom) {
-          preferred = below;
-        } else if (above >= top) {
-          preferred = above;
-        }
-      }
-      final y = math.max(nextTop, preferred);
-      nextTop = y + size.height + spacing;
-      forward.add((i, x, y));
-    }
-    var nextBottom = bottom;
-    for (final (i, x, preferred) in forward.reversed) {
-      final (:point, :size) = callouts[i];
-      final y = preferred.clamp(top, math.max(top, nextBottom - size.height)).toDouble();
-      nextBottom = y - spacing;
-      final cx = x + size.width / 2, cy = y + size.height / 2;
-      final dx = point.dx - cx, dy = point.dy - cy;
-      final ratio = [
-        1.0,
-        dx.abs() / (size.width / 2),
-        dy.abs() / (size.height / 2),
-      ].reduce(math.max);
-      positions[i] = (
-        card: Rect.fromLTWH(x, y, size.width, size.height),
-        lineStart: Offset(cx + dx / ratio, cy + dy / ratio),
-        lineEnd: point,
-      );
-    }
   }
-  return [for (final p in positions) p!];
 }
 
-/// The callouts over the result image while the fit details are open: cards
-/// at the edges, dashed leader lines to their points; a tap pins one.
+/// The callouts over the result image while the fit details are open: compact
+/// cards beside the person (`callout_layout.dart`, the web's layout), leaders
+/// fading out into a white halo dot (a tick across the hem for the length);
+/// a numbered legend when the cards do not fit beside the person. A tap pins
+/// one, which grows its marker and shows its leader whole.
 class FitCalloutsOverlay extends StatelessWidget {
   const FitCalloutsOverlay({
     super.key,
@@ -447,6 +446,8 @@ class FitCalloutsOverlay extends StatelessWidget {
     required this.aspect,
     required this.activeKey,
     required this.onSelect,
+    this.subject = const [],
+    this.keepOut = const [],
     this.bottomInset = 46,
   });
 
@@ -456,7 +457,16 @@ class FitCalloutsOverlay extends StatelessWidget {
   final double? aspect;
   final String? activeKey;
   final ValueChanged<String?> onSelect;
+
+  /// The person's outline in the image (0–1), the result's subject bands.
+  final List<ResultSubjectBand> subject;
+
+  /// Areas over the image the cards keep clear of, such as the download button.
+  final List<Rect> keepOut;
   final double bottomInset;
+
+  /// The area's insets and spacing, as the web's overlay.
+  static const _top = 12.0, _side = 8.0, _gap = 10.0, _clearance = 16.0;
 
   @override
   Widget build(BuildContext context) {
@@ -476,9 +486,16 @@ class FitCalloutsOverlay extends StatelessWidget {
               ? Rect.fromCenter(center: image.center, width: w, height: w / a)
               : Rect.fromCenter(center: image.center, width: h * a, height: h);
         }
+        Offset toOverlay(double x, double y) =>
+            Offset(image.left + image.width * x, image.top + image.height * y);
+        bool inView(Offset p) => p.dx >= 0 && p.dx <= w && p.dy >= 0 && p.dy <= h;
         final maxWidth = w / 2 - 16;
-        double measure(String text, TextStyle style) {
-          final painter = TextPainter(
+        Size measure(FitCallout c, {bool legend = false}) {
+          final extra =
+              FitCalloutCard.padding.horizontal +
+              (legend ? FitCalloutCard.numberSize + FitCalloutCard.numberGap : 0);
+          final textWidth = maxWidth - extra;
+          TextPainter painter(String text, TextStyle style, double width) => TextPainter(
             text: TextSpan(
               text: text,
               style: style.copyWith(
@@ -488,61 +505,138 @@ class FitCalloutsOverlay extends StatelessWidget {
             ),
             textDirection: TextDirection.ltr,
             textScaler: textScaler,
-          )..layout();
-          final width = painter.width;
-          painter.dispose();
-          return width;
+          )..layout(maxWidth: math.max(1, width));
+          final label = painter(c.label, FitCalloutCard.labelStyle, textWidth);
+          final verdict = painter(
+            c.description,
+            FitCalloutCard.verdictStyle,
+            textWidth - FitCalloutCard.dotSize - FitCalloutCard.dotGap,
+          );
+          final size = Size(
+            math.max(label.width, FitCalloutCard.dotSize + FitCalloutCard.dotGap + verdict.width) +
+                extra,
+            math.max(
+                  label.height + FitCalloutCard.lineGap + verdict.height,
+                  legend ? FitCalloutCard.numberSize : 0,
+                ) +
+                FitCalloutCard.padding.vertical,
+          );
+          label.dispose();
+          verdict.dispose();
+          return size;
         }
 
-        final sized = [
-          for (final c in items)
-            (
-              point: Offset(image.left + image.width * c.x, image.top + image.height * c.y),
-              size: Size(
-                (math.max(
-                          measure(c.label, FitCalloutCard.labelStyle),
-                          12 + measure(c.description, FitCalloutCard.verdictStyle),
-                        ) +
-                        30)
-                    .clamp(math.min(124, maxWidth), maxWidth)
-                    .toDouble(),
-                textScaler.scale(13 * 1.25 + 11 * 1.25) + 26,
-              ),
+        final subjectRects = [
+          for (final b in subject)
+            Rect.fromLTRB(
+              image.left + b.left * image.width,
+              image.top + b.top * image.height,
+              image.left + b.right * image.width,
+              image.top + b.bottom * image.height,
             ),
         ];
-        final placed = placeFitCallouts(
-          sized,
-          left: 8,
-          right: w - 8,
-          top: 12,
+        final area = LayoutArea(
+          left: _side,
+          top: _top,
+          right: w - _side,
           bottom: h - bottomInset,
-          gap: 10,
+          gap: _gap,
+          clearance: _clearance,
+          keepOut: keepOut,
         );
+        // A crop can hide the anchor: then use the same measurement's other
+        // side, if in view.
+        CalloutBox boxOf(FitCallout c, Size size) {
+          final points = [toOverlay(c.x, c.y), for (final (x, y) in c.alternates) toOverlay(x, y)];
+          final visible = points.where(inView).toList();
+          return CalloutBox(
+            point: visible.firstOrNull ?? points.first,
+            alternates: visible.skip(1).toList(),
+            width: size.width,
+            height: size.height,
+          );
+        }
+
+        final bands = subjectRects.isEmpty ? null : subjectRects;
+        var layout = placeFitCallouts([for (final c in items) boxOf(c, measure(c))], area, bands);
+        if (!layout.clear && items.isNotEmpty) {
+          layout = placeFitLegend(
+            [for (final c in items) boxOf(c, measure(c, legend: true))],
+            area,
+            bands,
+          );
+        }
+        final legend = layout.kind == FitLayoutKind.legend;
+        final narrow = w <= 480;
+        void toggle(String key) => onSelect(key == activeKey ? null : key);
         return Stack(
           children: [
             Positioned.fill(
               child: IgnorePointer(
                 child: CustomPaint(
-                  painter: _LeaderPainter([
-                    for (final (i, p) in placed.indexed) (p, items[i].key == activeKey),
-                  ], t.foreground),
-                ),
-              ),
-            ),
-            for (final (i, p) in placed.indexed)
-              Positioned.fromRect(
-                rect: p.card,
-                child: Semantics(
-                  button: true,
-                  selected: items[i].key == activeKey,
-                  label: '${items[i].label}: ${items[i].description}',
-                  excludeSemantics: true,
-                  child: GestureDetector(
-                    onTap: () => onSelect(items[i].key == activeKey ? null : items[i].key),
-                    child: FitCalloutCard(callout: items[i], active: items[i].key == activeKey),
+                  painter: _LeaderPainter(
+                    [
+                      for (final (i, p) in layout.cards.indexed)
+                        (
+                          path: p.path,
+                          anchor: p.anchor,
+                          active: items[i].key == activeKey,
+                          tick: items[i].marker == FitMarker.tick,
+                        ),
+                    ],
+                    t.foreground,
+                    legend: legend,
+                    tickWidth: narrow ? 18 : 22,
                   ),
                 ),
               ),
+            ),
+            for (final (i, p) in layout.cards.indexed) ...[
+              if (legend)
+                Positioned(
+                  left: p.anchor.dx - FitCalloutCard.numberSize / 2,
+                  top: p.anchor.dy - FitCalloutCard.numberSize / 2,
+                  child: GestureDetector(
+                    onTap: () => toggle(items[i].key),
+                    child: ExcludeSemantics(child: _NumberMarker(i + 1)),
+                  ),
+                )
+              else
+                // The marker's hit area: a pin from the image as from the card.
+                Positioned(
+                  left: p.anchor.dx - 16,
+                  top: p.anchor.dy - 16,
+                  width: 32,
+                  height: 32,
+                  child: ExcludeSemantics(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => toggle(items[i].key),
+                    ),
+                  ),
+                ),
+              Positioned(
+                left: p.x,
+                top: p.y,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxWidth),
+                  child: Semantics(
+                    button: true,
+                    selected: items[i].key == activeKey,
+                    label: '${items[i].label}: ${items[i].description}',
+                    excludeSemantics: true,
+                    child: GestureDetector(
+                      onTap: () => toggle(items[i].key),
+                      child: FitCalloutCard(
+                        callout: items[i],
+                        active: items[i].key == activeKey,
+                        number: legend ? i + 1 : null,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         );
       },
@@ -550,44 +644,109 @@ class FitCalloutsOverlay extends StatelessWidget {
   }
 }
 
+/// The leaders and their markers: a dashed line whose last 40% fades out in
+/// steps into a white halo dot (or a tick across the hem), white on any
+/// theme, as it marks the photo, not the interface. A pinned callout's marker
+/// grows and its leader shows whole.
 class _LeaderPainter extends CustomPainter {
-  _LeaderPainter(this.lines, this.color);
-  final List<(CalloutPlacement, bool)> lines;
+  _LeaderPainter(this.lines, this.color, {required this.legend, required this.tickWidth});
+  final List<({List<Offset> path, Offset anchor, bool active, bool tick})> lines;
   final Color color;
+  final bool legend;
+  final double tickWidth;
+
+  static const _fadeSteps = 8, _dash = 6.0, _gap = 5.0;
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final (p, active) in lines) {
-      final path = Path()
-        ..moveTo(p.lineStart.dx, p.lineStart.dy)
-        ..lineTo(p.lineEnd.dx, p.lineEnd.dy);
-      final dashed = _dash(path, 6, 5);
-      final opacity = active ? 1.0 : 0.6;
-      canvas.drawPath(
-        dashed,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = active ? 3.5 : 2.5
-          ..color = Color.fromRGBO(255, 255, 255, 0.55 * opacity),
-      );
-      canvas.drawPath(
-        dashed,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.25
-          ..color = color.withValues(alpha: (active ? 0.6 : 0.38) * opacity),
-      );
+    if (legend) return;
+    // Inactive leaders first, the pinned one over them.
+    for (final line in [...lines.where((l) => !l.active), ...lines.where((l) => l.active)]) {
+      _leader(canvas, line.path, line.active);
+      _marker(canvas, line.anchor, line.active, line.tick);
     }
   }
 
-  Path _dash(Path source, double on, double off) {
-    final out = Path();
-    for (final PathMetric metric in source.computeMetrics()) {
-      for (var d = 0.0; d < metric.length; d += on + off) {
-        out.addPath(metric.extractPath(d, math.min(d + on, metric.length)), Offset.zero);
+  void _leader(Canvas canvas, List<Offset> path, bool active) {
+    if (path.length < 2) return;
+    final (solid: _, :fade) = fadeLeader(path, fadeFraction, _fadeSteps);
+    final base = active ? 1.0 : 0.6;
+    // The dash runs on unbroken; each dash takes the opacity of where it lies.
+    double opacityAt(double distance) {
+      if (active || fade.isEmpty || distance < fade.first.offset) return 1;
+      for (final step in fade.reversed) {
+        if (distance >= step.offset) return step.opacity;
       }
+      return 1;
     }
-    return out;
+
+    final segments = [for (var i = 1; i < path.length; i++) (path[i - 1], path[i])];
+    var walked = 0.0;
+    for (final (from, to) in segments) {
+      final length = (to - from).distance;
+      // Where the dash pattern stands at this segment's start.
+      var d = 0.0;
+      while (d < length) {
+        final phase = (walked + d) % (_dash + _gap);
+        if (phase >= _dash) {
+          d += _dash + _gap - phase;
+          continue;
+        }
+        final end = math.min(length, d + _dash - phase);
+        final a = Offset.lerp(from, to, d / length)!, b = Offset.lerp(from, to, end / length)!;
+        final opacity = base * opacityAt(walked + (d + end) / 2);
+        canvas
+          ..drawLine(
+            a,
+            b,
+            Paint()
+              ..strokeWidth = active ? 3.5 : 2.5
+              ..strokeCap = StrokeCap.round
+              ..color = Color.fromRGBO(255, 255, 255, 0.55 * opacity),
+          )
+          ..drawLine(
+            a,
+            b,
+            Paint()
+              ..strokeWidth = 1.25
+              ..strokeCap = StrokeCap.round
+              ..color = color.withValues(alpha: (active ? 0.6 : 0.38) * opacity),
+          );
+        d = end;
+      }
+      walked += length;
+    }
+  }
+
+  void _marker(Canvas canvas, Offset at, bool active, bool tick) {
+    const white = Color(0xFFFFFFFF);
+    final opacity = active ? 1.0 : 0.9;
+    // The dot is 7 px; the tick 22 (18 on a phone) by 3. Pinned: dot ×1.75,
+    // tick ×1.35 wide and ×1.75 tall.
+    final shape = tick
+        ? RRect.fromRectAndRadius(
+            Rect.fromCenter(
+              center: at,
+              width: tickWidth * (active ? 1.35 : 1),
+              height: 3 * (active ? 1.75 : 1),
+            ),
+            const Radius.circular(1.5),
+          )
+        : RRect.fromRectAndRadius(
+            Rect.fromCircle(center: at, radius: 3.5 * (active ? 1.75 : 1)),
+            const Radius.circular(99),
+          );
+    Paint fill(Color c, [double blur = 0]) => Paint()
+      ..color = c.withValues(alpha: c.a * opacity)
+      ..maskFilter = blur > 0 ? MaskFilter.blur(BlurStyle.normal, blur) : null;
+    // A soft shadow and a white glow carry it on white and on dark cloth.
+    canvas
+      ..drawRRect(shape.shift(const Offset(0, 1)), fill(const Color(0x99000000), 3))
+      ..drawRRect(shape.inflate(tick ? 3 : 5), fill(const Color(0x8CFFFFFF), tick ? 4 : 5))
+      ..drawRRect(shape.inflate(tick ? 2 : 3), fill(const Color(0x73FFFFFF)))
+      // The hairline, then the white mark.
+      ..drawRRect(shape.inflate(1), fill(const Color(0x3D000000)))
+      ..drawRRect(shape, fill(white));
   }
 
   @override

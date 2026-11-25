@@ -8,6 +8,7 @@ import '../generated/state_machine.dart';
 import 'components.dart';
 import 'fit.dart';
 import 'flow_image.dart';
+import 'gate_note.dart';
 import 'pinch_zoom.dart';
 import 'scope.dart';
 import 'screens.dart';
@@ -55,10 +56,16 @@ class TryOnFlowView extends StatefulWidget {
     this.onAddToCart,
     this.onDownload,
     this.onError,
+    this.fitScore = false,
   });
 
   final TryOnExperience experience;
   final String? productName;
+
+  /// Shows the fit score on each result, with its intended fit and the fit
+  /// callouts on the image. Off by default; the size recommendation and the
+  /// fit gate's note work either way.
+  final bool fitScore;
   final Future<void> Function(CartRequest request)? onAddToCart;
   final Future<void> Function(Uint8List bytes, String mimeType)? onDownload;
   final void Function(Object error)? onError;
@@ -77,6 +84,10 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
   Timer? _ticker;
   Size? _resultSize;
   final _photoImages = <MediaId, ImageProvider>{};
+
+  /// The signed URL each restored photo was last shown from, to evict its
+  /// decoded image once the API deletes the photo.
+  final _photoUrls = <MediaId, String>{};
   Type? _lastScreen;
   String? _lastShown;
   Object? _reportedFailure;
@@ -114,6 +125,7 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
     if (oldWidget.experience != widget.experience) {
       _detach(oldWidget.experience);
       _photoImages.clear();
+      _photoUrls.clear();
       _attach();
     } else if ((oldWidget.onAddToCart == null) != (widget.onAddToCart == null)) {
       _e.setCartAvailable(widget.onAddToCart != null);
@@ -230,9 +242,15 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
   Widget _photo(FlowView view, MediaId? media, {String altKey = 'photo.previewAlt'}) {
     final scope = TryOnScope.of(context);
     final photo = media == null ? null : _e.photo(media);
-    if (photo == null) return const StagePlaceholder();
+    if (photo != null && photo.gone) {
+      // Deleted by the API: drop the decoded image too, not just its display.
+      final shown = _photoUrls.remove(media);
+      if (shown != null) unawaited(scope.imageProvider(shown).evict());
+    }
+    if (photo == null || photo.gone) return const StagePlaceholder();
     // A restored session's photo is the API's signed URL; a new one on the device, its bytes.
     final url = photo.url;
+    if (url != null) _photoUrls[media!] = url;
     final provider = url != null
         ? scope.imageProvider(url)
         : (_photoImages[media!] ??= MemoryImage(photo.original!.bytes));
@@ -260,6 +278,8 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
 
   TryOnMessage? _sourceImageRecovery(FlowView view, MediaId? media) {
     final source = view.renderMedia?.source;
+    // A photo the API deleted is no failure: the flow asks for a new one instead.
+    if (media != null && _e.photo(media)?.gone == true) return null;
     return source != null &&
             source.target is SourceImageTarget &&
             (source.target as SourceImageTarget).media == media &&
@@ -271,11 +291,77 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
   String? _pickerError(FlowView view) =>
       view.issue is PickerFailedIssue ? 'experience.pickerFailed' : null;
 
+  /// A calm request for a new photo once the shopper's earlier one is gone
+  /// (the API deletes it with the session's data): no error, nothing went
+  /// wrong. For [media], when that restored photo was deleted while shown;
+  /// without, when a restore found no stored photo.
+  TryOnMessage? _addPhoto([MediaId? media]) {
+    final gone = media == null ? _e.photoGone : _e.photo(media)?.gone == true;
+    return gone
+        ? TryOnMessage(
+            TryOnScope.text(context, 'experience.addPhotoToTryOn'),
+            variant: MessageVariant.neutral,
+          )
+        : null;
+  }
+
+  /// Whether a chosen photo is being sent and processed. The screen it was
+  /// chosen from stays, its primary button spinning, and the flow moves on
+  /// once the photo is processed: there is no processing screen. A photo
+  /// that failed still shows on its own screen with its recovery.
+  bool _uploadingPhoto(FlowView view) {
+    final upload = view.journey.photoUpload;
+    return view.journey.step == JourneyStep.photoUpload &&
+        upload != null &&
+        !upload.showCamera &&
+        upload.phase == PhotoUploadPhase.pending;
+  }
+
+  /// The fit gate's note on the size row (the web's `fitGateNote`): why the
+  /// selected size is refused, and the next size that can be tried on, which
+  /// the primary button offers. Picking on the size step reads as a
+  /// recommendation; over a shown result, as an inspection of the picked
+  /// size. A host's size the gate refused was already left for the next one:
+  /// the note says why. With no size left in that direction it says so.
+  String? _fitGateNote(FlowView view, TryOnScreenView screen) {
+    final selection = screen.selection;
+    final presentation = screen.presentation;
+    final switched = presentation.gateSwitch;
+    final variants = view.domain.product?.variants ?? const <Variant>[];
+    final sizeRows = selection.rows.where((r) => r.role == AxisRole.size);
+    final formats = [
+      for (final f in selection.labelFormats)
+        if (f.role == AxisRole.size) f,
+    ];
+    String sizeOf(String variantId) =>
+        sizeLabelText(labelFor(variantId, variants, sizeRows, formats));
+    final next = switched?.toVariantId ?? presentation.nextFittingVariantId;
+    final note = gateNoteMessage(
+      warning: switch (presentation.feedback?.warning) {
+        TryOnWarning.tooSmall => GateRefusal.tooSmall,
+        TryOnWarning.tooLarge => GateRefusal.tooLarge,
+        _ => null,
+      },
+      switched: switch (switched?.reason) {
+        RefusalReason.garmentTooSmall => GateRefusal.tooSmall,
+        RefusalReason.garmentTooLarge => GateRefusal.tooLarge,
+        null => null,
+      },
+      requested: sizeOf(switched?.fromVariantId ?? selection.variantId),
+      next: next == null ? null : sizeOf(next),
+      choosing: presentation.mode == PresentationMode.selection,
+    );
+    return note == null ? null : TryOnScope.of(context).messages.text(note.key, note.values);
+  }
+
   // --- Screens ----------------------------------------------------------------
 
   Widget _screen(FlowView view) {
     final upload = view.journey.photoUpload;
-    if (view.journey.step == JourneyStep.photoUpload && upload != null && !upload.showCamera) {
+    if (view.journey.step == JourneyStep.photoUpload &&
+        upload != null &&
+        !upload.showCamera &&
+        !_uploadingPhoto(view)) {
       return _staged(view, upload.phase);
     }
     return switch (view.screen) {
@@ -300,8 +386,9 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
     } else if (view.issue is SessionExpiredIssue) {
       error = 'experience.sessionExpired';
     }
-    final busy =
-        view.modal != null || session == SessionPhase.restoring || session == SessionPhase.creating;
+    // An open picker, or the session it creates, is not yet an upload: the
+    // picker can still be cancelled, and the photo is only sent once chosen.
+    final busy = session == SessionPhase.restoring || _uploadingPhoto(view);
     return IntroScreen(
       navigation: _navigation(view),
       consented: consented,
@@ -320,7 +407,7 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
       consentError: view.issue is ConsentRequiredIssue
           ? m.text('sessionIntro.consentRequired')
           : null,
-      recovering: _recovery(view),
+      recovering: _recovery(view, [if (!restoringFailed) ?_addPhoto()]),
       onConsent: (value) => _dispatch(SessionFlowAction(SetConsentSessionAction(value))),
       onPhotoFacts: (open) => setState(() => _photoFactsOpen = open),
       onWithdrawal: (open) => setState(() => _withdrawalOpen = open),
@@ -447,13 +534,11 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
 
   Widget _rejected(FlowView view, PhotoRejectedScreenView screen) {
     final m = TryOnScope.of(context).messages;
-    final selecting = view.modal is PickerModal;
     return RejectedScreen(
       navigation: _navigation(view),
       photo: _photo(view, screen.photo.media, altKey: 'photo.rejectedAlt'),
       error: m.text(_photoRejectionMessages[screen.reason] ?? 'photoUpload.fallbackError'),
-      busy: selecting,
-      statusMessage: selecting ? m.text('experience.choosingPhoto') : null,
+      busy: _uploadingPhoto(view),
       onUpload: () => _beginPhoto(screen.photo.source),
       onGuide: () => _dispatch(PhotoFlowAction(ShowGuidePhotoAction())),
       recovery: _recovery(view, [
@@ -465,10 +550,10 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
 
   Widget _height(FlowView view, HeightScreenView screen) {
     final m = TryOnScope.of(context).messages;
-    final selecting = view.modal is PickerModal;
+    final uploading = _uploadingPhoto(view);
     final saving = view.journey.bodyProgress == BodyProgress.savingHeight;
-    final status = selecting
-        ? m.text('experience.choosingPhoto')
+    final status = uploading
+        ? m.text('experience.processingPhoto')
         : (saving ? m.text('experience.savingHeight') : null);
     final issue = view.issue;
     final heightError = issue is SetHeightFailedIssue ? issue.error : null;
@@ -489,7 +574,7 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
       navigation: _navigation(view),
       photo: _photo(view, view.domain.photo?.media, altKey: 'photo.reviewAlt'),
       heightCm: screen.draft,
-      busy: selecting,
+      busy: uploading,
       confirmDisabled: !view.canConfirmHeight,
       statusMessage: status,
       error: error == null ? null : m.text(error),
@@ -499,7 +584,8 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
       recovery: _recovery(view, [
         ?_message(uncertain),
         ?_sourceImageRecovery(view, view.domain.photo?.media),
-        if (saving && !selecting)
+        if (view.domain.photo case final photo?) ?_addPhoto(photo.media),
+        if (saving && !uploading)
           Text(
             status!,
             style: TextStyle(fontSize: 14, color: TryOnScope.of(context).tokens.mutedForeground),
@@ -533,6 +619,7 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
             selection.labelFormats,
           );
     final savingHeight = view.journey.bodyProgress == BodyProgress.savingHeight;
+    final sizeNote = _fitGateNote(view, screen);
     final displayed = presentation.displayed;
     final shownId = displayed is TryOnDisplayedImage ? displayed.tryOnId : null;
     final shown = domain.tryOns.where((r) => r.id == shownId).firstOrNull;
@@ -559,6 +646,11 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
         : (error == null ? TryOnPhase.ready : TryOnPhase.error);
     final actions = view.renderMedia;
     final src = image == null ? null : _e.assetSource(image);
+    final pickerOverResult =
+        !_wide &&
+        selection.rows.isNotEmpty &&
+        (presentation.mode == PresentationMode.selection ||
+            presentation.mode == PresentationMode.editingVariant);
     Widget? result;
     if (shown != null && image != null && src != null) {
       final provider = scope.imageProvider(src);
@@ -567,7 +659,9 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
         image: provider,
         loadKey: (image.asset, image.load, image.version),
         fit: BoxFit.cover,
-        alignment: Alignment.center,
+        // On a phone the picker opens over the result's lower part: the result
+        // aligns to the top, so the person stays in view above it.
+        alignment: pickerOverResult ? Alignment.topCenter : Alignment.center,
         semanticLabel: [
           widget.productName ?? m.text('sessionIntro.defaultProductName'),
           m.text('tryOnView.aiGeneratedLabel'),
@@ -587,7 +681,10 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
         child: result,
       );
     }
-    final warning = feedback?.warning == null ? null : _warnings[feedback!.warning!];
+    // A fit-gate warning is said by the note on the size row, which names the size to try.
+    final warning = feedback?.warning == null || sizeNote != null
+        ? null
+        : _warnings[feedback!.warning!];
     return TryOnResultScreen(
       navigation: _navigation(view),
       productName: widget.productName,
@@ -606,10 +703,15 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
       error: error,
       statusMessage: status,
       requestPending: presentation.progress != null,
-      busy: view.modal != null,
+      busy: view.modal != null || _uploadingPhoto(view),
       cart: actions?.cart,
+      downloadVisible: widget.onDownload != null,
       downloadEnabled: actions?.download.available == true && widget.onDownload != null,
-      fit: shown == null ? null : fitForResult(shown, presentation.fitRetryable, m.text),
+      downloadPending: actions?.download.pending == true,
+      fit: widget.fitScore && shown != null
+          ? fitForResult(shown, presentation.fitRetryable, m.text)
+          : null,
+      sizeNote: sizeNote,
       fitDetailsOpen: _fitDetailsOpen,
       onFitDetails: (open) => setState(() {
         _fitDetailsOpen = open;
@@ -644,6 +746,7 @@ class _TryOnFlowViewState extends State<TryOnFlowView>
         ?_message(warning),
         if (actions?.cart.failed == true) ?_message('experience.cartFailed'),
         if (shown == null) ?_sourceImageRecovery(view, domain.photo?.media),
+        if (shown == null) ?_addPhoto(domain.photo?.media),
         if (actions?.download.failed == true) ?_message('experience.downloadFailed'),
         if (resultState == 'error') ?_message('experience.resultImageFailed'),
         if (progressText != null)

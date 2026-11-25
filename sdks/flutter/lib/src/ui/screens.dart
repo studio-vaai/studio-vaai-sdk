@@ -49,9 +49,7 @@ class IntroScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scope = TryOnScope.of(context);
-    final m = scope.messages;
-    final t = scope.tokens;
+    final m = TryOnScope.of(context).messages;
     final blocked = consentRequired && !consented;
     final errors = [
       if (consentRequired && consentError != null && consentError!.isNotEmpty) consentError!,
@@ -62,9 +60,59 @@ class IntroScreen extends StatelessWidget {
       m.text('sessionIntro.photoFacts.nobodyElseSees'),
       m.text('sessionIntro.photoFacts.deletedAfter'),
     ];
+    // Wide, as the web: "powered by" in the header instead of the subtitle and
+    // the guide's corner, and the three steps above the photo facts.
+    return LayoutBuilder(
+      builder: (context, box) =>
+          _screen(context, isWideTryOn(box.maxWidth), blocked, errors, facts),
+    );
+  }
+
+  Widget _screen(
+    BuildContext context,
+    bool wide,
+    bool blocked,
+    List<String> errors,
+    List<String> facts,
+  ) {
+    final scope = TryOnScope.of(context);
+    final m = scope.messages;
+    final t = scope.tokens;
+    final privacy = TryOnDisclosure(
+      heading: m.text('sessionIntro.photoFactsTitle'),
+      open: photoFactsOpen,
+      onToggle: onPhotoFacts,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final fact in facts)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2, right: 8),
+                    child: Icon(Icons.check, size: 16, color: t.positive),
+                  ),
+                  Expanded(
+                    child: Text(
+                      fact,
+                      style: TextStyle(fontSize: 14, height: 20 / 14, color: t.foreground),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
     return TryOnScreen(
       title: m.text('sessionIntro.sheetTitle'),
-      subtitle: m.text('sessionIntro.sheetSubtitle'),
+      subtitle: wide ? null : m.text('sessionIntro.sheetSubtitle'),
+      subtitleTrailing: wide
+          ? const Padding(padding: EdgeInsets.only(top: 4), child: TryOnPoweredBy())
+          : null,
       back: navigation.back,
       onBack: navigation.onBack,
       onClose: navigation.onClose,
@@ -74,38 +122,23 @@ class IntroScreen extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           const Padding(padding: EdgeInsets.only(bottom: 8), child: TryOnPhotoGuide()),
-          const Positioned(right: 0, bottom: 0, child: TryOnPoweredBy(stacked: true)),
+          if (!wide) const Positioned(right: 0, bottom: 0, child: TryOnPoweredBy(stacked: true)),
         ],
       ),
-      panel: TryOnDisclosure(
-        heading: m.text('sessionIntro.photoFactsTitle'),
-        open: photoFactsOpen,
-        onToggle: onPhotoFacts,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final fact in facts)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2, right: 8),
-                      child: Icon(Icons.check, size: 16, color: t.positive),
-                    ),
-                    Expanded(
-                      child: Text(
-                        fact,
-                        style: TextStyle(fontSize: 14, height: 20 / 14, color: t.foreground),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
+      panel: wide
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _Steps([
+                  m.text('sessionIntro.steps.uploadPhoto'),
+                  m.text('sessionIntro.steps.enterHeight'),
+                  m.text('sessionIntro.steps.trySizes'),
+                ]),
+                const SizedBox(height: 16),
+                privacy,
+              ],
+            )
+          : privacy,
       beforeActions: [
         if (consentRequired) ...[
           TryOnCheckbox(
@@ -149,6 +182,54 @@ class IntroScreen extends StatelessWidget {
                 onPressed: busy ? null : onCamera,
               ),
             ),
+    );
+  }
+}
+
+/// The intro's numbered steps on wide layouts (the web's `sv-steps`).
+class _Steps extends StatelessWidget {
+  const _Steps(this.items);
+  final List<String> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = TryOnScope.of(context).tokens;
+    return Semantics(
+      container: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (i, item) in items.indexed) ...[
+            if (i > 0) const SizedBox(height: 10),
+            Row(
+              children: [
+                Container(
+                  width: 20,
+                  height: 20,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: t.primary, shape: BoxShape.circle),
+                  child: Text(
+                    '${i + 1}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1,
+                      fontWeight: FontWeight.w500,
+                      color: t.primaryForeground,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    item,
+                    style: TextStyle(fontSize: 14, height: 1.375, color: t.foreground),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

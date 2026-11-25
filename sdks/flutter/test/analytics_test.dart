@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:studio_vaai/analytics.dart';
 import 'package:studio_vaai/studio_vaai.dart';
+import 'package:studio_vaai/testing.dart';
 
 import 'support/harness.dart';
 import 'support/scenarios.dart';
@@ -67,6 +68,8 @@ void main() {
         'variant-selection-initiated',
         'height-entered',
         'try-on-initiated',
+        // The tried size against the recommendation (#2884's `size-compared`).
+        'size-compared',
       ]),
     );
     final first = collector.bodies.first['event']! as Map;
@@ -110,6 +113,23 @@ void main() {
     expect(slow['data'], containsPair('reason', 'slow'));
     expect(slow['data'], containsPair('outcome', 'in_progress'));
     expect(slow['data'], containsPair('work', 'try-on'));
+    await finish(tester);
+  });
+
+  testWidgets('a size the fit gate refuses is a gated size, not a failed operation', (
+    tester,
+  ) async {
+    // No recommendation to rule M out first: the API refuses the try-on itself.
+    h.api.fitGate['M'] = 'too_small';
+    h.api.overrides['GET /products/${ScriptedApi.productId}/recommended-size'] = (_) =>
+        ScriptedApi.problem(400, 'size-recommendation-unavailable');
+    await start(tester, h);
+    await scenarios['selection']!(tester, h);
+    await tapPrimary(tester);
+    await settleFor(tester, text('Try on L'));
+    await deliver(tester);
+    expect(collector.names, contains('gated-size-selected'));
+    expect(collector.names, isNot(contains('experience-operation-failed')));
     await finish(tester);
   });
 

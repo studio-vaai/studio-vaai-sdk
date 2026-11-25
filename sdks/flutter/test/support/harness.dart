@@ -62,6 +62,17 @@ final class Harness {
   /// Analytics the app passes to the try-on, if a test sets it before [start].
   TryOnAnalytics? analytics;
 
+  /// Whether the app shows the fit score (the SDK's default is off); the
+  /// fit scenarios need it.
+  bool fitScore = true;
+
+  /// The size axis's name; null leaves the axis unnamed, as a shop may.
+  String? sizeAxisLabel = 'Size';
+
+  /// The axes the page chose (its size, default or picked): the try-on opens
+  /// on them, and only the fit gate moves a size.
+  List<String> chosenAxes = const [];
+
   /// The transport: [api], with routes a test can hold.
   late final GatedApi gate;
   final ScriptedDevices devices;
@@ -98,8 +109,17 @@ final class Harness {
           foreignId: foreignId,
           productName: 'Oxford shirt',
           presentProduct: (details) => ProductPresentation(
-            axes: scriptedPresentation(details).axes,
+            axes: [
+              for (final axis in scriptedPresentation(details).axes)
+                VariantAxis(
+                  role: axis.role,
+                  key: axis.key,
+                  label: sizeAxisLabel,
+                  items: axis.items,
+                ),
+            ],
             variantId: details.variants.first.id,
+            chosenAxes: chosenAxes,
             commerce: {
               ScriptedApi.variantM: const VariantCommerce(price: '€89'),
               ScriptedApi.variantL: const VariantCommerce(price: '€89'),
@@ -117,6 +137,7 @@ final class Harness {
           onDownload: (bytes, type) async {},
           onEvent: events.add,
           analytics: analytics,
+          fitScore: fitScore,
           onError: errors.add,
           child: const Center(child: Text('Product page')),
         ),
@@ -254,6 +275,24 @@ Future<void> start(
   await warmImages(tester);
   await openTryOn(tester, h);
 }
+
+/// A spinner in the screen's primary button.
+Finder primarySpinner() => find.descendant(
+  of: find.byKey(const ValueKey('try-on-primary')),
+  matching: find.byType(CircularProgressIndicator),
+);
+
+/// Whether the screen's primary button takes a tap.
+bool primaryEnabled(WidgetTester tester) =>
+    tester
+        .widget<InkWell>(
+          find.descendant(
+            of: find.byKey(const ValueKey('try-on-primary')),
+            matching: find.byType(InkWell),
+          ),
+        )
+        .onTap !=
+    null;
 
 /// Shorthands for the flow's dispatches a shopper would tap.
 void consent(Harness h) =>

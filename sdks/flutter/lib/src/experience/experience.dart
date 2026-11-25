@@ -41,6 +41,10 @@ final class TryOnPhoto {
   double? expiresAtMs;
   String? asset;
   final String? bodyId;
+
+  /// The API deleted this restored photo (the body, or its stored cut-out):
+  /// nothing of it is held any more, and the flow asks for a new photo.
+  bool gone = false;
 }
 
 /// One shopper's default try-on experience: the shared Rust session, its
@@ -171,6 +175,10 @@ final class TryOnExperience extends ChangeNotifier {
     final projected = tryOnExperienceEventOf(event, _view);
     if (projected != null) _tryOnEvents.add(projected);
   }
+
+  /// Whether the shopper's earlier photo is gone (the API deleted it with the
+  /// session's data), so the flow asks for a new one.
+  bool get photoGone => _jobs.photoGone;
 
   /// Formatted prices of the installed product, by variant ID.
   Map<String, String> get prices => _prices?.prices ?? const {};
@@ -579,6 +587,24 @@ final class TryOnExperience extends ChangeNotifier {
         }
       case DeviceEffectEffect(:final effect):
         _device(effect);
+      case DomainEventEffect(event: SessionDomainEvent(event: ReadySessionEvent())):
+        // A restored session brought the body back: its earlier try-ons too.
+        final bodyId = _jobs.restoredBodyId;
+        if (bodyId != null) unawaited(_restoreTryOns(bodyId));
+      case DomainEventEffect(
+        event: TryOnDomainEvent(event: CreatedTryOnEvent(:final productId, :final tryOn)),
+      ):
+        final revision = _session.tryOnAsset(id: tryOn.id)?.backendRevision;
+        if (revision != null) {
+          _jobs.rememberTryOn(
+            RememberedTryOn(
+              tryOnId: tryOn.id,
+              productId: productId,
+              variantId: tryOn.key.variantId,
+              backendRevision: revision,
+            ),
+          );
+        }
       default:
         // Domain and flow events reach hosts through the batch's experience events.
         break;
@@ -869,6 +895,67 @@ final class TryOnExperience extends ChangeNotifier {
     }
   }
 
+  /// Brings back the try-ons kept for a restored session's body (the web's
+  /// `restoreTryOns`): the API lists no try-ons, so a launch would otherwise
+  /// start without the shopper's results. Each is read again for a fresh
+  /// image link. Only one the API no longer has (not found) is forgotten; a
+  /// read that fails for now (offline, a timeout, a busy API) keeps it for the
+  /// next launch.
+  Future<void> _restoreTryOns(String bodyId) async {
+    final kept = await _jobs.keptTryOns(bodyId);
+    if (kept.isEmpty || _disposed) return;
+    final read = await Future.wait([
+      for (final tryOn in kept)
+        () async {
+          // `restored` null: not shown now; `gone`: the API no longer has it.
+          try {
+            final renewal = await _jobs.renewImage(
+              core.ResultExperienceImageTarget(
+                tryOnId: tryOn.tryOnId,
+                variant: tryOn.variantId,
+                bodyRevision: tryOn.backendRevision,
+              ),
+            );
+            if (renewal case core.EndedExperienceImageRenewal(
+              outcome: FailedOutcome(
+                error: BackendException.notFound || BackendException.bodyNotFound,
+              ),
+            )) {
+              return (restored: null, gone: true);
+            }
+            if (renewal is! core.RenewedExperienceImageRenewal) {
+              return (restored: null, gone: false);
+            }
+            return (
+              restored: RestoredTryOn(
+                tryOnId: tryOn.tryOnId,
+                productId: tryOn.productId,
+                variantId: tryOn.variantId,
+                imageUrl: renewal.url,
+                backendRevision: tryOn.backendRevision,
+              ),
+              gone: false,
+            );
+          } catch (_) {
+            return (restored: null, gone: false);
+          }
+        }(),
+    ]);
+    if (_disposed || _jobs.restoredBodyId != bodyId) return;
+    await _jobs.forgetTryOns([
+      for (final (i, tryOn) in kept.indexed)
+        if (read[i].gone) tryOn.tryOnId,
+    ]);
+    final restored = [for (final r in read) ?r.restored];
+    if (restored.isEmpty || _disposed || _jobs.restoredBodyId != bodyId) return;
+    // Through the flow, which shows the selected variant's at once.
+    try {
+      dispatch(PresentationFlowAction(RestoreTryOnsPresentationAction(restored)));
+    } catch (error, stack) {
+      _fail(error, stack);
+    }
+  }
+
   MediaId _registerRemote(String url, double expiresAtMs, String bodyId) {
     final id = newUuid();
     _photos[id] = TryOnPhoto.remote(url, expiresAtMs, bodyId);
@@ -879,16 +966,29 @@ final class TryOnExperience extends ChangeNotifier {
   /// `refreshPhoto`), under a new asset ID.
   Future<bool> _refreshPhoto(MediaId media) async {
     final photo = _photos[media];
+    if (photo == null || photo.gone) return false;
     final bodyId = switch (_view.domain.body) {
       LiveBodyState(:final identity) || MissingBodyState(:final identity) => identity.bodyId,
-      _ => photo?.bodyId,
+      _ => photo.bodyId,
     };
-    if (photo == null || photo.url == null || bodyId == null || bodyId.isEmpty) return false;
+    if (photo.url == null || bodyId == null || bodyId.isEmpty) return false;
     try {
       final renewal = await _jobs.renewImage(core.PhotoExperienceImageTarget(bodyId));
-      if (renewal is! core.RenewedExperienceImageRenewal || _disposed || _photos[media] != photo) {
-        return false;
+      if (_disposed || _photos[media] != photo) return false;
+      if (renewal case core.EndedExperienceImageRenewal(
+        outcome: FailedOutcome(error: BackendException.notFound),
+      )) {
+        // Deleted by the API (retention or erasure): drop what the app holds
+        // of it, not just its display, and ask for a new photo.
+        photo
+          ..url = null
+          ..expiresAtMs = null
+          ..gone = true;
+        _jobs.photoGone = true;
+        _notify();
+        return true;
       }
+      if (renewal is! core.RenewedExperienceImageRenewal) return false;
       photo
         ..url = renewal.url
         ..expiresAtMs = renewal.expiresAtMs ?? photo.expiresAtMs

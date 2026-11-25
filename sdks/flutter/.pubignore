@@ -13,3 +13,6 @@ pubspec.lock
 /test/goldens_test.dart
 # Test data (the HEIC fixture): its tests skip without it.
 /test/fixtures/
+# The web's results the shared-vector test replays (written by the web SDK's
+# tests): it skips without them.
+/test/shared_vectors/

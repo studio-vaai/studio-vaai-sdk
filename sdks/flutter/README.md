@@ -24,8 +24,8 @@ packages' build hooks and which the `camera` plugin requires).
 
 `StudioVaaiTryOn` is the Flutter counterpart of the web and React SDKs' `StudioVaaiTryOn`: the
 whole default experience (consent, photo from the library or the camera's self-timer, height,
-variant selection, try-ons with their fit score, add to bag), with the web's screens, copy and
-rules. The shared Rust core's default flow decides every screen and step; the widgets render its
+variant selection, try-ons, add to bag, and an optional fit score), with the web's screens, copy
+and rules. The shared Rust core's default flow decides every screen and step; the widgets render its
 view and send the shopper's actions back, so Flutter and the web behave the same.
 
 ```dart
@@ -50,12 +50,14 @@ StudioVaaiTryOn(
       ),
     ],
     variantId: details.variants.first.id,
+    chosenAxes: ['size'], // the size the product page shows: the try-on opens on it
     commerce: {details.variants.first.id: const VariantCommerce(price: '€89')},
   ),
   controller: tryOn,
   locale: 'de', // default: the app's locale
   messages: {'sessionIntro.sheetTitle': 'Probier es an'}, // MF2 overrides, optional
   appearance: TryOnAppearance.dark,
+  fitScore: true, // the fit score and its callouts on each result; off by default
   onAddToCart: (request) async => cart.add(request.variantId),
   onDownload: (bytes, mimeType) async => share(bytes), // optional; adds a download button
   onEvent: (event) => log(event), // the core's journey facts
@@ -78,7 +80,20 @@ StudioVaaiTryOn(
   restores them through the core's restore, as the web restores its session cookie and body
   selection, until the API expires the session (see [Kept sessions](#kept-sessions)).
 - `simpleProductPresentation(details, roles: {'size': AxisRole.size})` builds a presentation from
-  the API's variant IDs alone, for a start.
+  the API's variant IDs alone, for a start. List only the values the shop sells: the try-on offers
+  exactly the axes' items you pass.
+- A host's own button can name the variant with the catalog's `tryOnView.tryOnVariantCta` ("Try
+  on M in Navy") or, once tried, `tryOnView.seeVariantCta` ("See M in Navy on you"), formatted with
+  `TryOnMessages` (`sizeLabel`, `colorLabel`, `hasColor`).
+- The page's size, default or picked, is the shopper's choice when its axis is in `chosenAxes`:
+  the try-on opens on it, and the size recommendation leaves it be. Only the fit gate moves it:
+  a size the gate refuses gives way to the next size along the run that fits, with a note on
+  the size row ("Size XS is too small. We recommend size M.") and "Try on M in …" on the button.
+  A size the shopper picks in the try-on stays when refused; the note and the button offer the
+  next size instead.
+- The fit score (its percentage, the intended fit and the callouts on the image) is off by
+  default, as on the web: `fitScore: true` turns it on. The size recommendation and the fit
+  gate's note work either way.
 - It opens as a full-height modal sheet on phones and a centered dialog on wide windows, as the
   web SDK's dialog does (`presentation: TryOnPresentation.fullScreen` for a page). The system
   back gesture is the flow's Back, and Close at the start. To place the screens yourself, use
@@ -87,8 +102,10 @@ StudioVaaiTryOn(
   (`TryOnMessages.locales`); `messages` overrides any key for the locale.
 - Colors and sizes are the web components' design tokens (`TryOnTokens.light` and `.dark`):
   the same seeds, mix steps and derived colors. Brand them with
-  `tokens: TryOnTokens.light.copyWith(primary: ...)`. Text is set in Inter, as on the web; the
-  package bundles it (SIL Open Font License, in `NOTICES`).
+  `tokens: TryOnTokens.light.copyWith(primary: ...)`, and shape the buttons alone with
+  `buttonRadius` (the web's `--sv-button-radius`; it follows `radius` until set, e.g.
+  `TryOnTokens.radiusFull` for pills). Text is set in Inter, as on the web; the package bundles
+  it (SIL Open Font License, in `NOTICES`).
 - Results carry the "AI generated" label beside the variant, as on the web (EU AI Act
   transparency).
 - Screens set semantics labels, headers and live announcements for progress (the web's status
@@ -136,6 +153,20 @@ iOS and macOS, Keystore-encrypted storage on Android, never plain preferences. E
 and client key) has its own entry. On the next launch the core verifies the credential with the
 API and reads the body back, the same restore the web runs for its cookie.
 
+Beside it, as the web keeps them in local storage, the widgets keep the IDs of the body's latest
+try-ons (at most 24, per API and shop; the try-on, product and variant IDs and the body revision,
+never an image or a link). A launch that restores the body reads each again through
+`GET /try-ons/{id}` for a fresh image link and hands them to the core's restore: the earlier
+results, the picker's tried marks and a tried variant's instant result come back. A try-on the
+API no longer has is forgotten, a new body replaces the list, and the list is deleted with the
+session.
+
+A restored session shows the shopper's person cut-out, the photo the API signs for the body (an
+RGBA JPEG XL, decoded by the core where the platform cannot). When the API no longer stores it,
+the core restores no body: the flow opens on the photo step and asks for a new photo ("Add a
+photo to try this on."), with no error. A renewal that finds the photo deleted drops what the app
+holds of it.
+
 The entry is replaced when a refresh rotates the token, and deleted when the session expires, the
 API no longer accepts it, the shopper declines consent while it is created, or the flow resets the
 session. `keepSession: false` keeps nothing on the device; `sessionStore:` takes your own
@@ -165,7 +196,9 @@ refused (`UnsupportedPhotoException`) rather than uploaded as HEIC, which the AP
 `package:studio_vaai/testing.dart` has `ScriptedApi` (pass it as the `StudioVaai` transport) and
 `ScriptedDevices` (pass it as `devices`): the widgets then run the real core with no network,
 camera or photo library, as this package's own widget tests do. Pass `imageProvider` to show
-result images without the network.
+result images without the network. `ScriptedApi.fitGate` (`{'M': 'too_small'}`) scripts the fit
+gate, `storesPhoto: false` a body whose photo the API no longer stores, and it reads its try-ons
+back, so a kept session brings them back on the next launch.
 
 ## Headless
 
@@ -254,7 +287,8 @@ flutter test                   # the real core against ScriptedApi: journey, wid
 (cd example && flutter test)   # the example's try-on and headless session
 ```
 
-`test/widgets_test.dart` taps through every screen state; `test/goldens_test.dart` compares every
+`test/widgets_test.dart` taps through every screen state, `test/parity_test.dart` the web
+try-on's flow and state behaviours (fit score opt-in, fit gate, tried marks, relaunch); `test/goldens_test.dart` compares every
 state in English/light and German/dark, and the main screens in the other two, with
 `test/goldens/` (regenerate with
 `flutter test --update-goldens test/goldens_test.dart`; the goldens are rendered on macOS).

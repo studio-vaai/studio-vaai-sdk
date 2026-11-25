@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../generated/state_machine.dart';
@@ -5,6 +7,7 @@ import '../generated/studio_vaai_core.dart' as core;
 import 'components.dart';
 import 'fit.dart';
 import 'flow_image.dart';
+import 'messages.dart';
 import 'scope.dart';
 import 'screens.dart';
 import 'theme.dart';
@@ -51,6 +54,15 @@ core.VariantLabel labelFor(
   axes: _axes(rows),
   formats: formats,
 );
+
+/// A size label as plain text (the web's `sizeLabelText`): its size axes in
+/// the host's format, or joined with " / ".
+String sizeLabelText(core.VariantLabel label) {
+  final sizes = label.axes.where((a) => a.role == AxisRole.size && a.label.isNotEmpty);
+  final format = label.formats.where((f) => f.role == AxisRole.size).firstOrNull?.format;
+  if (format == null) return sizes.map((a) => a.label).join(' / ');
+  return sizes.fold(format, (text, a) => text.replaceFirst('{${a.key}}', a.label));
+}
 
 /// The current selection's label (`selectionLabelValue`).
 core.VariantLabel selectionLabel(SelectionView selection) => core.selectionLabelValue(
@@ -119,6 +131,8 @@ class TryOnResultScreen extends StatelessWidget {
     this.busy = false,
     this.cart,
     this.downloadEnabled = false,
+    this.downloadVisible = false,
+    this.downloadPending = false,
     this.fit,
     this.fitDetailsOpen = false,
     this.onFitDetails,
@@ -128,6 +142,7 @@ class TryOnResultScreen extends StatelessWidget {
     this.pickerNotes = const [],
     this.resultAspect,
     this.wide = false,
+    this.sizeNote,
   });
 
   final ScreenNavigation navigation;
@@ -151,6 +166,13 @@ class TryOnResultScreen extends StatelessWidget {
   final bool requestPending, busy;
   final ResultActionView? cart;
   final bool downloadEnabled;
+
+  /// Whether the host can take a download: the control shows over every
+  /// result, disabled while unavailable.
+  final bool downloadVisible;
+
+  /// A download in progress: the control stays, with a spinner beside it.
+  final bool downloadPending;
   final FitView? fit;
   final bool fitDetailsOpen;
   final ValueChanged<bool>? onFitDetails;
@@ -163,6 +185,10 @@ class TryOnResultScreen extends StatelessWidget {
 
   /// The web's wide layout: the picker always open, beside the image.
   final bool wide;
+
+  /// Said on the picker's size row in place of the recommendation: why the
+  /// fit gate refuses the selected size, and the size to try instead.
+  final String? sizeNote;
 
   @override
   Widget build(BuildContext context) {
@@ -215,20 +241,40 @@ class TryOnResultScreen extends StatelessWidget {
     final next = presentation.primaryAction;
     var primaryLabel = 'tryOn';
     String? primaryVariant;
+    // What "Try on …" names: the selection, or the size offered in its place.
+    var tryOnValues = selectedValues;
     switch (next) {
       case TryPrimaryTryOnAction(:final variantId):
         primaryVariant = variantId;
       case RetryPrimaryTryOnAction(:final variantId):
         primaryLabel = 'retry';
         primaryVariant = variantId;
+      case TryNextFittingPrimaryTryOnAction(:final variantId):
+        // The fit gate refuses the selection: the button offers the next size
+        // that can be tried on, and pressing it selects that size and tries it.
+        primaryVariant = variantId;
+        tryOnValues = variantLabelValues(labelFor(variantId, variants, rows, formats));
       case AlreadyWearingPrimaryTryOnAction():
         primaryLabel = 'wearing';
-      default:
+      case UnavailablePrimaryTryOnAction():
+        // Closed: nothing can be tried on now (a refusal with no size left, a
+        // sold-out variant, a request in flight).
+        break;
+      case null:
         break;
     }
     final opensPicker = hasPicker && !pickerOpen;
+    // The picker's heading, the same open or collapsed (the web's `pickerHeading`).
+    final pickerRows = rows.where(
+      (r) => r.displayOptions?.placement != AxisPlacement.resultToolbar,
+    );
+    String pickerHeading({required bool hasResult}) => m.text('tryOnView.pickerHeading', {
+      'hasResult': hasResult ? 'yes' : 'no',
+      'hasSize': pickerRows.any((r) => r.role == AxisRole.size) ? 'yes' : 'no',
+      'hasColor': pickerRows.any((r) => r.role == AxisRole.color) ? 'yes' : 'no',
+    });
     final String primaryText = opensPicker
-        ? m.text('tryOnView.variantPickerGenericTitle')
+        ? pickerHeading(hasResult: true)
         : switch (primaryLabel) {
             'retry' =>
               presentation.retryVariantId == null
@@ -237,7 +283,7 @@ class TryOnResultScreen extends StatelessWidget {
                       'variant': labelFor(presentation.retryVariantId!, variants, rows, formats),
                     }),
             'wearing' => m.text('tryOnView.wearingVariant', selectedValues),
-            _ => m.text('tryOnView.tryOnVariant', selectedValues),
+            _ => m.text('tryOnView.tryOnVariant', tryOnValues),
           };
 
     final stage = StageFrame(
@@ -248,32 +294,60 @@ class TryOnResultScreen extends StatelessWidget {
           ?result,
           if (phase == TryOnPhase.generating) GeneratingOverlay(text: progress),
           if (shown != null && !selecting && phase != TryOnPhase.generating) ...[
-            if (fit case FitReady(:final callouts) when fitDetailsOpen && !pickerOverImage)
-              FitCalloutsOverlay(
-                callouts: callouts,
-                aspect: resultAspect,
-                activeKey: activeCalloutKey,
-                onSelect: (key) => onActiveCallout?.call(key),
+            if (fit case FitReady(
+              :final callouts,
+              :final subject,
+            ) when fitDetailsOpen && !pickerOverImage)
+              LayoutBuilder(
+                builder: (context, box) => FitCalloutsOverlay(
+                  callouts: callouts,
+                  subject: subject,
+                  aspect: resultAspect,
+                  activeKey: activeCalloutKey,
+                  onSelect: (key) => onActiveCallout?.call(key),
+                  // The cards keep clear of the download button.
+                  keepOut: [if (downloadVisible) Rect.fromLTWH(box.maxWidth - 60, 12, 48, 48)],
+                ),
               ),
-            if (downloadEnabled)
+            // The download control stays in place while it is unavailable or
+            // busy, so it never flashes: disabled, and a spinner beside it
+            // once a download takes longer than a moment.
+            if (downloadVisible) ...[
+              if (downloadPending)
+                const Positioned(
+                  top: 12 + 14,
+                  right: 12 + 48 + 8,
+                  child: _DelayedSpinner(key: ValueKey('try-on-download-busy')),
+                ),
               Positioned(
                 top: 12,
                 right: 12,
                 child: Semantics(
                   button: true,
+                  enabled: downloadEnabled && !downloadPending && !locked && imageReady,
                   label: m.text('tryOnView.downloadImage'),
                   excludeSemantics: true,
                   child: Material(
+                    key: const ValueKey('try-on-download'),
                     color: t.glass,
                     shape: CircleBorder(side: BorderSide(color: t.glassBorder)),
                     child: IconButton(
                       tooltip: m.text('tryOnView.downloadImage'),
-                      onPressed: locked || !imageReady ? null : () => callbacks.download(shown.id),
-                      icon: Icon(Icons.download_outlined, size: 20, color: t.foreground),
+                      onPressed: !downloadEnabled || downloadPending || locked || !imageReady
+                          ? null
+                          : () => callbacks.download(shown.id),
+                      icon: Icon(
+                        Icons.download_outlined,
+                        size: 20,
+                        color: t.foreground.withValues(
+                          alpha: downloadEnabled || downloadPending ? 1 : 0.4,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
+            ],
           ],
         ],
       ),
@@ -282,6 +356,7 @@ class TryOnResultScreen extends StatelessWidget {
     final picker = !hasPicker
         ? null
         : _PickerCard(
+            title: pickerHeading(hasResult: shown != null),
             open: pickerOpen,
             canClose: !wide && !selecting && phase != TryOnPhase.error,
             plain: wide,
@@ -289,7 +364,10 @@ class TryOnResultScreen extends StatelessWidget {
             error: pickerOpen ? errorText : '',
             notes: pickerNotes,
             child: VariantPicker(
+              // On the glass card a row that overflows scrolls out to its edges.
+              edgeInset: wide ? 0 : _PickerCard.inset,
               selection: selection,
+              sizeNote: sizeNote,
               tried: presentation.triedItems,
               prices: prices,
               unavailable: unavailable,
@@ -316,8 +394,11 @@ class TryOnResultScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Wide, as on the web, the fit score leads and the picker's
+                // marks show what was tried; the variant history is a phone's.
+                if (wide && fit != null) _fitBar(fit!, shown, shownValues, locked, imageReady, m),
                 _History(
-                  results: results,
+                  results: wide ? const [] : results,
                   shown: shown,
                   disabled: locked,
                   labelOf: (id) => labelFor(
@@ -334,18 +415,9 @@ class TryOnResultScreen extends StatelessWidget {
                   onShow: callbacks.showTryOn,
                   onShowAxisItem: callbacks.showAxisItem,
                 ),
-                if (fit != null) ...[
+                if (!wide && fit != null) ...[
                   const SizedBox(height: 8),
-                  FitScoreBar(
-                    fit: fit,
-                    label: fit is FitFailed
-                        ? m.text('tryOnView.fitScoreUnavailable')
-                        : m.text('tryOnView.fitScoreForVariant', shownValues),
-                    open: fitDetailsOpen,
-                    busy: locked || !imageReady,
-                    onToggle: onFitDetails,
-                    onRetry: () => callbacks.retryFit(shown.id),
-                  ),
+                  _fitBar(fit!, shown, shownValues, locked, imageReady, m),
                 ],
               ],
             ),
@@ -369,7 +441,7 @@ class TryOnResultScreen extends StatelessWidget {
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (summaryPanel != null) ...[summaryPanel, const SizedBox(height: 16)],
+                  if (summaryPanel != null) ...[summaryPanel, const SizedBox(height: 24)],
                   ?picker,
                 ],
               )
@@ -399,7 +471,11 @@ class TryOnResultScreen extends StatelessWidget {
           label: selecting
               ? m.text('sizeAndStyleSelection.useAnotherImage')
               : m.text('tryOnView.addVariantToCart', {
-                  ...shownValues,
+                  // A result the rows cannot name borrows the selection's name
+                  // when it is the same variant: never "this variant" while one is named.
+                  ...(shownValues['hasVariant'] == 'no' && shownVariantId == selection.variantId
+                      ? selectedValues
+                      : shownValues),
                   'price': shownPrice ?? '',
                   'hasPrice': shownPrice == null ? 'no' : 'yes',
                 }),
@@ -419,6 +495,24 @@ class TryOnResultScreen extends StatelessWidget {
       ),
     );
   }
+
+  Widget _fitBar(
+    FitView fit,
+    TryOn shown,
+    Map<String, Object> shownValues,
+    bool locked,
+    bool imageReady,
+    TryOnMessages m,
+  ) => FitScoreBar(
+    fit: fit,
+    label: fit is FitFailed
+        ? m.text('tryOnView.fitScoreUnavailable')
+        : m.text('tryOnView.fitScoreForVariant', shownValues),
+    open: fitDetailsOpen,
+    busy: locked || !imageReady,
+    onToggle: onFitDetails,
+    onRetry: () => callbacks.retryFit(shown.id),
+  );
 
   static ({Color? color, String? image}) _swatch(
     String id,
@@ -441,6 +535,13 @@ class TryOnResultScreen extends StatelessWidget {
   }
 }
 
+/// A swatch too close to white to show on a pale panel without an outline:
+/// the web's contrast with white below 1.3.
+bool isLightSwatch(Color color) {
+  final l = color.computeLuminance();
+  return (1 + 0.05) / (l + 0.05) < 1.3;
+}
+
 Color? parseHex(String hex) {
   var value = hex.trim().replaceFirst('#', '');
   if (value.length == 3) value = value.split('').map((c) => '$c$c').join();
@@ -451,6 +552,7 @@ Color? parseHex(String hex) {
 
 class _PickerCard extends StatelessWidget {
   const _PickerCard({
+    required this.title,
     required this.open,
     required this.canClose,
     this.plain = false,
@@ -460,6 +562,10 @@ class _PickerCard extends StatelessWidget {
     required this.child,
   });
 
+  /// The card's inset; the picker's rows scroll out to the card's edges.
+  static const inset = 12.0;
+
+  final String title;
   final bool open, canClose;
 
   /// Without the glass card: the wide layout's panel.
@@ -471,10 +577,7 @@ class _PickerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scope = TryOnScope.of(context);
-    final m = scope.messages;
-    final t = scope.tokens;
-    final title = m.text('sizeAndStyleSelection.variantSectionLabel');
+    final t = TryOnScope.of(context).tokens;
     final heading = Text(
       title,
       style: TextStyle(
@@ -482,6 +585,26 @@ class _PickerCard extends StatelessWidget {
         height: 20 / 14,
         fontWeight: FontWeight.w500,
         color: t.foreground,
+      ),
+    );
+    // On the card, everything but the rows keeps the card's inset.
+    Widget padded(Widget child) => plain
+        ? child
+        : Padding(
+            padding: const EdgeInsets.symmetric(horizontal: inset),
+            child: child,
+          );
+    Widget closable() => InkWell(
+      onTap: onClose,
+      child: Semantics(
+        button: true,
+        expanded: true,
+        child: Row(
+          children: [
+            Expanded(child: heading),
+            Icon(Icons.keyboard_arrow_up, size: 18, color: t.foreground),
+          ],
+        ),
       ),
     );
     final content = Semantics(
@@ -492,33 +615,30 @@ class _PickerCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Semantics(
-            header: true,
-            child: canClose
-                ? InkWell(
-                    onTap: onClose,
-                    child: Semantics(
-                      button: true,
-                      expanded: true,
-                      child: Row(
-                        children: [
-                          Expanded(child: heading),
-                          Icon(Icons.keyboard_arrow_up, size: 18, color: t.foreground),
-                        ],
-                      ),
-                    ),
-                  )
-                : heading,
-          ),
+          Semantics(header: true, child: padded(canClose ? closable() : heading)),
           const SizedBox(height: 8),
           child,
-          for (final note in notes) ...[const SizedBox(height: 8), note],
-          if (error.isNotEmpty) ...[const SizedBox(height: 8), TryOnMessage(error)],
+          for (final note in notes) ...[const SizedBox(height: 8), padded(note)],
+          if (error.isNotEmpty) ...[const SizedBox(height: 8), padded(TryOnMessage(error))],
         ],
       ),
     );
     // Wide, the panel has no glass card: the web's `sv-glass.panel` turns transparent.
-    return plain ? content : TryOnGlass(child: content);
+    // Wide, the picker sits in the panel on a muted card, as the web's.
+    return plain
+        ? Container(
+            key: const ValueKey('try-on-picker-card'),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: t.muted,
+              borderRadius: BorderRadius.circular(TryOnTokens.radiusLg),
+            ),
+            child: content,
+          )
+        : TryOnGlass(
+            padding: const EdgeInsets.symmetric(vertical: inset),
+            child: content,
+          );
   }
 }
 
@@ -534,6 +654,8 @@ class VariantPicker extends StatelessWidget {
     required this.recommended,
     required this.onSelect,
     required this.onSelectRecommendation,
+    this.sizeNote,
+    this.edgeInset = 0,
   });
 
   final SelectionView selection;
@@ -545,12 +667,57 @@ class VariantPicker extends StatelessWidget {
   final void Function(String axis, String item) onSelect;
   final VoidCallback onSelectRecommendation;
 
+  /// Said about the selected size in place of the recommendation, such as why
+  /// the fit gate refuses it.
+  final String? sizeNote;
+
+  /// The inset of the panel the picker sits in. The picker spans the panel's
+  /// full width: labels keep the inset, and a row of choices longer than the
+  /// panel scrolls sideways out to its edges, with the same inset at either end.
+  final double edgeInset;
+
+  /// The picker's width up to which the size row's badge slot sits on a line
+  /// of its own (the web's container query, 24rem).
+  static const narrowWidth = 384.0;
+
+  /// The badge slot's fixed height (the web's 1.375rem): whether it holds the
+  /// recommendation, a note in its place, or nothing, the size row keeps one
+  /// height and the chips below never move.
+  static const badgeSlotHeight = 22.0;
+
+  /// The host's axis name, else "Size:" or "Color:" by the axis role, with
+  /// the selected value (the web's `#rowLabel`).
+  static String? rowLabel(TryOnMessages m, VariantRow row, String value) {
+    final label = row.label;
+    if (label != null && label.isNotEmpty) {
+      return value.isEmpty
+          ? label
+          : m.text('tryOnView.variantAxisLabel', {'axisLabel': label, 'valueLabel': value});
+    }
+    if (row.role == AxisRole.size) {
+      return m.text('tryOnView.sizeAxisLabel', {
+        'hasSize': value.isEmpty ? 'no' : 'yes',
+        'sizeLabel': value,
+      });
+    }
+    if (row.role == AxisRole.color && value.isNotEmpty) {
+      return m.text('tryOnView.colorAxisLabel', {'colorLabel': value});
+    }
+    return label;
+  }
+
   @override
   Widget build(BuildContext context) {
     final scope = TryOnScope.of(context);
     final m = scope.messages;
     final t = scope.tokens;
     final firstSize = selection.rows.where((r) => r.role == AxisRole.size).firstOrNull?.key;
+    final labelStyle = TextStyle(
+      fontSize: 13,
+      height: 1.25,
+      fontWeight: FontWeight.w300,
+      color: t.foreground,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -561,83 +728,182 @@ class VariantPicker extends StatelessWidget {
             builder: (context) {
               final selected = row.items.where((i) => i.selected).firstOrNull;
               final value = selected == null ? '' : itemDisplayText(selected.display);
-              final label = (row.label == null || row.label!.isEmpty || value.isEmpty)
-                  ? row.label
-                  : m.text('tryOnView.variantAxisLabel', {
-                      'axisLabel': row.label!,
-                      'valueLabel': value,
-                    });
+              final label = rowLabel(m, row, value);
+              final note = row.key == firstSize ? sizeNote : null;
               final recommendation = recommended != null && row.key == firstSize
                   ? m.text('tryOnView.recommendedVariant', {'variant': recommended!})
                   : null;
               final triedItems = tried?[row.key] ?? const [];
               final segmented = row.displayOptions?.control == AxisControl.segmented;
+              final labelText = (label ?? '').isEmpty ? null : Text(label!, style: labelStyle);
+              Widget? heading;
+              if (row.key == firstSize) {
+                // A note replaces the recommendation: the badge is the steady
+                // state, the note the interruption. Both share one slot.
+                final Widget? badge = note != null
+                    ? _SizeNote(note)
+                    : (recommendation == null
+                          ? null
+                          : _RecommendationBadge(
+                              label: recommendation,
+                              onTap: disabled ? null : onSelectRecommendation,
+                            ));
+                final slot = SizedBox(
+                  key: const ValueKey('try-on-size-badge-slot'),
+                  height: badgeSlotHeight,
+                  child: Align(alignment: AlignmentDirectional.centerStart, child: badge),
+                );
+                // Beside the label where the picker is wide, on a line of its
+                // own where it is narrow.
+                heading = LayoutBuilder(
+                  builder: (context, box) => box.maxWidth <= narrowWidth
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [?labelText, const SizedBox(height: 4), slot],
+                        )
+                      : Row(
+                          children: [
+                            ?labelText,
+                            const SizedBox(width: 6),
+                            Expanded(child: slot),
+                          ],
+                        ),
+                );
+              } else if (labelText != null) {
+                heading = labelText;
+              }
+              final inset = EdgeInsets.symmetric(horizontal: edgeInset);
+              final options = [
+                for (final item in row.items)
+                  _Option(
+                    row: row,
+                    item: item,
+                    segmented: segmented,
+                    // The core marks an item whose choice selects a variant already tried.
+                    tried: item.tried || triedItems.contains(item.key),
+                    soldOut: item.variantId != null && unavailable.contains(item.variantId),
+                    recommended:
+                        row.role == AxisRole.size &&
+                        item.selected &&
+                        selection.recommended &&
+                        !selection.chosenAxes.contains(row.key),
+                    disabled: disabled || item.variantId == null,
+                    onTap: () => onSelect(row.key, item.key),
+                  ),
+              ];
               return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if ((label ?? '').isNotEmpty || recommendation != null)
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        if ((label ?? '').isNotEmpty)
-                          Text(
-                            label!,
-                            style: TextStyle(
-                              fontSize: 13,
-                              height: 1.25,
-                              fontWeight: FontWeight.w300,
-                              color: t.foreground,
-                            ),
-                          ),
-                        if (recommendation != null)
-                          InkWell(
-                            onTap: disabled ? null : onSelectRecommendation,
-                            borderRadius: BorderRadius.circular(TryOnTokens.radiusFull),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: t.positiveMuted,
-                                borderRadius: BorderRadius.circular(TryOnTokens.radiusFull),
-                              ),
-                              child: Text(
-                                recommendation,
-                                style: TextStyle(fontSize: 12, color: t.positiveForeground),
-                              ),
-                            ),
-                          ),
-                      ],
+                  if (heading != null) ...[
+                    Padding(padding: inset, child: heading),
+                    const SizedBox(height: 6),
+                  ],
+                  if (segmented)
+                    Padding(
+                      padding: inset,
+                      child: Wrap(runSpacing: 8, children: options),
+                    )
+                  else
+                    SingleChildScrollView(
+                      key: ValueKey('try-on-picker-row-${row.key}'),
+                      scrollDirection: Axis.horizontal,
+                      padding: inset,
+                      child: Row(
+                        children: [
+                          for (final (i, option) in options.indexed) ...[
+                            if (i > 0) const SizedBox(width: 8),
+                            option,
+                          ],
+                        ],
+                      ),
                     ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: segmented ? 0 : 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final item in row.items)
-                        _Option(
-                          row: row,
-                          item: item,
-                          segmented: segmented,
-                          tried: triedItems.contains(item.key),
-                          soldOut: item.variantId != null && unavailable.contains(item.variantId),
-                          recommended:
-                              row.role == AxisRole.size &&
-                              item.selected &&
-                              selection.recommended &&
-                              !selection.chosenAxes.contains(row.key),
-                          disabled: disabled || item.variantId == null,
-                          onTap: () => onSelect(row.key, item.key),
-                        ),
-                    ],
-                  ),
                 ],
               );
             },
           ),
         ],
       ],
+    );
+  }
+}
+
+/// The size recommendation's badge; tapping it selects the recommended size.
+class _RecommendationBadge extends StatelessWidget {
+  const _RecommendationBadge({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = TryOnScope.of(context).tokens;
+    return Opacity(
+      opacity: onTap == null ? 0.5 : 1,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(TryOnTokens.radiusFull),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: t.positiveMuted,
+            borderRadius: BorderRadius.circular(TryOnTokens.radiusFull),
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: t.positiveForeground),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A quiet note on the size row, such as why the fit gate refuses the size:
+/// the theme's muted surface and text with an info icon, never an error. One
+/// line; a longer note ends in an ellipsis and keeps its whole text for
+/// screen readers and as its tooltip.
+class _SizeNote extends StatelessWidget {
+  const _SizeNote(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = TryOnScope.of(context).tokens;
+    return Semantics(
+      liveRegion: true,
+      label: text,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: text,
+        excludeFromSemantics: true,
+        child: Container(
+          key: const ValueKey('try-on-size-note'),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: t.muted,
+            borderRadius: BorderRadius.circular(TryOnTokens.radius),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.info_outline, size: 12, color: t.mutedForeground),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  text,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, height: 1.25, color: t.mutedForeground),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -679,8 +945,15 @@ class _Option extends StatelessWidget {
       if (recommended) m.text('chip.status.recommended'),
       if (tried) m.text('tryOnView.optionTriedOn'),
     ].join(' ');
-    final dimmed = soldOut || item.refusal != null || !item.available;
-    final mark = (row.role == AxisRole.size && item.selected) || tried;
+    // A size the fit gate refuses is muted and struck through, as the web's
+    // `refused` chip: the note on the size row says why, so no badge.
+    final refused = item.refusal != null;
+    // Refused and sold-out sizes keep the same bubble as every other size;
+    // only their text is muted (the picker's panel is itself the muted colour).
+    final mutedText = refused || soldOut;
+    final dimmed = !item.available;
+    // A light check on a tried item; the selected size, once tried, a dark one.
+    final current = tried && row.role == AxisRole.size && item.selected;
     Widget body;
     switch (item.display) {
       case ColorItemDisplay(:final hex):
@@ -694,7 +967,8 @@ class _Option extends StatelessWidget {
           GlyphItemDisplay(glyph: ItemGlyph.shirtOpen) => Icons.dry_cleaning_outlined,
           _ => null,
         };
-        final fg = item.selected && !segmented && !glyph ? t.primaryForeground : t.foreground;
+        final filled = item.selected && !segmented && !glyph;
+        final fg = filled ? t.primaryForeground : (mutedText ? t.mutedForeground : t.foreground);
         body = Container(
           constraints: BoxConstraints(
             minWidth: segmented || glyph ? 0 : 44,
@@ -702,7 +976,7 @@ class _Option extends StatelessWidget {
           ),
           padding: EdgeInsets.symmetric(horizontal: segmented || glyph ? 10 : 12),
           decoration: BoxDecoration(
-            color: item.selected && !segmented && !glyph ? t.primary : t.background,
+            color: filled ? t.primary : t.background,
             borderRadius: BorderRadius.circular(TryOnTokens.radiusFull),
             border: Border.all(
               color: recommended
@@ -721,7 +995,8 @@ class _Option extends StatelessWidget {
                   fontSize: 14,
                   fontWeight: item.selected ? FontWeight.w600 : FontWeight.w400,
                   color: fg,
-                  decoration: soldOut ? TextDecoration.lineThrough : null,
+                  // Struck through only for the fit gate: a verdict about the body, not stock.
+                  decoration: refused && !item.selected ? TextDecoration.lineThrough : null,
                 ),
               ),
             ],
@@ -744,48 +1019,74 @@ class _Option extends StatelessWidget {
             clipBehavior: Clip.none,
             children: [
               body,
-              if (mark)
-                Positioned(
-                  top: -3,
-                  right: -3,
-                  child: Container(
-                    width: 16,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: t.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: t.background, width: 1.5),
-                    ),
-                    child: Icon(Icons.check, size: 10, color: t.primaryForeground),
-                  ),
-                ),
-              if (item.refusal != null)
-                Positioned(
-                  bottom: -6,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      decoration: BoxDecoration(
-                        color: t.destructiveMuted,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        item.refusal == RefusalReason.garmentTooSmall
-                            ? m.text('sizeAndStyleSelection.sizeGateTooSmallBadge')
-                            : m.text('sizeAndStyleSelection.sizeGateTooLargeBadge'),
-                        style: TextStyle(fontSize: 9, color: t.destructiveForeground),
-                      ),
-                    ),
-                  ),
-                ),
+              if (tried) Positioned(top: 1, right: 1, child: _OptionMark(current: current)),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+/// A spinner that appears only after a moment, so a quick download does not
+/// flash it.
+class _DelayedSpinner extends StatefulWidget {
+  const _DelayedSpinner({super.key});
+
+  @override
+  State<_DelayedSpinner> createState() => _DelayedSpinnerState();
+}
+
+class _DelayedSpinnerState extends State<_DelayedSpinner> {
+  bool _shown = false;
+  late final _timer = Timer(const Duration(milliseconds: 150), () {
+    if (mounted) setState(() => _shown = true);
+  });
+
+  @override
+  void initState() {
+    super.initState();
+    _timer;
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      _shown ? const TryOnSpinner(size: 20) : const SizedBox.square(dimension: 20);
+}
+
+/// The check on an option already tried (the web's `option-mark`): white
+/// with a black check, or black with a white check on the selected size.
+class _OptionMark extends StatelessWidget {
+  const _OptionMark({required this.current});
+  final bool current;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: ValueKey(current ? 'option-mark-current' : 'option-mark-tried'),
+    width: 15,
+    height: 15,
+    decoration: BoxDecoration(
+      color: current ? const Color(0xFF000000) : const Color(0xFFFFFFFF),
+      shape: BoxShape.circle,
+      boxShadow: [
+        BoxShadow(
+          color: current ? const Color(0xFFFFFFFF) : const Color(0x29000000),
+          spreadRadius: 1,
+        ),
+      ],
+    ),
+    child: Icon(
+      Icons.check,
+      size: 10,
+      color: current ? const Color(0xFFFFFFFF) : const Color(0xFF000000),
+    ),
+  );
 }
 
 class _Swatch extends StatelessWidget {
@@ -798,6 +1099,7 @@ class _Swatch extends StatelessWidget {
   Widget build(BuildContext context) {
     final scope = TryOnScope.of(context);
     final t = scope.tokens;
+    final swatch = color;
     return Container(
       width: 44,
       height: 44,
@@ -810,7 +1112,11 @@ class _Swatch extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: color ?? t.muted,
-          border: Border.all(color: t.border),
+          // A light swatch keeps an outline of the input border on its disc,
+          // so a white one still shows on a pale panel.
+          border: image == null && swatch != null && isLightSwatch(swatch)
+              ? Border.all(color: t.input)
+              : null,
           image: image == null
               ? null
               : DecorationImage(image: scope.imageProvider(image!), fit: BoxFit.cover),

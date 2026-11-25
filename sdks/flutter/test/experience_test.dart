@@ -374,13 +374,11 @@ void main() {
       };
       final e = await launch();
       addTearDown(e.dispose);
-      devices.pickerGate = Completer<DevicePhoto?>();
       e.dispatchShopper(SessionFlowAction(SetConsentSessionAction(true)));
+      // The library starts the session once a photo is chosen.
       e.dispatchShopper(PhotoFlowAction(BeginSourcePhotoAction(PhotoSource.library_)));
       await settle(e, (v) => v.domain.session == SessionPhase.creating);
       // The shopper withdraws consent before the API answers.
-      devices.pickerGate!.complete(null);
-      await settle(e, (v) => v.modal == null);
       e.dispatchShopper(SessionFlowAction(SetConsentSessionAction(false)));
       await settle(e, (v) => v.domain.session == SessionPhase.absent);
       gate.complete();

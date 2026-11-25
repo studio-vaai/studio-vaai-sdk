@@ -87,6 +87,7 @@ class StudioVaaiTryOn extends StatefulWidget {
     this.imageProvider,
     this.keepSession = true,
     this.sessionStore,
+    this.fitScore = false,
     this.child,
   }) : assert((productId == null) != (foreignId == null), 'Pass a productId or a foreignId.');
 
@@ -160,6 +161,12 @@ class StudioVaaiTryOn extends StatefulWidget {
   /// Loads remote images (try-on results, a restored session's photo);
   /// defaults to [TryOnNetworkImage], which also decodes the API's JPEG XL.
   final TryOnImageProvider? imageProvider;
+
+  /// Shows the fit score on each result, with its intended fit and the fit
+  /// callouts on the image: the web SDK's `fitScore`. Off by default; the
+  /// size recommendation and the note for a size that does not fit work
+  /// either way.
+  final bool fitScore;
 
   /// The host's own content, such as the product page's "Try on" button.
   final Widget? child;
@@ -431,6 +438,7 @@ class _RouteContent extends StatelessWidget {
         onError: widget.onError,
         onLink: widget.onLink,
         imageProvider: widget.imageProvider,
+        fitScore: widget.fitScore,
       );
     },
   );
@@ -451,6 +459,7 @@ class TryOnExperienceView extends StatelessWidget {
     this.onError,
     this.onLink,
     this.imageProvider,
+    this.fitScore = false,
   });
 
   final TryOnExperience experience;
@@ -463,6 +472,9 @@ class TryOnExperienceView extends StatelessWidget {
   final void Function(Object error)? onError;
   final void Function(Uri uri)? onLink;
   final TryOnImageProvider? imageProvider;
+
+  /// Shows the fit score on each result (see [StudioVaaiTryOn.fitScore]).
+  final bool fitScore;
 
   @override
   Widget build(BuildContext context) {
@@ -502,6 +514,7 @@ class TryOnExperienceView extends StatelessWidget {
                 onAddToCart: onAddToCart,
                 onDownload: onDownload,
                 onError: onError,
+                fitScore: fitScore,
               ),
             ),
           ),

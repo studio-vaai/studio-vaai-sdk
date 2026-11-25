@@ -24,6 +24,7 @@ final class TryOnTokens {
     required this.steps,
     required this.backdrop,
     required this.annotation,
+    this.buttonRadius = radius,
   });
 
   /// `SV_COLOR_SEEDS` and `SV_MIX_STEPS`.
@@ -68,6 +69,11 @@ final class TryOnTokens {
   final Color backdrop;
   final Color annotation;
 
+  /// The corner radius of the flow's buttons, the web's `--sv-button-radius`:
+  /// [radius] unless a shop sets it, so buttons can be shaped (a pill with
+  /// [radiusFull]) without reshaping cards, photos and the dialog.
+  final double buttonRadius;
+
   TryOnTokens copyWith({
     Color? background,
     Color? foreground,
@@ -79,6 +85,7 @@ final class TryOnTokens {
     TryOnMixSteps? steps,
     Color? backdrop,
     Color? annotation,
+    double? buttonRadius,
   }) => TryOnTokens(
     background: background ?? this.background,
     foreground: foreground ?? this.foreground,
@@ -90,6 +97,7 @@ final class TryOnTokens {
     steps: steps ?? this.steps,
     backdrop: backdrop ?? this.backdrop,
     annotation: annotation ?? this.annotation,
+    buttonRadius: buttonRadius ?? this.buttonRadius,
   );
 
   // Derived colors (`SV_DERIVED_COLORS`).

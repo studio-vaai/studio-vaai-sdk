@@ -4,6 +4,9 @@
 /// Pass [ScriptedApi] as [StudioVaai]'s transport: it answers the requests
 /// the core builds for one product in sizes M and L, records them, and lets
 /// a test change the answer for one route (`overrides['POST /bodies'] = ...`).
+/// It reads its try-ons back (`GET /try-ons/{id}`), so a kept session brings
+/// earlier results back on the next launch, and [fitGate] scripts the fit
+/// gate: sizes the size recommendation rules out and the API refuses.
 /// Pass [ScriptedDevices] as a [StudioVaaiTryOn]'s devices.
 library;
 
@@ -17,7 +20,7 @@ import 'studio_vaai.dart';
 import 'widgets.dart';
 
 final class ScriptedApi implements HttpTransport {
-  ScriptedApi({this.estimatedHeightCm = 172});
+  ScriptedApi({this.estimatedHeightCm = 172, this.storesPhoto = true});
 
   static const baseUrl = 'https://api.example.test';
   static const uploadUrl = 'https://uploads.example.test/staging/1';
@@ -27,6 +30,17 @@ final class ScriptedApi implements HttpTransport {
   static const variantL = '0192f0e0-0000-7000-8000-00000000000b';
 
   final double estimatedHeightCm;
+
+  /// Whether the API still stores the body's photo (the person cut-out); false
+  /// answers an empty `sourceImageUrl`, as the API does once it is deleted.
+  bool storesPhoto;
+
+  /// The fit gate, by size (`M`, `L`): `too_small` or `too_large`. With a
+  /// gate, the size recommendation answers (recommending the first size not
+  /// gated) and marks those sizes, and a try-on of one is refused, as the API
+  /// does for a body they do not fit. Empty: no recommendation, no refusals.
+  final Map<String, String> fitGate = {};
+
   final List<HttpRequest> requests = [];
 
   /// An override may answer later, to hold a request open.
@@ -35,6 +49,10 @@ final class ScriptedApi implements HttpTransport {
   int _tryOns = 0;
   bool _hasBody = false;
   double? _height;
+  final _created = <String, Map<String, Object?>>{};
+
+  /// The body's photo link, empty once the photo is no longer stored.
+  String get _photoUrl => storesPhoto ? 'https://images.example.test/body.webp' : '';
 
   /// The requests sent to one route, such as `POST /bodies`.
   List<HttpRequest> sent(String route) => [
@@ -53,6 +71,10 @@ final class ScriptedApi implements HttpTransport {
     final route = _route(request);
     final override = overrides[route];
     if (override != null) return await override(request);
+    if (request.method == 'GET' && route.startsWith('GET /try-ons/')) {
+      final created = _created[route.substring('GET /try-ons/'.length)];
+      return created == null ? problem(404, 'not-found') : json(200, created);
+    }
     return switch (route) {
       'POST /session/bearer' => json(201, {'token': 'bearer-1', 'expiresAt': _inOneHour()}),
       'GET /products/$productId' => json(200, {
@@ -86,7 +108,7 @@ final class ScriptedApi implements HttpTransport {
               'bodyId': bodyId,
               'createdAt': '2026-11-16T10:00:00Z',
               'estimatedHeightCm': estimatedHeightCm,
-              'sourceImageUrl': 'https://images.example.test/body.webp',
+              'sourceImageUrl': _photoUrl,
               'sourceImageUrlExpiresAt': _inOneHour(),
               if (_height != null) 'userProvidedHeightCm': _height,
               if (_height != null) 'bodyRevisionId': 'revision-$_revision',
@@ -109,25 +131,64 @@ final class ScriptedApi implements HttpTransport {
         _height = ((jsonDecode(utf8.decode(request.body!)) as Map)['heightCm'] as num?)?.toDouble();
         return json(200, {'bodyRevisionId': 'revision-${++_revision}'});
       })(),
-      'GET /products/$productId/recommended-size' => problem(
-        400,
-        'size-recommendation-unavailable',
-      ),
+      'GET /products/$productId/recommended-size' =>
+        fitGate.isEmpty
+            ? problem(400, 'size-recommendation-unavailable')
+            : _gatedRecommendation(request),
       'POST /products/$productId/try-on' => _tryOn(request),
       _ => problem(404, 'not-found'),
     };
   }
 
+  static const _sizes = {variantM: 'M', variantL: 'L'};
+
+  HttpResponse _gatedRecommendation(HttpRequest request) {
+    final fitting = _sizes.values.firstWhere((s) => !fitGate.containsKey(s), orElse: () => 'M');
+    return json(200, {
+      'bodyRevisionId': Uri.parse(request.url).queryParameters['bodyRevisionId'] ?? 'revision-1',
+      'recommendedForeignIds': {'size': fitting},
+      'recommendations': [
+        for (final (rank, size) in _sizes.values.indexed)
+          {
+            'foreignIds': {'size': size},
+            'rank': rank + 1,
+            'rationale': fitGate[size] ?? 'Fits as intended',
+            'fit': switch (fitGate[size]) {
+              'too_small' => 'too_small',
+              'too_large' => 'too_loose',
+              _ => 'ideal',
+            },
+            'fitMatch': fitGate.containsKey(size) ? 20 : 85,
+            'fitChecks': const <Object>[],
+            'gate': ?fitGate[size],
+          },
+      ],
+    });
+  }
+
   HttpResponse _tryOn(HttpRequest request) {
     final body = jsonDecode(utf8.decode(request.body!)) as Map<String, Object?>;
+    if (fitGate[_sizes[body['variantId']]] case final gate?) {
+      return json(422, {
+        'type': 'about:blank',
+        'kind': 'try-on-size-rejected',
+        'title': 'try-on-size-rejected',
+        'status': 422,
+        'reason': gate == 'too_large' ? 'garment_too_large' : 'garment_too_small',
+        'tryOnId': '0192f0e0-0000-7000-8000-0000000199${(++_tryOns).toString().padLeft(2, '0')}',
+        'variantId': body['variantId'],
+      });
+    }
     _tryOns++;
-    return json(201, {
-      'tryOnId': '0192f0e0-0000-7000-8000-0000000100${_tryOns.toString().padLeft(2, '0')}',
+    final id = '0192f0e0-0000-7000-8000-0000000100${_tryOns.toString().padLeft(2, '0')}';
+    final created = _created[id] = {
+      'tryOnId': id,
       'variantId': body['variantId'],
       'bodyRevisionId': body['bodyRevisionId'],
       'imageUrl': 'https://images.example.test/try-on-$_tryOns.webp',
       'scene': {'overlayColor': '#ffffff'},
-    });
+    };
+    return json(201, created);
   }
 
   static HttpResponse json(int status, Object body) => HttpResponse(

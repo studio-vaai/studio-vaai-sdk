@@ -11,7 +11,8 @@
 //     --dart-define=STUDIO_VAAI_PRODUCT_ID=...
 //
 // STUDIO_VAAI_LOCALE (`en`, `de`, …) and STUDIO_VAAI_APPEARANCE (`dark`)
-// change the experience's language and appearance.
+// change the experience's language and appearance; STUDIO_VAAI_FIT_SCORE=true
+// shows the fit score and its callouts.
 import 'package:flutter/material.dart';
 import 'package:studio_vaai/studio_vaai.dart';
 import 'package:studio_vaai/testing.dart';
@@ -25,8 +26,9 @@ const _baseUrl = String.fromEnvironment(
   defaultValue: StudioVaai.defaultBaseUrl,
 );
 const _productId = String.fromEnvironment('STUDIO_VAAI_PRODUCT_ID');
-const _locale = String.fromEnvironment('STUDIO_VAAI_LOCALE', defaultValue: 'en');
+const _locale = String.fromEnvironment('STUDIO_VAAI_LOCALE');
 const _appearance = String.fromEnvironment('STUDIO_VAAI_APPEARANCE', defaultValue: 'light');
+const _fitScore = bool.fromEnvironment('STUDIO_VAAI_FIT_SCORE');
 
 void main() => runApp(const ExampleApp());
 
@@ -105,9 +107,13 @@ class _ProductPageState extends State<ProductPage> {
           labels: {'size': 'Size', 'colorway': 'Color'},
         ),
         controller: _tryOn,
-        locale: _locale,
+        // Unset: the device's language.
+        locale: _locale.isEmpty
+            ? WidgetsBinding.instance.platformDispatcher.locale.languageCode
+            : _locale,
         appearance: _appearance == 'dark' ? TryOnAppearance.dark : TryOnAppearance.light,
         devices: widget.devices,
+        fitScore: _fitScore,
         // ScriptedApi's try-on images are not on the network: show a stand-in.
         imageProvider: _scripted
             ? (_) => const AssetImage('assets/guide-people-dark.webp', package: 'studio_vaai')

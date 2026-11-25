@@ -39,6 +39,21 @@ final class ExperienceJobRunner {
   StoredTryOnSession? _stored;
   bool _disposed = false;
 
+  /// The try-ons of the kept body, kept beside the session.
+  late final TryOnHistory? _history = _store == null
+      ? null
+      : TryOnHistory(_store, tryOnHistoryKey(_sdk._config.baseUrl, _sdk._config.clientApiKey));
+
+  /// The body a session restore brought back, until another body or none
+  /// replaces it.
+  String? get restoredBodyId => _restoredBodyId;
+  String? _restoredBodyId;
+
+  /// Whether the shopper's earlier photo is gone: a restore found the saved
+  /// body, or its stored photo, deleted, or a renewal found it deleted while
+  /// shown. Until a new photo, the flow asks for one.
+  bool photoGone = false;
+
   // --- The stored session (the web's cookie and body selection) ------------
 
   /// Keeps the session's current bearer credential (after it is created or
@@ -54,6 +69,8 @@ final class ExperienceJobRunner {
 
   /// Keeps the committed body, to restore it with the session.
   Future<void> persistBody(String bodyId, PhotoSource source) async {
+    if (bodyId != _restoredBodyId) _restoredBodyId = null;
+    photoGone = false;
     final store = _store, stored = _stored;
     if (store == null || stored == null) return;
     _stored = stored.withBody(bodyId, source);
@@ -64,7 +81,27 @@ final class ExperienceJobRunner {
   Future<void> forget() async {
     _stored = null;
     await _store?.delete(_sdk.sessionKey);
+    // A forgotten session's try-ons are not shown to the next one.
+    await _history?.clear();
   }
+
+  /// Keeps a try-on just made with the kept body, so a launch that restores
+  /// the session shows it again.
+  void rememberTryOn(RememberedTryOn tryOn) {
+    final bodyId = _stored?.bodyId, history = _history;
+    if (bodyId == null || history == null || tryOn.backendRevision.isEmpty) return;
+    unawaited(history.remember(bodyId, tryOn));
+  }
+
+  /// The try-ons kept for [bodyId], oldest first.
+  Future<List<RememberedTryOn>> keptTryOns(String bodyId) async =>
+      await _history?.of(bodyId) ?? const [];
+
+  /// Forgets kept try-ons the API no longer has.
+  Future<void> forgetTryOns(Iterable<String> tryOnIds) async => _history?.forget(tryOnIds);
+
+  /// Forgets every kept try-on: the body they were made with is gone.
+  Future<void> forgetHistory() async => _history?.clear();
 
   /// The web's restore, for a bearer session: install the stored credential,
   /// have the API verify it (and report its expiry), then restore the
@@ -119,6 +156,7 @@ final class ExperienceJobRunner {
         case core.EndedExperienceBodyRestore(:final outcome):
           return outcome;
         case core.ReadyExperienceBodyRestore(:final body?):
+          _restoredBodyId = body.bodyId;
           final media = _restoredPhoto?.call(
             body.sourceImageUrl,
             body.sourceImageUrlExpiresAtMs,
@@ -138,7 +176,12 @@ final class ExperienceJobRunner {
             ),
           );
         default:
-          // The body is gone: keep the session, forget the body.
+          // The API no longer has the body, or no longer stores its photo:
+          // nothing to show or try on with. Keep the session, forget the body,
+          // and ask for a new photo.
+          photoGone = true;
+          // Its try-on IDs are no use any more.
+          await _history?.clear();
           _stored = _stored?.withBody(null, null);
           if (_stored != null) await store.write(_sdk.sessionKey, _stored!.encode());
           return SessionOutcomeVariant(ReadySessionOutcome());
@@ -151,7 +194,11 @@ final class ExperienceJobRunner {
   }
 
   /// Forgets the session's credential (the session ended or was cleared).
-  void clear() => _credentials.clear();
+  void clear() {
+    _credentials.clear();
+    _restoredBodyId = null;
+    photoGone = false;
+  }
 
   /// The image URL of a try-on or the source photo, renewed through the core.
   Future<core.ExperienceImageRenewal> renewImage(core.ExperienceImageTarget target) async {

@@ -1,6 +1,5 @@
 import type {
   MessageId,
-  MessageValues,
   FlowView,
   VariantLabel,
   PresentationView,
@@ -22,6 +21,10 @@ import {
   TryOnWarning,
   variantLabelValue,
 } from "@studio-vaai/core";
+
+import type { FitGateNote, GateRefusal } from "./gate-note.js";
+
+import { gateNote } from "./gate-note.js";
 
 export function tryOnResults(view: FlowView): TryOn[] {
   return view.domain.tryOns;
@@ -108,62 +111,36 @@ function sizeLabelText({ axes, formats }: VariantLabel): string {
   return sizes.reduce((text, { key, label }) => text.replace(`{${key}}`, label), format);
 }
 
-/** The fit-gate note: why the picked size is refused, and the next size that can be tried on. */
-interface FitGateNote {
-  id: MessageId;
-  values: MessageValues;
-}
+/** The warnings that are the fit gate's refusal of the selected size. */
+const gateWarnings: Partial<Record<TryOnWarning, GateRefusal>> = {
+  [TryOnWarning.TooSmall]: "too-small",
+  [TryOnWarning.TooLarge]: "too-large",
+};
 
-/**
- * A refused size names the next one along the size run that can be tried on, and the primary
- * button offers it. Picking on the size step reads as a recommendation; on a shown result, as an
- * inspection of the picked size. With no size left in that direction it says there is none.
- */
+/** The fit-gate note for the try-on screen, from the core's view (see {@link gateNote}). */
 function fitGateNote(
   view: FlowView,
   { selection, presentation }: InstanceType<typeof ScreenView.TryOn>["inner"],
 ): FitGateNote | undefined {
-  // The recommendation's fit gate refuses the selected size before any request. A request the
-  // API refused keeps its own message and suggestion; the button still offers the next size.
-  // A host's size the gate refused was already left for the next one: the note says why.
+  const refusalOf = (reason: RefusalReason): GateRefusal =>
+    reason === RefusalReason.GarmentTooLarge ? "too-large" : "too-small";
   const warning = presentation.feedback?.warning;
   const switched = presentation.gateSwitch;
-  let tooLarge: boolean;
-  if (warning === TryOnWarning.TooSmall || warning === TryOnWarning.TooLarge) {
-    tooLarge = warning === TryOnWarning.TooLarge;
-  } else if (switched === undefined) {
-    return globalThis.undefined;
-  } else {
-    tooLarge = switched.reason === RefusalReason.GarmentTooLarge;
-  }
   const variants = view.domain.product?.variants ?? [];
   const sizeRows = selection.rows.filter(({ role }) => role === AxisRole.Size);
   const formats = selection.labelFormats.filter(({ role }) => role === AxisRole.Size);
   const sizeOf = (variantId: string) =>
     sizeLabelText(variantLabelValue(variantId, variants, sizeRows, formats));
-  const requested = sizeOf(switched?.fromVariantId ?? selection.variantId);
   const next = switched?.toVariantId ?? presentation.nextFittingVariantId;
-  if (next === undefined) {
-    return {
-      id: tooLarge
-        ? "sizeAndStyleSelection.garmentTooLargeNoAlternativeNote"
-        : "sizeAndStyleSelection.garmentTooSmallNoAlternativeNote",
-      values: { requestedSize: requested },
-    };
-  }
-  const recommendedSize = sizeOf(next);
-  if (presentation.mode === PresentationMode.Selection) {
-    return {
-      id: tooLarge
-        ? "sizeAndStyleSelection.garmentTooLargeNote"
-        : "sizeAndStyleSelection.garmentTooSmallNote",
-      values: { requestedSize: requested, recommendedSize },
-    };
-  }
-  return {
-    id: tooLarge ? "tryOnView.gateInspectTooLargeNote" : "tryOnView.gateInspectTooSmallNote",
-    values: { sizeLabel: requested, recommendedSize },
-  };
+  return gateNote({
+    // A request the API refused keeps its own message and suggestion; the button still offers
+    // the next size.
+    warning: warning === undefined ? globalThis.undefined : gateWarnings[warning],
+    switched: switched === undefined ? globalThis.undefined : refusalOf(switched.reason),
+    requested: sizeOf(switched?.fromVariantId ?? selection.variantId),
+    next: next === undefined ? globalThis.undefined : sizeOf(next),
+    choosing: presentation.mode === PresentationMode.Selection,
+  });
 }
 
 export function tryOnScreenState(view: FlowView, screen: InstanceType<typeof ScreenView.TryOn>) {

@@ -43,8 +43,9 @@ Future<void> runTryOnFlow(WidgetTester tester) async {
     await tester.pump(const Duration(milliseconds: 16));
   }
   await tap(text(t('sessionIntro.consentLegal')));
-  await tap(text(t('sessionIntro.primaryCtaPhoto')));
-  await until(text(t('heightSetting.title')));
+  // The primary button: wide, the intro's first step reads "Upload a photo" too.
+  await tap(find.byKey(const ValueKey('try-on-primary')));
+  await until(text(t('heightSetting.confirm')));
   await tap(text(t('heightSetting.confirm')));
   await until(text(t('sizeAndStyleSelection.variantSubtitle')));
   await tap(find.byKey(const ValueKey('try-on-primary')));

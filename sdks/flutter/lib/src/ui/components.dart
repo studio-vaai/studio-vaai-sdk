@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/gestures.dart';
@@ -61,16 +62,25 @@ class TryOnScreen extends StatelessWidget {
     final scope = TryOnScope.of(context);
     final t = scope.tokens;
     final messages = beforeActions.where((w) => w is! SizedBox).toList();
-    List<Widget> actions() => [
+    // Messages before the actions, a fixed 12 px from the buttons.
+    List<Widget> messageList() => [
       if (messages.isNotEmpty) ...[
         const SizedBox(height: 12),
         for (final (i, m) in messages.indexed) ...[if (i > 0) const SizedBox(height: 8), m],
       ],
+    ];
+    // The buttons. A screen without a secondary action keeps its slot, so the
+    // primary button sits at the same height on every step.
+    List<Widget> buttons() => [
       if (primary != null) ...[
         const SizedBox(height: 12),
         KeyedSubtree(key: const ValueKey('try-on-primary'), child: primary!),
       ],
-      if (secondary != null) ...[const SizedBox(height: 4), secondary!],
+      if (secondary != null) ...[
+        const SizedBox(height: 4),
+        secondary!,
+      ] else if (primary != null)
+        const SizedBox(height: 4 + TryOnTokens.buttonHeight),
     ];
     Widget stageWith(Widget? overlay) => overlay == null
         ? stage!
@@ -99,42 +109,64 @@ class TryOnScreen extends StatelessWidget {
               wide: wide,
             );
             if (wide) {
-              // The web's wide screen: the stage left (1.35 : 1), the panel and
-              // the actions right, 24 px insets; the stage's overlay joins the panel.
+              // The web's wide screen: the stage left, as wide as a 3:4 photo of
+              // its height; the panel right, centred in the room above the
+              // actions; the actions at the column's foot, the secondary
+              // action's text on the stage's bottom edge. 24 px insets.
               return Column(
                 children: [
                   header,
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(flex: 135, child: stage ?? const SizedBox.shrink()),
-                          const SizedBox(width: 24),
-                          Expanded(
-                            flex: 100,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(
-                                  child: SingleChildScrollView(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                        ?panel,
-                                        if (panel != null && stageOverlay != null)
-                                          const SizedBox(height: 12),
-                                        ?stageOverlay,
-                                      ],
-                                    ),
-                                  ),
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: LayoutBuilder(
+                        builder: (context, box) {
+                          final stageWidth = math.min(
+                            (box.maxHeight - 24) * 3 / 4,
+                            (box.maxWidth - 24) * 0.6,
+                          );
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(
+                                width: stageWidth,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(bottom: 24),
+                                  child: stage ?? const SizedBox.shrink(),
                                 ),
-                                ...actions(),
-                              ],
-                            ),
-                          ),
-                        ],
+                              ),
+                              const SizedBox(width: 24),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Expanded(
+                                      child: LayoutBuilder(
+                                        builder: (context, room) => SingleChildScrollView(
+                                          child: ConstrainedBox(
+                                            constraints: BoxConstraints(minHeight: room.maxHeight),
+                                            child: Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                                              children: [
+                                                ?panel,
+                                                if (panel != null && stageOverlay != null)
+                                                  const SizedBox(height: 24),
+                                                ?stageOverlay,
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    ...messageList(),
+                                    ...buttons(),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -142,6 +174,8 @@ class TryOnScreen extends StatelessWidget {
                 ],
               );
             }
+            // Narrow: the content scrolls when it is taller than the screen;
+            // the buttons stay at the bottom.
             return Column(
               children: [
                 header,
@@ -152,7 +186,7 @@ class TryOnScreen extends StatelessWidget {
                         SliverFillRemaining(
                           hasScrollBody: false,
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
@@ -166,7 +200,7 @@ class TryOnScreen extends StatelessWidget {
                                 else
                                   const Spacer(),
                                 if (panel != null) ...[const SizedBox(height: 12), panel!],
-                                ...actions(),
+                                ...messageList(),
                               ],
                             ),
                           ),
@@ -175,6 +209,16 @@ class TryOnScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (primary != null || secondary != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: buttons(),
+                    ),
+                  )
+                else
+                  const SizedBox(height: 12),
                 LiveStatus(message: statusMessage),
               ],
             );
@@ -307,12 +351,8 @@ class _Header extends StatelessWidget {
                         const SizedBox(width: 6),
                       ],
                       Flexible(
-                        child: Text(
+                        child: BalancedText(
                           title,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
                           // Wide, the dialog's title is larger and lighter (2xl, medium).
                           style: TextStyle(
                             fontSize: wide ? 24 : 16,
@@ -325,14 +365,10 @@ class _Header extends StatelessWidget {
                     ],
                   ),
                 ),
-                // One line, cut with an ellipsis, as the web's description.
+                // Up to two balanced lines, as the web's description.
                 if (subtitle != null && subtitle!.isNotEmpty)
-                  Text(
+                  BalancedText(
                     subtitle!,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 14,
                       height: 1.4,
@@ -347,6 +383,64 @@ class _Header extends StatelessWidget {
           button(LucideGlyph.x, m.text('surface.closeSr'), onClose),
         ],
       ),
+    );
+  }
+}
+
+/// Centred text that wraps to at most [maxLines] balanced lines (the web's
+/// `text-wrap: balance` with a line clamp): a text longer than one line is
+/// set in the narrowest width that keeps its line count, so its lines are of
+/// even length; past [maxLines] it ends in an ellipsis.
+class BalancedText extends StatelessWidget {
+  const BalancedText(this.text, {super.key, required this.style, this.maxLines = 2});
+  final String text;
+  final TextStyle style;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.maybeOf(context) ?? TextDirection.ltr;
+    final merged = DefaultTextStyle.of(context).style.merge(style);
+    Text text0() => Text(
+      text,
+      textAlign: TextAlign.center,
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+      style: style,
+    );
+    return LayoutBuilder(
+      builder: (context, box) {
+        final available = box.maxWidth;
+        if (!available.isFinite) return text0();
+        int lines(double width) {
+          final painter = TextPainter(
+            text: TextSpan(text: text, style: merged),
+            textDirection: direction,
+            textScaler: scaler,
+          )..layout(maxWidth: width);
+          final count = painter.computeLineMetrics().length;
+          painter.dispose();
+          return count;
+        }
+
+        final wanted = math.min(lines(available), maxLines);
+        if (wanted <= 1) return text0();
+        // The narrowest width that keeps the line count.
+        var low = available / wanted, high = available;
+        for (var i = 0; i < 12 && high - low > 1; i++) {
+          final mid = (low + high) / 2;
+          if (lines(mid) <= wanted) {
+            high = mid;
+          } else {
+            low = mid;
+          }
+        }
+        return Center(
+          widthFactor: 1,
+          child: SizedBox(width: high.ceilToDouble(), child: text0()),
+        );
+      },
     );
   }
 }
@@ -527,10 +621,10 @@ class TryOnButton extends StatelessWidget {
         opacity: enabled || busy ? 1 : (primary ? 0.5 : 0.5),
         child: Material(
           color: bg,
-          borderRadius: BorderRadius.circular(TryOnTokens.radiusMd),
+          borderRadius: BorderRadius.circular(t.buttonRadius),
           child: InkWell(
             onTap: enabled ? onPressed : null,
-            borderRadius: BorderRadius.circular(TryOnTokens.radiusMd),
+            borderRadius: BorderRadius.circular(t.buttonRadius),
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: TryOnTokens.buttonHeight),
               child: Padding(
