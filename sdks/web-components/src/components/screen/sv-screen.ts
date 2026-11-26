@@ -353,12 +353,17 @@ export class SvScreen extends SvElement implements SvScreenProps {
         .actions {
           padding-inline: 0 var(--_sv-screen-inset);
         }
+        /* A fitted photo sits at the stage's start and bottom, so its bottom edge is the line the
+           actions end on, on every step whatever the photo's proportions. */
         :host([align-photo]:not([stage-layout="centered"])) slot[name="stage"]::slotted(*) {
           --_sv-stage-frame-justify: start;
+          --_sv-stage-frame-align: end;
         }
         :host([align-photo]:not([stage-layout="centered"])) slot[name="stage"]::slotted(sv-image) {
           --_sv-image-frame-align-left: 0px;
           --_sv-image-frame-align-right: auto;
+          --_sv-image-frame-align-top: auto;
+          --_sv-image-frame-align-bottom: 0px;
         }
         :host([align-photo]:not([stage-layout="centered"]))
           slot[name="stage"]::slotted(sv-image:dir(rtl)) {

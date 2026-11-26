@@ -61,6 +61,11 @@ export type StudioVaaiTryOnProps = (
    * the size recommendation and the fit gate work either way.
    */
   fitScore?: boolean;
+  /**
+   * Hides the size recommendation on the size picker and its loading and failure notes. Off by
+   * default; the fit gate works either way.
+   */
+  hideSizeRecommendation?: boolean;
   /** Live overrides of price and stock supplied by presentProduct. */
   commerce?: ProductCommerce;
   autoStart?: FlowConfig["autoStart"];
@@ -93,6 +98,7 @@ function StudioVaaiTryOnView(
     foreignId,
     productName,
     fitScore = false,
+    hideSizeRecommendation = false,
     active = true,
     commerce,
     presentProduct,
@@ -347,6 +353,7 @@ function StudioVaaiTryOnView(
     }
     element.experience = experience;
     element.fitScore = fitScore;
+    element.hideSizeRecommendation = hideSizeRecommendation;
     if (installedToken !== globalThis.undefined) {
       element.productName = productName;
     }
@@ -360,7 +367,14 @@ function StudioVaaiTryOnView(
     return () => {
       element.removeEventListener("sv-try-on-experience-error", onError);
     };
-  }, [experience, fitScore, installedToken, productName, props.onAddToCart]);
+  }, [
+    experience,
+    fitScore,
+    hideSizeRecommendation,
+    installedToken,
+    productName,
+    props.onAddToCart,
+  ]);
 
   return createElement(
     TryOnExperienceContext.Provider,

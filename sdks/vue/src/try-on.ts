@@ -53,6 +53,11 @@ export interface StudioVaaiTryOnProps {
    * the size recommendation and the fit gate work either way.
    */
   fitScore?: boolean;
+  /**
+   * Hides the size recommendation on the size picker and its loading and failure notes. Off by
+   * default; the fit gate works either way.
+   */
+  hideSizeRecommendation?: boolean;
   /** Live overrides of price and stock supplied by presentProduct. */
   commerce?: ProductCommerce;
   autoStart?: FlowConfig["autoStart"];
@@ -100,6 +105,7 @@ const componentProps = {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Vue validates the constructor at runtime and uses PropType for its public signature.
   appearance: { type: String as PropType<SvAppearance>, default: "light" },
   fitScore: { type: Boolean, default: false },
+  hideSizeRecommendation: { type: Boolean, default: false },
   commerce: Object as PropType<StudioVaaiTryOnProps["commerce"]>,
   autoStart: Number as PropType<StudioVaaiTryOnProps["autoStart"]>,
   analytics: Object as PropType<TryOnAnalytics>,
@@ -399,6 +405,7 @@ const component = defineComponent({
         () => props.productName,
         () => props.addToCart,
         () => props.fitScore,
+        () => props.hideSizeRecommendation,
       ],
       () => {
         const element = surface.value;
@@ -406,6 +413,7 @@ const component = defineComponent({
           return;
         }
         element.fitScore = props.fitScore;
+        element.hideSizeRecommendation = props.hideSizeRecommendation;
         element.addToCart = props.addToCart;
         if (installedToken.value !== globalThis.undefined) {
           element.productName = props.productName;

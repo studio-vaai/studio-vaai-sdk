@@ -100,6 +100,13 @@ export interface SvTryOnExperienceProps {
    * default; the size recommendation and the fit gate work either way.
    */
   fitScore?: boolean | undefined;
+  /**
+   * Hides the size recommendation: its badge and highlighted size on the size picker, and
+   * the notes while it loads or when it fails. The fit gate still refuses a size that does not
+   * fit. A size the host or shopper chose is never replaced; without one, the try-on still
+   * starts on the recommended size.
+   */
+  hideSizeRecommendation?: boolean | undefined;
   /** Adds the requested variant to the host cart. The dialog closes after this succeeds. */
   addToCart?:
     | ((detail: TryOnExperienceEventMap["sv-try-on-add-to-cart-requested"]) => void | Promise<void>)
@@ -172,6 +179,7 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
     prices: { attribute: false },
     resultFraming: { attribute: false },
     fitScore: { type: Boolean, attribute: "fit-score" },
+    hideSizeRecommendation: { type: Boolean, attribute: "hide-size-recommendation" },
     addToCart: { attribute: false, noAccessor: true },
   };
 
@@ -197,6 +205,8 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
   declare resultFraming: SvImageFraming | undefined;
 
   declare fitScore: boolean | undefined;
+
+  declare hideSizeRecommendation: boolean | undefined;
 
   declare prices: SvTryOnExperienceProps["prices"];
   #addToCart: SvTryOnExperienceProps["addToCart"];
@@ -1158,7 +1168,11 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
       .resultImageState=${resultState}
       .productName=${this.productName}
       .product=${domain.product}
-      .selection=${selection}
+      .selection=${
+        this.hideSizeRecommendation === true && selection !== undefined
+          ? { ...selection, recommended: false, recommendedVariantId: undefined }
+          : selection
+      }
       .presentation=${presentation}
       .tryOns=${results}
       .bodyRevision=${bodyRevision}
@@ -1214,12 +1228,14 @@ export class SvTryOnExperience extends SvElement implements SvTryOnExperiencePro
       <div class="picker-note" slot="picker-note">
         ${this.#message(state.noSize ? "experience.noSuitableSize" : undefined)}
         ${
-          domain.sizeRecommendationPending && !state.savingHeight
+          domain.sizeRecommendationPending &&
+          !state.savingHeight &&
+          this.hideSizeRecommendation !== true
             ? html`<p role="status">${this.ui.text("experience.recommendationPending")}</p>`
             : nothing
         }
         ${
-          domain.sizeRecommendationError === undefined
+          domain.sizeRecommendationError === undefined || this.hideSizeRecommendation === true
             ? nothing
             : this.#message("experience.recommendationFailed")
         }

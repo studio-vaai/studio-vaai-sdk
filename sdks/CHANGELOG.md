@@ -28,6 +28,11 @@ Flutter package `studio_vaai` has its own [changelog](flutter/CHANGELOG.md).
   one shows its result at once.
 - When a size does not fit, a note on the size row names the next size that fits, and the
   button offers to try it on.
+- You can hide the size recommendation: its badge and highlighted size on the picker, and the
+  notes while it loads or when it fails. The note for a size that does not fit still shows. Add
+  `hideSizeRecommendation` to `<StudioVaaiTryOn>` in React, `hide-size-recommendation` in Vue,
+  or the `hide-size-recommendation` attribute (`hideSizeRecommendation` property) to
+  `<sv-try-on-experience>`.
 - `--sv-button-radius` shapes the buttons alone, for example as pills. It follows `--sv-radius`
   until you set it.
 - New events `sv-try-on-operation-slow` and `sv-try-on-operation-deadline`.
@@ -45,6 +50,9 @@ Flutter package `studio_vaai` has its own [changelog](flutter/CHANGELOG.md).
 - A try-on whose response was lost, for example to a dropped connection, can be retried and
   keeps the shopper's photo. A retry never creates a second try-on.
 - A session the API no longer accepts (401) now ends cleanly, and the shopper starts a new one.
+- On wide screens the photo ends level with the buttons beside it on every step, including the
+  try-on result, and the buttons keep the same place and height throughout.
+- The note for a size that does not fit has a light grey background on the size row again.
 - Fit callouts: one per measurement, with readable names, placed beside the person and anchored
   on the garment. The length is marked with a tick across the hem.
 - The camera captures a sharper picture, shows an upright camera's whole frame, and uploads

@@ -24,7 +24,7 @@ export const sessionIntroStyles = css`
   }
   .guide {
     display: flex;
-    align-items: center;
+    align-items: var(--_sv-stage-frame-align, center);
     justify-content: var(--_sv-stage-frame-justify, center);
     min-inline-size: 0;
     min-block-size: 0;

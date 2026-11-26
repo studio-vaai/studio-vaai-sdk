@@ -146,6 +146,7 @@ export class SvVariantPicker extends SvElement implements SvVariantPickerProps {
         }
       }
       .badge-slot .note {
+        flex: 1 1 auto;
         align-items: center;
         max-inline-size: 100%;
         white-space: nowrap;
@@ -178,7 +179,9 @@ export class SvVariantPicker extends SvElement implements SvVariantPickerProps {
         min-inline-size: 0;
         padding: calc(var(--_sv-spacing) * 0.5) calc(var(--_sv-spacing) * 1.5);
         border-radius: var(--_sv-radius);
-        background: var(--_sv-muted);
+        /* A shade of ink over whatever the picker sits on, so the bar shows on the raised card,
+           a plain background and the glass over the photo alike. */
+        background: color-mix(in srgb, var(--_sv-foreground) 6%, transparent);
         color: var(--_sv-muted-foreground);
         font-size: var(--_sv-text-xs);
         line-height: 1.25;

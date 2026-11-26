@@ -101,6 +101,7 @@ export class SvImage extends SvElement implements SvImageProps {
       .frame {
         position: relative;
         justify-self: var(--_sv-stage-frame-justify, center);
+        align-self: var(--_sv-stage-frame-align, center);
         inline-size: min(100cqi, 100cqb * var(--_sv-image-ratio));
         aspect-ratio: var(--_sv-image-ratio);
         overflow: hidden;
@@ -112,6 +113,8 @@ export class SvImage extends SvElement implements SvImageProps {
         aspect-ratio: auto;
         left: var(--_sv-image-frame-align-left, var(--_sv-image-frame-left));
         right: var(--_sv-image-frame-align-right, auto);
+        top: var(--_sv-image-frame-align-top, var(--_sv-image-frame-top));
+        bottom: var(--_sv-image-frame-align-bottom, auto);
       }
       .composition {
         position: absolute;
@@ -592,7 +595,7 @@ export class SvImage extends SvElement implements SvImageProps {
       placement && this._viewport
         ? styleMap({
             "--_sv-image-frame-left": percent(placement.frame.x / this._viewport.width),
-            top: percent(placement.frame.y / this._viewport.height),
+            "--_sv-image-frame-top": percent(placement.frame.y / this._viewport.height),
             "inline-size": percent(placement.frame.width / this._viewport.width),
             "block-size": percent(placement.frame.height / this._viewport.height),
           })

@@ -935,6 +935,40 @@ describe("web try-on experience", () => {
     }
   });
 
+  it("hides the size recommendation when the host asks", async () => {
+    const { element, dispose } = await mountWithAdapters({
+      recommend: (id) =>
+        new Outcome.SizeRecommendation({
+          outcome: new SizeRecommendationOutcome.Ranked({
+            scores: [{ variantIds: [id], aggregate: { fit: Fit.Ideal, fitMatch: 0.9 }, axes: [] }],
+            preferred: [id],
+            restrictions: [],
+            noSuitableSize: false,
+          }),
+        }),
+    });
+    try {
+      element.hideSizeRecommendation = true;
+      const screen = await rendered(element, "sv-try-on-view-screen");
+      const picker = await rendered(screen, "sv-variant-picker");
+      await vi.waitFor(() => {
+        expect(screen.selection?.rows.length).toBeGreaterThan(0);
+      });
+      await element.updateComplete;
+      expect(screen.selection?.recommended).toBe(false);
+      expect(screen.selection?.recommendedVariantId).toBeUndefined();
+      expect(picker.shadowRoot?.textContent).not.toContain("Recommended");
+      expect(picker.shadowRoot?.querySelector("button.recommendation")).toBeNull();
+      expect(element.shadowRoot?.textContent).not.toContain("recommended size");
+      element.hideSizeRecommendation = false;
+      await vi.waitFor(() => {
+        expect(picker.shadowRoot?.textContent).toContain("Recommended");
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it("keeps the recommendation available across reattachment", async () => {
     const { element, experience, events, dispose } = await mountWithAdapters({
       recommend: (id) =>
